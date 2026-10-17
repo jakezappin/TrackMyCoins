@@ -13,14 +13,14 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, object_session, selectinload
 
 from ..auth import current_user
 from ..config import get_settings
 from ..db import get_db
 from ..models import Coin, CoinType, Collection, User
 from ..schemas import CoinOut
-from ..services import checklist, insurance, upgrades
+from ..services import checklist, insurance, purchase_value, upgrades
 from ..services.coins import CPG, coin_out, collection_summary, latest_quote, on_hand, sold, value_estimate
 from ..services.greysheet import PricingError
 from .collections import _type_label, get_owned_collection
@@ -120,6 +120,10 @@ def _join(pairs: list[tuple[bool, str]]) -> str:
     return ", ".join(label for on, label in pairs if on)
 
 
+def _purchase_estimate(c: Coin):
+    return purchase_value.estimate(object_session(c), c)
+
+
 COIN_COLUMNS = [
     ("Inventory #", 12, lambda c: c.inventory_number),
     ("Date", 10, _date_mint),
@@ -142,6 +146,8 @@ COIN_COLUMNS = [
     ("Price paid", 12, lambda c: c.price_paid),
     ("Date purchased", 12, lambda c: c.purchase_date),
     ("Purchased from", 18, lambda c: c.purchased_from),
+    ("Est. value at purchase", 14, lambda c: _purchase_estimate(c).value),
+    ("Value at purchase from", 22, lambda c: _purchase_estimate(c).detail or None),
     ("CPG value", 12, lambda c: (q.value if (q := latest_quote(c, CPG)) else None)),
     ("CPG as of", 12, lambda c: (q.fetched_at.date() if (q := latest_quote(c, CPG)) else None)),
     ("Toner premium", 12, lambda c: c.toner_premium),
@@ -173,7 +179,8 @@ def _sheet(ws, columns, coins):
     for coin in coins:
         ws.append([fn(coin) for _, _, fn in columns])
     _style(ws, [w for _, w, _ in columns], money_cols={n for n, _, _ in columns if n in (
-        "Price paid", "CPG value", "Sale price", "Profit / loss", "Toner premium", "Holder premium", "Estimated value")}, header=[n for n, _, _ in columns])
+        "Price paid", "CPG value", "Sale price", "Profit / loss", "Toner premium", "Holder premium", "Estimated value",
+        "Est. value at purchase")}, header=[n for n, _, _ in columns])
 
 
 def _style(ws, widths, money_cols=(), header=()):

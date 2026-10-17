@@ -157,6 +157,7 @@ class CoinFields(BaseModel):
     toning_rainbow: bool = False
 
     price_paid: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    purchase_value_custom: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     purchase_date: date | None = None
     purchased_from: str | None = Field(default=None, max_length=200)
 
@@ -348,7 +349,17 @@ class PcgsMarket(BaseModel):
         return absolute_url(v)
 
 
+class PurchaseValue(BaseModel):
+    """Estimated value at purchase and where it came from (custom | cpg | cpg_history | auctions | paid)."""
+
+    value: Decimal | None = None
+    source: str | None = None
+    detail: str = ""
+    pending: bool = False  # auction sales not looked up yet
+
+
 class CoinDetail(CoinOut):
+    purchase_value: PurchaseValue | None = None
     pcgs_market: PcgsMarket | None = None
     facts: CoinFacts | None = None
     photos: list[PhotoOut]

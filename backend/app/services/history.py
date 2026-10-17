@@ -4,9 +4,10 @@ At each date where something changed, a coin counts if it had been bought (purch
 added) and not yet sold. Its value is its latest estimate as of that day: a CPG price, a "CPG + premiums"
 estimate or the owner's own value, whichever was recorded most recently.
 
-Before a coin's first estimate was recorded, its first estimate stands in for it, and the point is marked
-"backfilled" (the chart draws those stretches dashed). Without this, a collection priced for the first time
-today would have a value on one day only, and no line.
+Before a coin's first estimate was recorded, the value runs in a straight line from its estimated value at
+purchase (see purchase_value.py) to that first estimate; without a value at purchase, the first estimate stands
+in. Those points are marked "backfilled" (the chart draws them dashed). Without this, a collection priced for the
+first time today would have a value on one day only, and no line.
 """
 
 from datetime import date, datetime, timezone
@@ -16,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..models import Coin
+from . import purchase_value
 from .coins import CENTS, CPG, CUSTOM, PREMIUM
 
 VALUE_SOURCES = {CPG, PREMIUM, CUSTOM}
@@ -38,7 +40,7 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
     coins = db.scalars(q).all()
 
     # Per coin: when it was held, and its value estimates in time order.
-    held, estimates = {}, {}
+    held, estimates, at_purchase = {}, {}, {}
     days: set[date] = set()
     for c in coins:
         start = c.purchase_date or _day(c.created_at)
@@ -53,6 +55,8 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
         )
         estimates[c.id] = [(_day(q.fetched_at), q.value) for q in quotes]
         days.update(d for d, _ in estimates[c.id])
+        if estimates[c.id] and estimates[c.id][0][0] > start:
+            at_purchase[c.id] = purchase_value.estimate(db, c).value
     if not coins:
         return []
     days.add(datetime.now(timezone.utc).date())
@@ -75,7 +79,14 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
                 else:
                     break
             if latest is None and estimates[c.id]:
-                latest = estimates[c.id][0][1]  # not priced yet on this day: use its first recorded estimate
+                # Not priced yet on this day: on the line from its value at purchase to its first estimate.
+                first_day, first = estimates[c.id][0]
+                pv = at_purchase.get(c.id)
+                if pv is not None and first_day > start:
+                    share = Decimal((d - start).days) / Decimal((first_day - start).days)
+                    latest = pv + (first - pv) * share
+                else:
+                    latest = first
                 backfilled = True
             if latest is not None:
                 value += latest

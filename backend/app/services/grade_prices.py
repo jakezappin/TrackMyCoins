@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..designations import from_greysheet_name, with_designation
-from ..models import Coin, GradePriceSheet
+from ..models import Coin, CpgHistory, GradePriceSheet
 from .coins import CPG, latest_quote
 
 
@@ -19,6 +19,26 @@ def save_sheet(db: Session, sheet: dict) -> None:
         db.add(row)
     row.gsid, row.name, row.rows = sheet.get("gsid"), sheet.get("name"), sheet["rows"]
     row.fetched_at = datetime.now(timezone.utc)
+    record_history(db, sheet["key"], sheet["rows"], row.fetched_at)
+
+
+def record_history(db: Session, key: str, rows: list[dict], when: datetime) -> None:
+    """Add each grade's CPG to the shared price history: a new row when it changed, else extend the current one."""
+    current = {
+        (h.label, h.cac): h
+        for h in db.scalars(select(CpgHistory).where(CpgHistory.key == key).order_by(CpgHistory.first_seen))
+    }  # the latest row per grade wins
+    for r in rows:
+        if not r.get("cpg"):
+            continue
+        value = Decimal(str(r["cpg"])).quantize(Decimal("0.01"))
+        h = current.get((r["label"], bool(r.get("cac"))))
+        if h is not None and h.value == value:
+            h.last_seen = when
+        else:
+            grade = int(r["grade"]) if str(r.get("grade") or "").isdigit() else None
+            db.add(CpgHistory(key=key, grade=grade, label=r["label"], cac=bool(r.get("cac")), value=value,
+                              first_seen=when, last_seen=when))
 
 
 REUSE_FOR = timedelta(hours=24)  # Greysheet updates CPG weekly at most; a day-old sheet is current

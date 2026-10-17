@@ -5,7 +5,7 @@ import { api, type ExportColumn } from "../api";
 const GROUPS: [string, string[]][] = [
   ["Coin", ["Inventory #", "Date", "Year", "Mint", "Variety", "VAM", "PCGS #"]],
   ["Grading & Holder", ["Grading service", "Cert #", "Grade", "CAC", "CAC sticker", "Collector slab", "Packaging", "Toning"]],
-  ["Purchase", ["Price paid", "Date purchased", "Purchased from"]],
+  ["Purchase", ["Price paid", "Date purchased", "Purchased from", "Est. value at purchase", "Value at purchase from"]],
   ["Value", ["CPG value", "CPG as of", "Toner premium", "Holder premium", "Value source", "Estimated value"]],
   ["Sale (Sold Sheet)", ["Sale price", "Sale date", "Sold to", "Profit / loss"]],
 ];

@@ -11,15 +11,14 @@ Features we've talked about and put on hold, with what we learned so they're qui
 
 ## On hold
 
-### Estimated value at purchase (Greysheet price history)
-Show what a coin was worth when it was bought ("paid $1,250, value then $1,400, 11% below market"), and rebuild the
-value-over-time chart from real history instead of the dashed backfill.
+### Greysheet price history (to improve "Est. value at purchase")
+The estimated value at purchase is built (2026-10-17): own figure, else CPG within 2 months of purchase, else
+TrackMyCoins' own CPG history, else the average of PCGS auction sales near the purchase date, else price paid.
+Real CPG history from Greysheet would replace the auction step for older purchases.
 - Greysheet's website shows CPG, NGC and PCGS price history per coin, but the API we use has no history: no call
   takes a date and none return past values (checked 2026-10-17).
 - Next step: ask support@greysheet.com whether Dealer+/Pro API access includes historical values, how far back,
   and whether a website subscription can be linked to our API key.
-- Fallback idea: an optional "Estimated value at purchase" field, filled automatically from CPG for purchases in
-  the last ~30 days and typed by hand for older ones.
 
 ### NGC, PCGS and Greysheet wholesale values from Greysheet
 - The API already returns `NgcVal`, `PcgsVal`, `GreyVal` and `BlueBookVal`, but they're empty on our tier.

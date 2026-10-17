@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -81,6 +82,23 @@ class InventoryCounter(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     coin_type_id: Mapped[int] = mapped_column(ForeignKey("coin_types.id"), primary_key=True)
     next_seq: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class CpgHistory(Base):
+    """CPG for one grade of one issue over time, built from every price sheet the app fetches (shared by all
+    users). A row covers first_seen..last_seen; a new row starts whenever the price changes."""
+
+    __tablename__ = "cpg_history"
+    __table_args__ = (Index("ix_cpg_history_lookup", "key", "label", "cac"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(40))  # same as GradePriceSheet.key: "pcgs:7130" or "gsid:7434"
+    grade: Mapped[int | None] = mapped_column(Integer)
+    label: Mapped[str] = mapped_column(String(30))  # Greysheet's grade label, e.g. "MS64" or "MS64+"
+    cac: Mapped[bool] = mapped_column(Boolean, default=False)
+    value: Mapped[Decimal] = mapped_column(Money)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class GradePriceSheet(Base):
@@ -269,6 +287,14 @@ class Coin(Base):
     lookup_raw: Mapped[dict | None] = mapped_column(JSON)
     # Latest PCGS data for the coin's PCGS # and grade: price guide, population, recent auction sales.
     pcgs_market: Mapped[dict | None] = mapped_column(JSON)
+    # Estimated value at purchase: the owner's own figure, else worked out (see services/purchase_value.py).
+    purchase_value_custom: Mapped[Decimal | None] = mapped_column(Money)
+    # Average of PCGS auction sales near the purchase date, saved because PCGS only keeps ~3 years of sales.
+    # `purchase_auction_key` is what it was worked out for (PCGS #, grade, purchase date); a change redoes it.
+    purchase_auction_value: Mapped[Decimal | None] = mapped_column(Money)
+    purchase_auction_count: Mapped[int | None] = mapped_column(Integer)
+    purchase_auction_span: Mapped[str | None] = mapped_column(String(20))  # "2024-01..2024-05"
+    purchase_auction_key: Mapped[str | None] = mapped_column(String(100))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

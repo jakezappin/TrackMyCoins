@@ -57,6 +57,18 @@ export default function CoinDetailPage() {
     api.coin(inv).then(setCoin).catch((e) => setError(e.message));
   }, [inv]);
 
+  // Value at purchase from PCGS auction sales: looked up once, the first time the coin needs it.
+  const pvTried = useRef<string | null>(null);
+  const pvPending = Boolean(coin?.purchase_value?.pending);
+  useEffect(() => {
+    if (!pvPending || pvTried.current === inv) return;
+    pvTried.current = inv;
+    api
+      .fillPurchaseValue(inv)
+      .then(setCoin)
+      .catch(() => undefined); // e.g. today's PCGS allowance used up: price paid stands in, tried again later
+  }, [pvPending, inv]);
+
   function update(c: CoinDetail) {
     setCoin(c);
     refresh();
@@ -348,6 +360,20 @@ export default function CoinDetailPage() {
               </dd>
               <dt>From</dt>
               <dd>{coin.purchased_from ?? "—"}</dd>
+              <dt>Value at purchase</dt>
+              <dd>
+                {coin.purchase_value?.value != null ? (
+                  <>
+                    {money(coin.purchase_value.value)}{" "}
+                    <span className="muted small">
+                      {coin.purchase_value.detail}
+                      {coin.purchase_value.pending && " · checking PCGS auction sales…"}
+                    </span>
+                  </>
+                ) : (
+                  "—"
+                )}
+              </dd>
               {coin.is_sold && (
                 <>
                   <dt>Sold</dt>

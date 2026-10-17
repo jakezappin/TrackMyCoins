@@ -154,7 +154,8 @@ export interface LabelReading {
 /** A coin as a visitor to a shared link sees it: no cost, seller, notes or sale details. */
 export type SharedCoin = Omit<
   CoinFields,
-  "pcgs_number" | "price_paid" | "purchase_date" | "purchased_from" | "sale_price" | "sale_date" | "sold_to" | "notes"
+  | "pcgs_number" | "price_paid" | "purchase_value_custom" | "purchase_date" | "purchased_from" | "sale_price" | "sale_date"
+  | "sold_to" | "notes"
 > & {
   id: number;
   value_estimate: string | null;
@@ -202,6 +203,8 @@ export interface CoinFields {
   toning_dual: boolean;
   toning_rainbow: boolean;
   price_paid: string | null;
+  /** Your own estimated value at purchase; blank: worked out (see CoinDetail.purchase_value). */
+  purchase_value_custom: string | null;
   purchase_date: string | null;
   purchased_from: string | null;
   sale_price: string | null;
@@ -316,7 +319,17 @@ export type GradePrices =
       has_cac: boolean;
     };
 
+/** Estimated value at purchase and where it came from. */
+export interface PurchaseValue {
+  value: string | null;
+  source: "custom" | "cpg" | "cpg_history" | "auctions" | "paid" | null;
+  detail: string;
+  /** PCGS auction sales not looked up yet (the coin page asks for them). */
+  pending: boolean;
+}
+
 export interface CoinDetail extends Coin {
+  purchase_value: PurchaseValue | null;
   facts: CoinFacts | null;
   pcgs_market: PcgsMarket | null;
   photos: Photo[];
@@ -535,6 +548,7 @@ const FIELD_LABELS: Record<string, string> = {
   cert_number: "Cert number",
   pcgs_number: "PCGS #",
   price_paid: "Price paid",
+  purchase_value_custom: "Est. value at purchase",
   purchase_date: "Purchase date",
   sale_price: "Sale price",
   sale_date: "Sale date",
@@ -697,6 +711,8 @@ export const api = {
   deleteWant: (id: number) => request<void>("DELETE", `/api/wants/${id}`),
   priceWant: (id: number) => request<WantItem>("POST", `/api/wants/${id}/price`),
   upgrades: (collectionId: number) => request<Upgrades>("GET", `/api/collections/${collectionId}/upgrades`),
+  fillPurchaseValue: (inv: string) =>
+    request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/purchase-value`),
   moveTargets: (inv: string) =>
     request<{ id: number; name: string; finish: string }[]>("GET", `/api/coins/${encodeURIComponent(inv)}/move-targets`),
   moveCoin: (inv: string, collectionId: number) =>

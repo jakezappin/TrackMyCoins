@@ -45,6 +45,7 @@ const EMPTY: CoinFields = {
   toning_dual: false,
   toning_rainbow: false,
   price_paid: null,
+  purchase_value_custom: null,
   purchase_date: null,
   purchased_from: null,
   sale_price: null,
@@ -258,7 +259,7 @@ export default function CoinFormPage() {
       set(key, (e.target.value === "" ? null : e.target.value) as never),
   });
   /** A money field: shows what was typed, and tidies "1,250" to "1250.00" on leaving the field. */
-  const money_ = (key: "price_paid" | "sale_price") => ({
+  const money_ = (key: "price_paid" | "sale_price" | "purchase_value_custom") => ({
     value: (form[key] as string | null) ?? "",
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(key, (e.target.value === "" ? null : e.target.value) as never),
     onBlur: () => {
@@ -493,8 +494,17 @@ export default function CoinFormPage() {
     }
     const paid = parseMoney(form.price_paid);
     const sold = parseMoney(form.sale_price);
-    if ("error" in paid || "error" in sold) {
-      setError(["error" in paid && `Price paid ${paid.error}.`, "error" in sold && `Sale price ${sold.error}.`].filter(Boolean).join(" "));
+    const atPurchase = parseMoney(form.purchase_value_custom);
+    if ("error" in paid || "error" in sold || "error" in atPurchase) {
+      setError(
+        [
+          "error" in paid && `Price paid ${paid.error}.`,
+          "error" in sold && `Sale price ${sold.error}.`,
+          "error" in atPurchase && `Est. value at purchase ${atPurchase.error}.`,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
       return;
     }
     submitting.current = true;
@@ -502,6 +512,7 @@ export default function CoinFormPage() {
     const body = {
       ...form,
       price_paid: paid.value,
+      purchase_value_custom: atPurchase.value,
       sale_price: sold.value,
       collection_id: collectionId,
       coin_type_id: isTypeSet ? memberTypeId : undefined,
@@ -1013,6 +1024,15 @@ export default function CoinFormPage() {
           <label className="field">
             <span>Purchased from</span>
             <input {...text("purchased_from")} placeholder="Dealer, show, auction…" />
+          </label>
+          <label className="field">
+            <span>Est. value at purchase (optional)</span>
+            <input type="text" inputMode="decimal" {...money_("purchase_value_custom")} placeholder="Automatic" />
+            <small className="muted">
+              Leave blank and it's worked out: CPG if the coin was priced within 2 months of buying it, else CPG from
+              TrackMyCoins' price history for that date, else the average of PCGS auction sales around then, else the
+              price paid.
+            </small>
           </label>
         </section>
         <section className={`card form-section ${isSold ? "sold-section" : ""}`}>

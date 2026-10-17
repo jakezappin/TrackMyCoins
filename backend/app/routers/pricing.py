@@ -6,7 +6,7 @@ from ..auth import current_user
 from ..db import get_db
 from ..models import PriceQuote, User
 from ..schemas import CoinDetail, LookupResult, ManualQuoteIn, ValuationIn
-from ..services import greysheet, lookups, price_refresh
+from ..services import greysheet, lookups, price_refresh, purchase_value
 from ..services import ebay, grade_prices
 from ..services import ngc_images as ngc_images_service
 from ..services.coins import CUSTOM, coin_detail, duplicate_info, find_duplicate_cert, latest_quote
@@ -71,6 +71,22 @@ def cert_check(
     exclude_id = get_owned_coin(db, user, exclude).id if exclude else None
     dup = find_duplicate_cert(db, user.id, service.upper(), cert, exclude_id)
     return {"duplicate": duplicate_info(dup) if dup else None}
+
+
+@router.post("/coins/{inventory_number}/purchase-value", response_model=CoinDetail)
+def fill_purchase_value(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Work out the estimated value at purchase from PCGS auction sales, if the coin needs it (one PCGS call,
+    shared for a day by coins of the same issue and grade). Quota errors come back as 429."""
+    coin = get_owned_coin(db, user, inventory_number)
+    if purchase_value.needs_auctions(db, coin):
+        try:
+            purchase_value.fill_auctions(coin, user.id)
+        except lookups.LookupError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        except httpx.HTTPError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"PCGS error: {e}")
+        db.commit()
+    return coin_detail(coin)
 
 
 @router.post("/coins/{inventory_number}/cpg", response_model=CoinDetail)

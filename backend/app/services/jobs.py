@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from ..db import SessionLocal
 from ..models import Coin, Collection, PriceRefreshRun
-from . import greysheet, lookups, price_refresh, quota
+from . import greysheet, lookups, price_refresh, purchase_value, quota
 from .coins import on_hand
 
 
@@ -123,6 +123,15 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                         job.messages.append(f"{job.current}: PCGS: {e}")
                 except httpx.HTTPError as e:
                     job.messages.append(f"{job.current}: PCGS: error ({e.__class__.__name__})")
+            if pcgs_ok and purchase_value.needs_auctions(db, coin):  # value at purchase from auction sales
+                try:
+                    called |= purchase_value.fill_auctions(coin, job.user_id)
+                    changed = True
+                except quota.QuotaExceeded as e:
+                    pcgs_ok = False
+                    job.pcgs_stopped = str(e)
+                except (lookups.LookupError, httpx.HTTPError):
+                    pass  # it's tried again next time
             if changed:
                 db.commit()
                 job.updated += 1

@@ -4,12 +4,12 @@ import re
 from decimal import Decimal
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, object_session, selectinload
 
 from ..config import get_settings
 from ..models import Coin, CoinType, CollectionCounter, InventoryCounter, PriceQuote
 from ..series import collection_type_slug
-from ..schemas import CoinDetail, CoinFacts, CoinOut, CollectionSummary, PhotoOut, PriceQuoteOut
+from ..schemas import CoinDetail, CoinFacts, CoinOut, CollectionSummary, PhotoOut, PriceQuoteOut, PurchaseValue
 from . import metals
 from .lookups.pcgs import coin_facts as pcgs_specs
 
@@ -182,7 +182,18 @@ def coin_detail(coin: Coin) -> CoinDetail:
         collection_name=coin.collection.name,
         pcgs_market=coin.pcgs_market,
         facts=coin_facts(coin),
+        purchase_value=_purchase_value(coin),
     )
+
+
+def _purchase_value(coin: Coin) -> PurchaseValue | None:
+    from . import purchase_value  # it uses this module
+
+    db = object_session(coin)
+    if db is None:
+        return None
+    e = purchase_value.estimate(db, coin)
+    return PurchaseValue(value=e.value, source=e.source, detail=e.detail, pending=e.pending)
 
 
 def on_hand(query):

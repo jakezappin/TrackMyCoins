@@ -59,6 +59,8 @@ ALIASES = {
     "type": "series_hint", "series": "series_hint", "cointype": "series_hint", "seriesname": "series_hint",
     "denomination": "series_hint", "denom": "series_hint", "collectiontype": "series_hint",
     "inventory": "inventory_hint", "inventorynumber": "inventory_hint", "inventoryno": "inventory_hint",
+    "estvalueatpurchase": "purchase_value", "valueatpurchase": "purchase_value",
+    "estimatedvalueatpurchase": "purchase_value", "valueatpurchasefrom": "purchase_value_from",
     "valuesource": "value_source", "estimatedvalue": "estimated_value", "myvalue": "estimated_value",
 }
 
@@ -248,6 +250,11 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     f["price_paid"] = _money(vals.get("price_paid"), errors, "Price paid")
     f["purchase_date"] = _date(vals.get("purchase_date"), errors, "Date purchased")
     f["purchased_from"] = _text(vals.get("purchased_from"))
+    # Our export's value at purchase is only the owner's own figure if it says so; otherwise it was worked out
+    # and is worked out again here. Other spreadsheets: a value in the column is the owner's.
+    source = (_text(vals.get("purchase_value_from")) or "").lower()
+    if not source or source.startswith("your own"):
+        f["purchase_value_custom"] = _money(vals.get("purchase_value"), errors, "Est. value at purchase")
     f["sale_price"] = _money(vals.get("sale_price"), errors, "Sale price")
     f["sale_date"] = _date(vals.get("sale_date"), errors, "Sale date")
     f["sold_to"] = _text(vals.get("sold_to"))
