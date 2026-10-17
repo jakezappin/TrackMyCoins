@@ -83,6 +83,17 @@ class InventoryCounter(Base):
     next_seq: Mapped[int] = mapped_column(Integer, default=1)
 
 
+class PriceRefreshRun(Base):
+    """One use of "Refresh prices" (to cap how often a user can refresh in bulk, which spends API calls)."""
+
+    __tablename__ = "price_refresh_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    scope: Mapped[str] = mapped_column(String(200))
+
+
 class CollectionCounter(Base):
     """Next collection number per (user, coin type, finish), e.g. /collections/kennedy-half-dollars-proof/3."""
 

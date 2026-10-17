@@ -16,6 +16,9 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={
             "PCGSNo": "7072", "Grade": "MS62", "PriceGuideValue": 335.0, "Population": 1204, "PopHigher": 312,
             "CoinFactsLink": "https://www.pcgs.com/coinfacts/coin/7072", "IsValidRequest": True,
+            "Mintage": 749500, "MintLocation": "Philadelphia", "MetalContent": "90% Silver, 10% Copper",
+            "Weight": 26.73, "Diameter": 38.1, "Edge": "Reeded", "Designer": "George T. Morgan",
+            "SeriesName": "Morgan Dollars 1878-1921",
         })
     if path.endswith("/GetAPRByGrade"):
         return httpx.Response(200, json={"IsValidRequest": True, "Auctions": [
@@ -76,3 +79,21 @@ def test_overdate_and_overmint_helpers():
     assert over_variety("1887/6-O $1") == "1887/6"
     assert over_variety("1881-S $1") is None
     assert normalize_mint_mark("O/S") == "O" and normalize_mint_mark("-S") == "S" and normalize_mint_mark("") == "P"
+
+
+def test_coin_facts_card(authed, morgan_collection):
+    coin = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1878, grade=62, pcgs_number="7072")).json()
+    assert authed.get(f"/api/coins/{coin['inventory_number']}").json()["facts"] is None  # nothing fetched yet
+    f = authed.post(f"/api/coins/{coin['inventory_number']}/pcgs").json()["facts"]
+    assert (f["mintage"], f["mint_location"], f["weight_g"], f["designer"], f["population"], f["pop_higher"], f["pop_grade"]) == (
+        749500, "Philadelphia", 26.73, "George T. Morgan", 1204, 312, "MS62")
+    assert f["source"] == "pcgs_market" and f["as_of"]
+
+
+def test_coin_facts_from_cert_lookup(authed, morgan_collection):
+    raw = {"PCGSNo": 7130, "Grade": "MS65", "Mintage": 12760000, "MintLocation": "San Francisco", "Population": 60698,
+           "PopHigher": 21681, "MetalContent": "90% Silver, 10% Copper", "Weight": 26.73, "Diameter": 38.1}
+    coin = authed.post("/api/coins", json={**coin_payload(morgan_collection["id"], year=1881, mint_mark="S"), "lookup_raw": raw}).json()
+    f = authed.get(f"/api/coins/{coin['inventory_number']}").json()["facts"]
+    assert (f["mintage"], f["mint_location"], f["population"], f["pop_grade"], f["source"]) == (
+        12760000, "San Francisco", 60698, "MS65", "cert_lookup")

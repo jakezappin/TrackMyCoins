@@ -261,7 +261,25 @@ export interface PcgsMarket {
   auctions: AuctionSale[];
 }
 
+export interface CoinFacts {
+  mintage: number | null;
+  mint_location: string | null;
+  metal: string | null;
+  weight_g: number | null;
+  diameter_mm: number | null;
+  edge: string | null;
+  designer: string | null;
+  series: string | null;
+  population: number | null;
+  pop_higher: number | null;
+  pop_grade: string | null;
+  as_of: string | null;
+  source: "pcgs_market" | "cert_lookup";
+  pcgs_number: string | null;
+}
+
 export interface CoinDetail extends Coin {
+  facts: CoinFacts | null;
   pcgs_market: PcgsMarket | null;
   photos: Photo[];
   price_quotes: PriceQuote[];
@@ -439,6 +457,8 @@ export const api = {
   dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
   history: (collectionId: number | null) =>
     request<HistoryPoint[]>("GET", `/api/history${collectionId == null ? "" : `?collection_id=${collectionId}`}`),
+  refreshAllowance: () =>
+    request<{ limit: number; used: number; left: number; next_available_at: string | null }>("GET", "/api/refresh-prices/allowance"),
   refreshPrices: (collection_id: number | null, include_pcgs: boolean) =>
     request<RefreshJob>("POST", "/api/refresh-prices", { collection_id, include_pcgs }),
   job: (id: string) => request<RefreshJob>("GET", `/api/jobs/${id}`),

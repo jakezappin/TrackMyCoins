@@ -245,8 +245,31 @@ class AuctionSale(BaseModel):
     cac: bool = False
 
 
+class CoinSpecs(BaseModel):
+    mintage: int | None = None
+    mint_location: str | None = None
+    metal: str | None = None
+    weight_g: float | None = None
+    diameter_mm: float | None = None
+    edge: str | None = None
+    designer: str | None = None
+    series: str | None = None
+
+
+class CoinFacts(CoinSpecs):
+    """Mintage, specs and PCGS population, from data already fetched (PCGS market data or a PCGS cert lookup)."""
+
+    population: int | None = None
+    pop_higher: int | None = None
+    pop_grade: str | None = None  # the grade the population is for, e.g. "MS65"
+    as_of: datetime | None = None
+    source: str  # "pcgs_market" | "cert_lookup"
+    pcgs_number: str | None = None
+
+
 class PcgsMarket(BaseModel):
     fetched_at: datetime
+    facts: CoinSpecs | None = None
     pcgs_number: str
     grade: str  # e.g. "MS62", "MS64+"
     price_guide: Decimal | None = None
@@ -258,6 +281,7 @@ class PcgsMarket(BaseModel):
 
 class CoinDetail(CoinOut):
     pcgs_market: PcgsMarket | None = None
+    facts: CoinFacts | None = None
     photos: list[PhotoOut]
     price_quotes: list[PriceQuoteOut]
     collection_name: str

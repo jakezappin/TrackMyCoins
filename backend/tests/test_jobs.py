@@ -60,3 +60,14 @@ def test_refresh_updates_premium_estimate(authed, morgan_collection):
     wait(authed, authed.post("/api/refresh-prices", json={"collection_id": cid}).json()["id"])
     quotes = authed.get(f"/api/coins/{inv}").json()["price_quotes"]
     assert [q["value"] for q in quotes if q["source"] == "PREMIUM"] == ["2000.00", "2000.00"]  # recorded again on refresh
+
+
+def test_refresh_limited_per_week(authed, morgan_collection):
+    cid = morgan_collection["id"]
+    assert authed.get("/api/refresh-prices/allowance").json() == {"limit": 2, "used": 0, "left": 2, "next_available_at": None}
+    wait(authed, authed.post("/api/refresh-prices", json={"collection_id": cid}).json()["id"])
+    wait(authed, authed.post("/api/refresh-prices", json={}).json()["id"])
+    a = authed.get("/api/refresh-prices/allowance").json()
+    assert (a["used"], a["left"]) == (2, 0) and a["next_available_at"]
+    r = authed.post("/api/refresh-prices", json={"collection_id": cid})
+    assert r.status_code == 429 and "2 times a week" in r.json()["detail"]

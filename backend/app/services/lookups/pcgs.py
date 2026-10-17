@@ -84,6 +84,29 @@ def _sale_date(text: str | None) -> str | None:
     return f"{m.group(1)}-{m.group(2)}" if m else None
 
 
+def _num(v) -> float | None:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 else None
+
+
+def coin_facts(facts: dict) -> dict:
+    """Mintage and specifications from a PCGS CoinFacts response (by grade or by cert)."""
+    mintage = _num(facts.get("Mintage"))
+    return {
+        "mintage": int(mintage) if mintage else None,
+        "mint_location": (facts.get("MintLocation") or "").strip() or None,
+        "metal": (facts.get("MetalContent") or "").strip() or None,
+        "weight_g": _num(facts.get("Weight")),
+        "diameter_mm": _num(facts.get("Diameter")),
+        "edge": (facts.get("Edge") or "").strip() or None,
+        "designer": (facts.get("Designer") or "").strip() or None,
+        "series": (facts.get("SeriesName") or "").strip() or None,
+    }
+
+
 def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10) -> dict:
     """PCGS Price Guide value, population and the most recent auction sales for a PCGS # and grade."""
     params = {"PCGSNo": pcgs_number, "GradeNo": grade, "PlusGrade": "true" if plus else "false"}
@@ -113,6 +136,7 @@ def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10)
 
     guide = facts.get("PriceGuideValue")
     return {
+        "facts": coin_facts(facts),
         "pcgs_number": str(pcgs_number),
         "grade": facts.get("Grade") or f"{grade}{'+' if plus else ''}",
         "price_guide": str(guide) if guide not in (None, "", 0) else None,

@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session, selectinload
 from ..config import get_settings
 from ..models import Coin, CoinType, CollectionCounter, InventoryCounter, PriceQuote
 from ..series import collection_type_slug
-from ..schemas import CoinDetail, CoinOut, CollectionSummary, PhotoOut, PriceQuoteOut
+from ..schemas import CoinDetail, CoinFacts, CoinOut, CollectionSummary, PhotoOut, PriceQuoteOut
+from .lookups.pcgs import coin_facts as pcgs_specs
 
 CPG = "CPG"
 PREMIUM = "PREMIUM"  # CPG + toner and/or holder premium, recorded as an estimate
@@ -143,6 +144,23 @@ def coin_out(coin: Coin) -> CoinOut:
     return out
 
 
+def coin_facts(coin: Coin) -> CoinFacts | None:
+    """Mintage, specs and population: from the PCGS market data if fetched, else from a PCGS cert lookup."""
+    m = coin.pcgs_market or {}
+    if m.get("facts"):
+        return CoinFacts(**m["facts"], population=m.get("population"), pop_higher=m.get("pop_higher"),
+                         pop_grade=m.get("grade"), as_of=m.get("fetched_at"), source="pcgs_market",
+                         pcgs_number=m.get("pcgs_number"))
+    raw = coin.lookup_raw or {}
+    if raw.get("PCGSNo") and (raw.get("Mintage") or raw.get("Population")):
+        pop = raw.get("Population")
+        return CoinFacts(**pcgs_specs(raw), population=pop if isinstance(pop, int) else None,
+                         pop_higher=raw.get("PopHigher") if isinstance(raw.get("PopHigher"), int) else None,
+                         pop_grade=raw.get("Grade") or None, as_of=coin.created_at, source="cert_lookup",
+                         pcgs_number=str(raw.get("PCGSNo")))
+    return None
+
+
 def coin_detail(coin: Coin) -> CoinDetail:
     base = coin_out(coin).model_dump()
     return CoinDetail(
@@ -154,6 +172,7 @@ def coin_detail(coin: Coin) -> CoinDetail:
         price_quotes=[PriceQuoteOut.model_validate(q) for q in coin.price_quotes],
         collection_name=coin.collection.name,
         pcgs_market=coin.pcgs_market,
+        facts=coin_facts(coin),
     )
 
 

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     greysheet_api_key: str = ""
     greysheet_api_token: str = ""
     greysheet_use_sandbox: bool = False
+    # Bulk "Refresh prices" runs allowed per user in any rolling 7 days (each run spends Greysheet/PCGS calls).
+    refresh_limit_per_week: int = 2
     # eBay Browse API (Production keyset: App ID / Cert ID) for "For sale on eBay now".
     ebay_client_id: str = ""
     ebay_client_secret: str = ""

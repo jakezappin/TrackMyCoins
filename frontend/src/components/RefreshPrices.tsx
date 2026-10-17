@@ -19,6 +19,11 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
   const [showLog, setShowLog] = useState(false);
   const timer = useRef<number | null>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const [allow, setAllow] = useState<{ limit: number; left: number; next_available_at: string | null } | null>(null);
+  const loadAllowance = () => api.refreshAllowance().then(setAllow).catch(() => undefined);
+  useEffect(() => {
+    loadAllowance();
+  }, []);
   useEffect(() => setSlot(document.getElementById("refresh-slot")), []);
 
   // Pick up a refresh that's already running (e.g. after leaving and coming back).
@@ -48,6 +53,7 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
     setShowLog(false);
     try {
       setJob(await api.refreshPrices(collectionId, includePcgs));
+      loadAllowance();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -58,8 +64,13 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
 
   return (
     <>
-      <button className="btn" onClick={() => setAsking(true)} disabled={running || coinCount === 0}>
-        {running ? `Refreshing… ${pct}%` : "Refresh prices"}
+      <button
+        className="btn"
+        onClick={() => setAsking(true)}
+        disabled={running || coinCount === 0 || allow?.left === 0}
+        title={allow?.left === 0 ? `Next refresh available ${nextLabel(allow.next_available_at)}` : undefined}
+      >
+        {running ? `Refreshing… ${pct}%` : allow?.left === 0 ? `Refresh prices · ${nextLabel(allow.next_available_at, true)}` : "Refresh prices"}
       </button>
 
       {asking && (
@@ -76,6 +87,15 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
                 get PCGS Price Guide, population and auction sales
               </span>
             </label>
+            {allow && (
+              <p className="small muted">
+                You can refresh prices {allow.limit} times a week to keep within our price providers' limits.{" "}
+                <strong>
+                  {allow.left} of {allow.limit} left
+                </strong>{" "}
+                this week. Single coins can still be priced from their own page any time.
+              </p>
+            )}
             {includePcgs && (
               <p className="small warn">
                 Uses 2 of PCGS's 1,000 free API calls per day for each coin ({coinCount * 2} calls). If the limit is
@@ -146,4 +166,13 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
 /** Where the progress panel appears (full width, under the page header). */
 export function RefreshSlot() {
   return <div id="refresh-slot" />;
+}
+
+/** "Tue Oct 21, 3:40 PM", or "Tue" for the button. */
+function nextLabel(iso: string | null, short = false): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return short
+    ? `next ${d.toLocaleDateString(undefined, { weekday: "short" })}`
+    : d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }

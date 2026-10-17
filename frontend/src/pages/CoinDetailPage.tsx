@@ -7,6 +7,7 @@ import { ngcCertUrl } from "../ngcButton";
 import PhotoButtons from "../components/PhotoButtons";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import EstimatedValueCard from "../components/EstimatedValueCard";
+import CoinFactsCard from "../components/CoinFactsCard";
 import EbayCard from "../components/EbayCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
 import {
@@ -172,6 +173,7 @@ export default function CoinDetailPage() {
 
       <div className="detail-grid">
         {/* Photos */}
+        <div className="stack">
         <section className="card gallery">
           {photo ? (
             <div className="hero-photo">
@@ -240,6 +242,13 @@ export default function CoinDetailPage() {
             </details>
           )}
         </section>
+        <CoinFactsCard
+          facts={coin.facts}
+          canFetch={Boolean(coin.grade && (coin.pcgs_number || coin.grading_service !== "RAW"))}
+          busy={pcgsBusy}
+          onFetch={getPcgs}
+        />
+        </div>
 
         {/* Facts + pricing */}
         <div className="stack">
