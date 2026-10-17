@@ -74,3 +74,4 @@ def year_of(value) -> int | None:
     """1880 from 1880, "1880" or "1880/79"."""
     m = re.match(r"\s*(\d{4})", str(value or ""))
     return int(m.group(1)) if m else None
+

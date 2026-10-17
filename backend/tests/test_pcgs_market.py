@@ -124,3 +124,16 @@ def test_pcgs_market_fetched_once_a_day_per_issue_and_grade(authed, morgan_colle
     n = len(requests)
     d = authed.post(f"/api/coins/{b['inventory_number']}/pcgs").json()
     assert len(requests) == n and d["pcgs_market"]["population"] == 1204  # same issue + grade: no PCGS calls
+
+
+def test_pcgs_links_made_absolute():
+    from app.schemas import PcgsMarket
+    from app.urls import absolute_url
+
+    assert absolute_url("www.pcgs.com/coinfacts/coin/detail/7130/65") == "https://www.pcgs.com/coinfacts/coin/detail/7130/65"
+    assert absolute_url("https://x.test/a") == "https://x.test/a" and absolute_url("//x.test/a") == "https://x.test/a"
+    assert absolute_url("") is None
+    m = PcgsMarket(fetched_at="2026-10-17T00:00:00Z", pcgs_number="7130", grade="MS65",
+                   coinfacts_url="www.pcgs.com/coinfacts/coin/detail/7130/65",
+                   auctions=[{"date": "2026-08", "price": "170.8", "url": "www.stacksbowers.com/lot/1"}])
+    assert m.coinfacts_url.startswith("https://") and m.auctions[0].url == "https://www.stacksbowers.com/lot/1"

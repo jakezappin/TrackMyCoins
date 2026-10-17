@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from .designations import canonical
+from .urls import absolute_url
 
 GradingService = Literal["PCGS", "NGC", "ANACS", "CACG", "RAW"]
 CacSticker = Literal["green", "gold"]
@@ -301,6 +302,11 @@ class AuctionSale(BaseModel):
     cert_number: str | None = None
     cac: bool = False
 
+    @field_validator("url")
+    @classmethod
+    def _absolute(cls, v):
+        return absolute_url(v)
+
 
 class CoinSpecs(BaseModel):
     mintage: int | None = None
@@ -335,6 +341,11 @@ class PcgsMarket(BaseModel):
     pop_higher: int | None = None
     coinfacts_url: str | None = None
     auctions: list[AuctionSale] = []
+
+    @field_validator("coinfacts_url")
+    @classmethod
+    def _absolute(cls, v):  # also fixes links saved before this was handled
+        return absolute_url(v)
 
 
 class CoinDetail(CoinOut):

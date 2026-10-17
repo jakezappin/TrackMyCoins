@@ -10,6 +10,7 @@ import httpx
 from ...config import get_settings
 from ...designations import from_pcgs, with_designation
 from ...schemas import LookupResult
+from ...urls import absolute_url
 from .base import LookupError, normalize_mint_mark, over_variety, parse_grade, set_designation, year_of
 
 BASE_URL = "https://api.pcgs.com/publicapi"
@@ -130,7 +131,7 @@ def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10)
             "auctioneer": a.get("Auctioneer") or None,
             "sale_name": a.get("SaleName") or None,
             "lot": str(a.get("LotNumV2") or a.get("LotNo") or "") or None,
-            "url": a.get("AuctionLotUrl") or None,
+            "url": absolute_url(a.get("AuctionLotUrl")),
             "service": a.get("Service") or None,
             "cert_number": a.get("CertNo") or None,
             "cac": bool(a.get("IsCAC")),
@@ -145,7 +146,7 @@ def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10)
         "price_guide": str(guide) if guide not in (None, "", 0) else None,
         "population": facts.get("Population"),
         "pop_higher": facts.get("PopHigher"),
-        "coinfacts_url": facts.get("CoinFactsLink") or None,
+        "coinfacts_url": absolute_url(facts.get("CoinFactsLink")),
         "auctions": sales[:auctions],
     }
 
