@@ -62,6 +62,12 @@ export interface Collection {
   summary: Summary;
 }
 
+export interface ExportColumn {
+  name: string;
+  /** Only on the Sold sheet (sale price, sale date, ...). */
+  sold_only: boolean;
+}
+
 export interface ImportRow {
   row: number;
   sheet: string;
@@ -425,6 +431,7 @@ export const api = {
   collectionStatus: (id: number, mode: StatusMode = "full") =>
     request<CollectionStatus>("GET", `/api/collections/${id}/status?mode=${mode}`),
   exportUrl: (id: number) => `/api/collections/${id}/export`,
+  exportColumns: () => request<ExportColumn[]>("GET", "/api/reports/export-columns"),
   insuranceUrl: (collectionId: number | null) =>
     `/api/reports/insurance${collectionId == null ? "" : `?collection_id=${collectionId}`}`,
 

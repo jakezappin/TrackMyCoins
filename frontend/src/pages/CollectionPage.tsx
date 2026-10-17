@@ -4,6 +4,7 @@ import { api, type Coin, type Collection } from "../api";
 import { useApp } from "../App";
 import CoinTable from "../components/CoinTable";
 import ShareCollection from "../components/ShareCollection";
+import ExportDialog from "../components/ExportDialog";
 import MoreMenu from "../components/MoreMenu";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import SummaryCards from "../components/SummaryCards";
@@ -18,6 +19,7 @@ export default function CollectionPage() {
   const [coins, setCoins] = useState<Coin[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [name, setName] = useState("");
 
   const load = useCallback(() => {
@@ -96,9 +98,9 @@ export default function CollectionPage() {
           <span className="act-more">
             <MoreMenu>
               <Link to={`/import?collection=${collection.id}`}>Import coins</Link>
-              <a href={api.exportUrl(collection.id)} download>
-                Export to Excel
-              </a>
+              <button type="button" onClick={() => setExporting(true)}>
+                Export to Excel…
+              </button>
               <a href={api.insuranceUrl(collection.id)} download>
                 Insurance report (PDF)
               </a>
@@ -116,6 +118,7 @@ export default function CollectionPage() {
         </div>
       </div>
 
+      {exporting && <ExportDialog collectionId={collection.id} onClose={() => setExporting(false)} />}
       <RefreshSlot />
       <SummaryCards summary={collection.summary} />
       <ValueHistoryChart collectionId={collection.id} refreshKey={collection.summary} />

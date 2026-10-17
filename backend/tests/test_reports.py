@@ -215,3 +215,19 @@ def test_insurance_pdf(authed):
         assert r.content.startswith(b"%PDF")
         assert "Insurance_Inventory_" in r.headers["content-disposition"]
     assert authed.get("/api/reports/insurance?collection_id=99999").status_code == 404
+
+
+def test_export_chosen_columns(authed):
+    col = _collection(authed, "morgan-dollars", name="My Morgans")
+    authed.post("/api/coins", json=coin_payload(col["id"], year=1881, mint_mark="S", price_paid="100.00"))
+    authed.post("/api/coins", json=coin_payload(col["id"], year=1878, mint_mark="P", sale_price="200", sale_date="2026-10-01"))
+    cols = authed.get("/api/reports/export-columns").json()
+    names = [c["name"] for c in cols]
+    assert names[0] == "Inventory #" and "Sale price" in names
+    assert next(c for c in cols if c["name"] == "Sale price")["sold_only"]
+
+    r = authed.get(f"/api/collections/{col['id']}/export", params=[("columns", "Date"), ("columns", "Price paid"), ("columns", "Sale price")])
+    wb = load_workbook(io.BytesIO(r.content))
+    assert list(wb["Coins"].values)[0] == ("Date", "Price paid")
+    assert list(wb["Sold"].values)[0] == ("Date", "Price paid", "Sale price")
+    assert authed.get(f"/api/collections/{col['id']}/export", params={"columns": "Nope"}).status_code == 400

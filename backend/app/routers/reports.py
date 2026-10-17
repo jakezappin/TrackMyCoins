@@ -6,7 +6,7 @@ from datetime import date
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -148,6 +148,14 @@ SOLD_COLUMNS = COIN_COLUMNS[:9] + [
 ]
 
 
+SALE_ONLY = [c for c in SOLD_COLUMNS if c[0] not in {n for n, _, _ in COIN_COLUMNS}]
+ALL_COLUMN_NAMES = [n for n, _, _ in COIN_COLUMNS] + [n for n, _, _ in SALE_ONLY]
+
+
+def _pick(columns, chosen: set[str] | None):
+    return columns if chosen is None else [c for c in columns if c[0] in chosen]
+
+
 def _sheet(ws, columns, coins):
     ws.append([name for name, _, _ in columns])
     for coin in coins:
@@ -173,8 +181,18 @@ def _style(ws, widths, money_cols=(), header=()):
 
 
 @router.get("/{collection_id}/export")
-def export_collection(collection_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def export_collection(
+    collection_id: int,
+    columns: list[str] | None = Query(None, description="Column names to include (default: all)"),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     col = get_owned_collection(db, user, collection_id)
+    chosen = None
+    if columns:
+        chosen = {c for c in columns if c in ALL_COLUMN_NAMES}
+        if not chosen:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose at least one column to export")
     load = (selectinload(Coin.photos), selectinload(Coin.price_quotes))
     def order(coins):
         return sorted(coins, key=lambda c: (c.year, checklist.MINT_ORDER.get(c.mint_mark, 9), c.inventory_number))
@@ -210,7 +228,7 @@ def export_collection(collection_id: int, db: Session = Depends(get_db), user: U
         ws.cell(r, 1).font = Font(bold=True)
     ws.column_dimensions["A"].width, ws.column_dimensions["B"].width = 32, 36
 
-    _sheet(wb.create_sheet("Coins"), COIN_COLUMNS, held)
+    _sheet(wb.create_sheet("Coins"), _pick(COIN_COLUMNS, chosen) or COIN_COLUMNS[:1], held)
 
     # Checklist(s), if the catalog can be reached; the export still works without them.
     for mode in checklist.modes_for(col.coin_type.slug):
@@ -237,7 +255,7 @@ def export_collection(collection_id: int, db: Session = Depends(get_db), user: U
         _style(ws, [16 if mode == "full" else 34, 10, 16, 60])
 
     if gone:
-        _sheet(wb.create_sheet("Sold"), SOLD_COLUMNS, gone)
+        _sheet(wb.create_sheet("Sold"), _pick(SOLD_COLUMNS, chosen) or SOLD_COLUMNS[:1], gone)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -253,6 +271,13 @@ def export_collection(collection_id: int, db: Session = Depends(get_db), user: U
 # ---- Insurance report (PDF) -------------------------------------------------------------------
 
 insurance_router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+
+@insurance_router.get("/export-columns")
+def export_columns(_: User = Depends(current_user)):
+    """Columns the Excel export can include. Sale columns only appear on the Sold sheet."""
+    sale = {n for n, _, _ in SALE_ONLY}
+    return [{"name": n, "sold_only": n in sale} for n in ALL_COLUMN_NAMES]
 
 
 @insurance_router.get("/insurance")
