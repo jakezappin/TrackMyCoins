@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type ImportPreview, type ImportRow } from "../api";
+import { api, type ImportPreview, type ImportResult, type ImportRow } from "../api";
 import { useApp } from "../App";
 import { collectionPath, money } from "../format";
 
 type Mode = "file" | "certs";
 
 const TEMPLATE_HEADERS = [
-  "Date", "Grade", "Grading service", "Cert #", "CAC sticker", "Variety", "VAM", "Collector slab", "Toning",
+  "Type", "Date", "Grade", "Grading service", "Cert #", "CAC sticker", "Variety", "VAM", "Collector slab", "Toning",
   "Price paid", "Date purchased", "Purchased from", "Notes",
 ];
 const TEMPLATE_EXAMPLE = [
-  "1881-S", "MS65+ DMPL", "PCGS", "12345678", "Green", "", "VAM-3", "Rattler", "Obverse",
+  "Morgan Dollar", "1881-S", "MS65+ DMPL", "PCGS", "12345678", "Green", "", "VAM-3", "Rattler", "Obverse",
   "250.00", "2025-03-15", "Heritage", "",
 ];
 
@@ -35,6 +36,7 @@ export default function ImportPage() {
   const targets = collections.filter((c) => !typeSets.has(c.coin_type_id));
 
   const fileInput = useRef<HTMLInputElement>(null);
+  // null: sort each coin into the collection for its series (the default)
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
   const [mode, setMode] = useState<Mode>("file");
   const [certs, setCerts] = useState("");
@@ -43,12 +45,7 @@ export default function ImportPage() {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [skip, setSkip] = useState<Set<string>>(new Set());
   const [importPhotos, setImportPhotos] = useState(true);
-  const [result, setResult] = useState<{ created: string[]; skipped: { row: number; description: string; errors: string[] }[] } | null>(null);
-
-  useEffect(() => {
-    if (collectionId === null && targets.length) setCollectionId(targets[0].id);
-  }, [targets, collectionId]);
-  const collection = collections.find((c) => c.id === collectionId);
+  const [result, setResult] = useState<ImportResult | null>(null);
 
   function reset() {
     setPreview(null);
@@ -73,7 +70,7 @@ export default function ImportPage() {
   const hasPhotos = preview?.rows.some((r) => r.photo_urls.length > 0) ?? false;
 
   async function commit() {
-    if (!preview || !collectionId) return;
+    if (!preview) return;
     setBusy(true);
     setError(null);
     try {
@@ -102,12 +99,13 @@ export default function ImportPage() {
         <label className="field">
           <span>Import into</span>
           <select
-            value={collectionId ?? ""}
+            value={collectionId ?? "auto"}
             onChange={(e) => {
-              setCollectionId(Number(e.target.value));
+              setCollectionId(e.target.value === "auto" ? null : Number(e.target.value));
               reset();
             }}
           >
+            <option value="auto">Sort by coin type (automatic)</option>
             {targets.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} ({c.collection_type_label})
@@ -115,7 +113,13 @@ export default function ImportPage() {
             ))}
           </select>
         </label>
-        {targets.length === 0 && <p className="muted small">Create a collection first.</p>}
+        {collectionId === null && (
+          <p className="muted small">
+            Each coin goes into your first collection for its series (proofs into a Proof collection). If you don't
+            have one yet, it's created. The series comes from a Type column (like Morgan Dollar), words after the
+            date (like 1881-S Morgan Dollar), the PCGS number, or a TrackMyCoins inventory number.
+          </p>
+        )}
 
         <div className="segmented mode-switch" role="tablist">
           <button type="button" className={`seg ${mode === "file" ? "active" : ""}`} onClick={() => { setMode("file"); reset(); }}>
@@ -130,7 +134,7 @@ export default function ImportPage() {
           <div className="stack">
             <p className="muted small">
               A CSV or Excel file with one coin per row and column headings in the first row. A TrackMyCoins export
-              works as-is, including its Sold sheet. Columns can include Date (like 1881-S), Grade (like MS65+ DMPL or
+              works as-is, including its Sold sheet. Columns can include Type (like Morgan Dollar), Date (like 1881-S), Grade (like MS65+ DMPL or
               Raw AU55), Grading service, Cert #, CAC sticker, Variety, VAM, Collector slab, Toning, Price paid, Date
               purchased, Purchased from and Notes.
             </p>
@@ -139,7 +143,7 @@ export default function ImportPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={busy || !collectionId}
+                disabled={busy}
                 onClick={() => fileInput.current?.click()}
               >
                 {busy ? "Reading…" : "Choose file"}
@@ -152,7 +156,7 @@ export default function ImportPage() {
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = "";
-                  if (f && collectionId) run(() => api.importPreview(collectionId, f));
+                  if (f) run(() => api.importPreview(collectionId, f));
                 }}
               />
               <button type="button" className="btn" onClick={downloadTemplate}>
@@ -171,8 +175,8 @@ export default function ImportPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={busy || !certs.trim() || !collectionId}
-                onClick={() => collectionId && run(() => api.importCerts(collectionId, certs))}
+                disabled={busy || !certs.trim()}
+                onClick={() => run(() => api.importCerts(collectionId, certs))}
               >
                 {busy ? "Looking up…" : "Look up certs"}
               </button>
@@ -190,6 +194,7 @@ export default function ImportPage() {
               {preview.ok_count} ready{preview.error_count ? ` · ${preview.error_count} with problems (won't be imported)` : ""}
             </span>
           </div>
+          <Destinations rows={preview.rows.filter((r) => r.errors.length === 0 && !skip.has(rowKey(r)))} />
           <ul className="import-list">
             {preview.rows.map((r) => {
               const ok = r.errors.length === 0;
@@ -220,6 +225,12 @@ export default function ImportPage() {
                       {r.fields.sale_price ? ` · sold ${money(r.fields.sale_price as string)}` : ""}
                       {r.photo_urls.length ? ` · ${r.photo_urls.length} photo${r.photo_urls.length === 1 ? "" : "s"}` : ""}
                     </span>
+                    {ok && r.target && collectionId === null && (
+                      <span className="small import-target">
+                        → {r.target}
+                        {r.target_new && <span className="tag">New</span>}
+                      </span>
+                    )}
                     {r.errors.map((e) => (
                       <span key={e} className="small error">
                         {e}
@@ -249,32 +260,123 @@ export default function ImportPage() {
         </section>
       )}
 
-      {result && collection && (
-        <section className="card form-section">
-          <h2>
-            Imported {result.created.length} Coin{result.created.length === 1 ? "" : "s"}
-          </h2>
-          {result.created.length > 0 && (
-            <p className="small muted">
-              {result.created[0]}
-              {result.created.length > 1 ? ` to ${result.created[result.created.length - 1]}` : ""}
-            </p>
-          )}
-          {result.skipped.length > 0 && (
-            <p className="small muted">
-              {result.skipped.length} row{result.skipped.length === 1 ? " was" : "s were"} skipped.
-            </p>
-          )}
-          <div className="row">
-            <Link className="btn btn-primary" to={collectionPath(collection)}>
-              Go to {collection.name}
-            </Link>
-            <button type="button" className="btn" onClick={reset}>
-              Import more
-            </button>
-          </div>
-        </section>
-      )}
+      {result && <ImportReport result={result} onClose={reset} />}
     </div>
+  );
+}
+
+/** Where the ticked rows will go: "Morgans (3) · Peace Dollar Collection 1 (new, 2)". */
+function Destinations({ rows }: { rows: ImportRow[] }) {
+  const groups = new Map<string, { count: number; isNew: boolean }>();
+  for (const r of rows) {
+    if (!r.target) continue;
+    const g = groups.get(r.target) ?? { count: 0, isNew: Boolean(r.target_new) };
+    g.count += 1;
+    groups.set(r.target, g);
+  }
+  if (groups.size < 2 && ![...groups.values()].some((g) => g.isNew)) return null;
+  return (
+    <div className="import-dest small">
+      <span className="muted">Going into:</span>
+      {[...groups].map(([name, g]) => (
+        <span key={name} className="import-dest-item">
+          {name} ({g.isNew ? "new, " : ""}
+          {g.count})
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** After an import: how many went in (and where), and every row that didn't with the reason. */
+function ImportReport({ result, onClose }: { result: ImportResult; onClose: () => void }) {
+  const { collections } = useApp();
+  const rejected = result.skipped.filter((s) => !s.errors.includes("Skipped"));
+  const unticked = result.skipped.length - rejected.length;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const n = result.created.length;
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal import-report" role="dialog" aria-label="Import results" onClick={(e) => e.stopPropagation()}>
+        <h2>Import Complete</h2>
+        <div className="import-counts">
+          <div className="import-count ok">
+            <strong>{n}</strong>
+            <span>accepted</span>
+          </div>
+          <div className={`import-count ${rejected.length ? "bad" : ""}`}>
+            <strong>{rejected.length}</strong>
+            <span>rejected</span>
+          </div>
+        </div>
+        {unticked > 0 && (
+          <p className="muted small">
+            {unticked} row{unticked === 1 ? "" : "s"} you unticked {unticked === 1 ? "was" : "were"} left out.
+          </p>
+        )}
+
+        {result.collections.length > 0 && (
+          <>
+            <h3>Added To</h3>
+            <ul className="import-report-cols">
+              {result.collections.map((c) => {
+                const col = collections.find((x) => x.id === c.id);
+                return (
+                  <li key={c.id}>
+                    {col ? (
+                      <Link to={collectionPath(col)} onClick={onClose}>
+                        {c.name}
+                      </Link>
+                    ) : (
+                      c.name
+                    )}
+                    {c.new && <span className="tag">New</span>}
+                    <span className="muted">
+                      {c.count} coin{c.count === 1 ? "" : "s"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
+        {rejected.length > 0 && (
+          <>
+            <h3>Rejected</h3>
+            <ul className="import-report-bad">
+              {rejected.map((s) => (
+                <li key={`${s.sheet}-${s.row}`}>
+                  <div>
+                    <strong>{s.description || "Unreadable row"}</strong>
+                    <span className="muted small">
+                      {" "}
+                      · {s.sheet && s.sheet !== "CSV" ? `${s.sheet} sheet, ` : ""}row {s.row}
+                    </span>
+                  </div>
+                  {s.errors.map((e) => (
+                    <div key={e} className="small error">
+                      {e}
+                    </div>
+                  ))}
+                </li>
+              ))}
+            </ul>
+            <p className="muted small">Fix these rows in your file and import it again; coins already added are flagged as duplicates.</p>
+          </>
+        )}
+
+        <div className="row-end">
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

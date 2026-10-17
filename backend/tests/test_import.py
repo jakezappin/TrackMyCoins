@@ -117,5 +117,80 @@ def test_overdates_and_overmintmarks():
         "1878 7/8TF Strong": (1878, "P", "7/8TF Strong"),  # tail-feather variety, not an overdate
     }
     for date, want in cases.items():
-        f, _, errors = importer.row_to_fields({"Date": date, "Grade": "MS63", "Service": "PCGS", "Cert": "1"})
+        f, _, errors, _ = importer.row_to_fields({"Date": date, "Grade": "MS63", "Service": "PCGS", "Cert": "1"})
         assert not errors and (f["year"], f["mint_mark"], f["variety"]) == want, date
+
+
+MIXED = """Type,Date,Grade,Service,Cert #
+,1881-S Morgan Dollar,MS64,PCGS,90000001
+Peace Dollar,1922,MS63,PCGS,90000002
+Barber Dime,1900-O,MS62,NGC,90000003
+,1895 Morgan,PR64 CAM,PCGS,90000004
+Morgan,1910,MS63,PCGS,90000005
+Franklin Half,1955,MS64,PCGS,90000006
+,1881 $1,MS63,PCGS,90000007
+,1882-S,MS64,PCGS,90000008
+,1921-S Peace,MS63,PCGS,90000009
+"""
+
+
+def test_sort_mixed_file_into_collections(authed):
+    first = _collection(authed, "morgan-dollars", name="Morgans A")
+    _collection(authed, "morgan-dollars", name="Morgans B")
+    r = authed.post("/api/import/preview", files={"file": ("mixed.csv", MIXED.encode(), "text/csv")})
+    assert r.status_code == 200, r.text
+    rows = {x["row"]: x for x in r.json()["rows"]}
+    assert (rows[2]["target"], rows[2]["target_new"], rows[2]["fields"]["variety"]) == ("Morgans A", False, None)
+    assert (rows[3]["target"], rows[3]["target_new"]) == ("Peace Dollar Collection 1", True)
+    assert rows[4]["target"] == "Barber Dime Collection 1"
+    assert rows[5]["target"] == "Morgan Dollar Proof Collection 1"
+    assert "1910 isn't a Morgan Dollar date" in rows[6]["errors"][0]
+    assert rows[7]["errors"] and rows[8]["errors"]  # a series we don't track; "$1" alone is ambiguous
+    assert "Type column" in rows[9]["errors"][0]  # nothing says what it is
+    assert rows[10]["target"] == "Peace Dollar Collection 1"
+
+    out = authed.post("/api/import/commit", json={"collection_id": None, "rows": r.json()["rows"]}).json()
+    assert len(out["created"]) == 5 and len(out["skipped"]) == 4
+    made = {c["name"]: c for c in out["collections"]}
+    assert made["Morgans A"]["count"] == 1 and not made["Morgans A"]["new"]
+    assert made["Peace Dollar Collection 1"]["count"] == 2 and made["Peace Dollar Collection 1"]["new"]
+    assert made["Morgan Dollar Proof Collection 1"]["new"]
+    cols = {c["name"]: c for c in authed.get("/api/collections").json()}
+    assert cols["Peace Dollar Collection 1"]["number"] == 1 and cols["Morgan Dollar Proof Collection 1"]["finish"] == "PR"
+    assert [c["inventory_number"][:3] for c in authed.get(f"/api/collections/{first['id']}/coins").json()] == ["MOR"]
+    peace = authed.get(f"/api/collections/{made['Peace Dollar Collection 1']['id']}/coins").json()
+    assert sorted(c["year"] for c in peace) == [1921, 1922]
+
+
+def test_import_into_one_collection_flags_other_series(authed):
+    col = _collection(authed, "morgan-dollars", name="Morgans")
+    text = "Date,Grade,Service,Cert #\n1921 Peace Dollar,MS63,PCGS,91000001\n1910,MS63,PCGS,91000002\n1921,MS63,PCGS,91000003\n"
+    rows = {x["row"]: x for x in _preview_csv(authed, col, text).json()["rows"]}
+    assert rows[2]["errors"] == ["This looks like a Peace Dollar, not a Morgan Dollar."]
+    assert "1910 isn't a Morgan Dollar date" in rows[3]["errors"][0]
+    assert rows[4]["errors"] == [] and rows[4]["target"] == "Morgans"
+
+
+def test_export_inventory_numbers_sort_themselves(authed):
+    text = "Inventory #,Date,Grade,Grading service,Cert #\nPEA-00007,1923-S,MS64,PCGS,92000001\n"
+    r = authed.post("/api/import/preview", files={"file": ("x.csv", text.encode(), "text/csv")}).json()
+    assert r["rows"][0]["target"] == "Peace Dollar Collection 1"
+
+
+def test_paste_certs_sorted_by_pcgs_series(authed, monkeypatch):
+    from app.routers import importer as r_imp
+
+    facts = {"1": ("Morgan Dollars 1878-1921", "1881-S $1", 1881, "S"),
+             "2": ("Peace Dollars 1921-1935", "1923 $1", 1923, None),
+             "3": ("Franklin Half Dollars 1948-1963", "1955 50C", 1955, None)}
+
+    def fake(service, cert, check_cac=True, user_id=None):
+        series, name, year, mint = facts[cert]
+        return LookupResult(grading_service="PCGS", cert_number=cert, year=year, mint_mark=mint, grade_prefix="MS",
+                            grade=64, description=name, raw={"SeriesName": series, "Name": name})
+
+    monkeypatch.setattr(r_imp.lookups, "lookup", fake)
+    d = authed.post("/api/import/certs", json={"certs": "1, 2, 3"}).json()
+    rows = {x["row"]: x for x in d["rows"]}
+    assert rows[1]["target"] == "Morgan Dollar Collection 1" and rows[2]["target"] == "Peace Dollar Collection 1"
+    assert "doesn't track yet" in rows[3]["errors"][0]

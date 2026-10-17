@@ -3,16 +3,17 @@
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
-from ..models import Coin, Collection, CoinPhoto, User
+from ..models import CatalogEntry, Coin, CoinPhoto, CoinType, Collection, CollectionCounter, User
 from ..schemas import CoinFields, ImportValuation
-from ..series import BY_SLUG
-from ..services import importer, lookups, quota
+from ..series import BY_SLUG, FINISHES, Series
+from ..services import importer, lookups, quota, series_match
 from ..services import photos as store
-from ..services.coins import _cert_key, find_duplicate_cert, next_inventory_number
+from ..services.coins import _cert_key, find_duplicate_cert, next_collection_number, next_inventory_number
 from .coins import _validate
 from .collections import get_owned_collection
 
@@ -30,27 +31,32 @@ class ImportRow(BaseModel):
     description: str = ""
     lookup_raw: dict | None = None
     photo_urls: list[str] = []
+    hints: dict = {}  # what says which series the coin is (Type column, words after the date, inventory #)
+    target: str | None = None  # the collection it will go into (preview)
+    target_new: bool = False  # ... which will be created
 
 
 class PreviewOut(BaseModel):
-    collection_id: int
+    collection_id: int | None
     rows: list[ImportRow]
     ok_count: int
     error_count: int
 
 
 class CertsIn(BaseModel):
-    collection_id: int
+    collection_id: int | None = None  # None: sort each coin into the collection for its series
     certs: str = Field(max_length=20000)
 
 
 class CommitIn(BaseModel):
-    collection_id: int
+    collection_id: int | None = None
     rows: list[ImportRow] = Field(max_length=importer.MAX_ROWS)
     import_photos: bool = True
 
 
-def _collection(db: Session, user: User, collection_id: int) -> Collection:
+def _collection(db: Session, user: User, collection_id: int | None) -> Collection | None:
+    if collection_id is None:
+        return None
     col = get_owned_collection(db, user, collection_id)
     series = BY_SLUG.get(col.coin_type.slug)
     if series and series.is_type_set:
@@ -71,8 +77,10 @@ def _messages(e: ValidationError) -> list[str]:
     return out
 
 
-def _describe(f: dict) -> str:
+def _describe(f: dict, series_name: str | None = None) -> str:
     date = f"{f.get('year') or '?'}" + (f"-{f['mint_mark']}" if f.get("mint_mark") not in (None, "P") else "")
+    if series_name:
+        date += f" {series_name}"
     grade = f"{f.get('grade_prefix') or ''}{f.get('grade') or ''}{'+' if f.get('grade_plus') else ''}"
     if f.get("strike_designation"):
         grade += f" {f['strike_designation']}"
@@ -80,15 +88,122 @@ def _describe(f: dict) -> str:
     return " ".join(x for x in (date, f.get("variety") or "", grade.strip(), "·", svc) if x)
 
 
-def _check(db: Session, user: User, col: Collection, rows: list[ImportRow]) -> list[ImportRow]:
-    """Same rules as adding a coin by hand, plus duplicate certs within the file."""
+FINISH_WORD = {"MS": "", "PR": " Proof", "SPR": " Silver Proof"}
+NO_SERIES = ("Couldn't tell which series this coin is. Add a Type column (e.g. Morgan Dollar) or put it after "
+             "the date (e.g. 1881-S Morgan Dollar).")
+
+
+class _Router:
+    """Decides which collection each row goes into: the one picked, or (sorting) the user's first collection for
+    the coin's series and finish, creating one at commit if there isn't one."""
+
+    def __init__(self, db: Session, user: User, fixed: Collection | None, rows: list[ImportRow]):
+        self.db, self.user, self.fixed = db, user, fixed
+        self.types = {t.slug: t for t in db.scalars(select(CoinType))}
+        self.existing: dict[tuple[int, str], Collection] = {}
+        for c in db.scalars(select(Collection).where(Collection.user_id == user.id).order_by(Collection.number)):
+            self.existing.setdefault((c.coin_type_id, c.finish), c)  # first by number
+        self.planned: dict[tuple[int, str], Collection] = {}  # sorting: collections still to be created
+        # PCGS numbers we've already catalogued name their series exactly.
+        numbers = {str(r.fields.get("pcgs_number")) for r in rows if r.fields.get("pcgs_number")}
+        self.by_pcgs: dict[str, int] = {}
+        if numbers:
+            for num, type_id in db.execute(
+                select(CatalogEntry.pcgs_number, CatalogEntry.coin_type_id).where(CatalogEntry.pcgs_number.in_(numbers))
+            ):
+                self.by_pcgs.setdefault(num, type_id)
+        self.slug_by_type_id = {t.id: slug for slug, t in self.types.items()}
+
+    def series_of(self, r: ImportRow) -> tuple[Series | None, str | None]:
+        year = r.fields.get("year")
+        s = series_match.from_inventory_number(r.hints.get("inventory"))
+        if s:
+            return s, None
+        type_id = self.by_pcgs.get(str(r.fields.get("pcgs_number") or ""))
+        if type_id and (s := BY_SLUG.get(self.slug_by_type_id.get(type_id, ""))) and not s.is_type_set:
+            return s, None
+        reasons = []
+        if r.lookup_raw:
+            m = series_match.from_pcgs_facts(r.lookup_raw, year)
+            if m.series:
+                return m.series, None
+            reasons.append(m.reason)
+        text = r.hints.get("text")
+        m = series_match.from_text(text, year)
+        if m.series:
+            return m.series, None
+        reasons.append(m.reason)
+        if text and not r.lookup_raw:
+            reasons.append(f"Didn't recognize '{text}' as a series TrackMyCoins tracks. Use a name like Morgan Dollar.")
+        return None, next((x for x in reasons if x), None)
+
+    def target(self, r: ImportRow) -> tuple[Collection, CoinType] | str:
+        """(collection, its coin type) for a row, or why it can't be placed."""
+        series, why = self.series_of(r)
+        year = r.fields.get("year")
+        if self.fixed is not None:
+            mine = BY_SLUG.get(self.fixed.coin_type.slug)
+            if series and mine and series.slug != mine.slug:
+                return f"This looks like a {series.name}, not a {mine.name}."
+            if mine and not series_match.year_ok(mine.slug, year):
+                return f"{year} isn't a {mine.name} date ({mine.plural} were struck {series_match.years_label(mine.slug)})."
+            return self.fixed, self.fixed.coin_type
+        if series is None:
+            return why or NO_SERIES
+        if not series_match.year_ok(series.slug, year):
+            return f"{year} isn't a {series.name} date ({series.plural} were struck {series_match.years_label(series.slug)})."
+        ct = self.types.get(series.slug)
+        if ct is None:
+            return NO_SERIES
+        finish = "MS"
+        if (r.fields.get("grade_prefix") or "") in ("PR", "PF"):
+            silver = "silver" in f"{r.hints.get('text', '')} {r.fields.get('variety') or ''}".lower()
+            finish = "SPR" if silver and "SPR" in (ct.finishes or []) else "PR"
+        if finish not in (ct.finishes or ["MS"]):
+            return f"TrackMyCoins doesn't have {FINISHES[finish][1]} collections for {series.plural}."
+        key = (ct.id, finish)
+        col = self.existing.get(key) or self.planned.get(key)
+        if col is None:  # not saved until commit
+            col = Collection(user_id=self.user.id, coin_type_id=ct.id, finish=finish, name=self._new_name(ct, finish))
+            self.planned[key] = col
+        return col, ct
+
+    def _new_name(self, ct: CoinType, finish: str) -> str:
+        counter = self.db.get(CollectionCounter, (self.user.id, ct.id, finish))
+        n = counter.next_number if counter else 1
+        taken = set(self.db.scalars(select(Collection.name).where(Collection.user_id == self.user.id)))
+        taken |= {c.name for c in self.planned.values()}
+        while (name := f"{ct.name}{FINISH_WORD[finish]} Collection {n}") in taken:
+            n += 1
+        return name
+
+    def create_planned(self, used: set[tuple[int, str]]) -> None:
+        """Save the new collections that coins are actually going into."""
+        for key, col in self.planned.items():
+            if key in used:
+                col.number = next_collection_number(self.db, self.user.id, self.types[self.slug_by_type_id[key[0]]], key[1])
+                self.db.add(col)
+        self.db.flush()
+
+
+def _check(db: Session, user: User, router_: _Router, rows: list[ImportRow]) -> list[tuple[ImportRow, Collection, CoinType]]:
+    """Same rules as adding a coin by hand, plus the right series and duplicate certs within the file.
+    Returns the rows that can be imported with where they go; the others get errors."""
     seen: dict[tuple[str, str], int] = {}
+    ok = []
     for r in rows:
+        made_up = not r.description or r.description == _describe(r.fields)  # ours, not PCGS's
         r.description = r.description or _describe(r.fields)
+        r.target, r.target_new = None, False
         if r.errors:
             continue
+        placed = router_.target(r)
+        if isinstance(placed, str):
+            r.errors.append(placed)
+            continue
+        col, ct = placed
         try:
-            data = _validate(CoinFields(**r.fields), col, col.coin_type)
+            data = _validate(CoinFields(**r.fields), col, ct)
             ImportValuation(**r.valuation)
         except HTTPException as e:
             r.errors.append(str(e.detail))
@@ -102,22 +217,27 @@ def _check(db: Session, user: User, col: Collection, rows: list[ImportRow]) -> l
             dup = find_duplicate_cert(db, user.id, data["grading_service"], data["cert_number"])
             if dup:
                 r.errors.append(f"Already in your collection as {dup.inventory_number}")
-            elif key in seen:
+                continue
+            if key in seen:
                 r.errors.append(f"Same cert as row {seen[key]}")
-            else:
-                seen[key] = r.row
-    return rows
+                continue
+            seen[key] = r.row
+        r.target, r.target_new = col.name, col.id is None
+        if made_up:
+            r.description = _describe(r.fields, ct.name)
+        ok.append((r, col, ct))
+    return ok
 
 
 def _preview(db, user, col, rows: list[ImportRow]) -> PreviewOut:
-    rows = _check(db, user, col, rows)
+    _check(db, user, _Router(db, user, col, rows), rows)
     bad = sum(1 for r in rows if r.errors)
-    return PreviewOut(collection_id=col.id, rows=rows, ok_count=len(rows) - bad, error_count=bad)
+    return PreviewOut(collection_id=col.id if col else None, rows=rows, ok_count=len(rows) - bad, error_count=bad)
 
 
 @router.post("/preview", response_model=PreviewOut)
 async def preview_file(
-    file: UploadFile, collection_id: int = Form(...), db: Session = Depends(get_db), user: User = Depends(current_user)
+    file: UploadFile, collection_id: int | None = Form(None), db: Session = Depends(get_db), user: User = Depends(current_user)
 ):
     col = _collection(db, user, collection_id)
     data = await file.read(10 * 1024 * 1024 + 1)
@@ -133,8 +253,8 @@ async def preview_file(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Import at most {importer.MAX_ROWS} rows at a time.")
     rows = []
     for sheet, n, raw in raw_rows:
-        fields, valuation, errors = importer.row_to_fields(raw, sold_sheet=sheet == "Sold")
-        rows.append(ImportRow(row=n, sheet=sheet, fields=fields, valuation=valuation, errors=errors))
+        fields, valuation, errors, hints = importer.row_to_fields(raw, sold_sheet=sheet == "Sold")
+        rows.append(ImportRow(row=n, sheet=sheet, fields=fields, valuation=valuation, errors=errors, hints=hints))
     return _preview(db, user, col, rows)
 
 
@@ -186,15 +306,17 @@ def preview_certs(body: CertsIn, db: Session = Depends(get_db), user: User = Dep
 @router.post("/commit")
 def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     col = _collection(db, user, body.collection_id)
-    # Rows that had problems in the preview stay skipped; the rest are checked again here.
-    rows = _check(db, user, col, body.rows)
+    # Rows that had problems in the preview stay skipped; the rest are checked (and placed) again here.
+    router_ = _Router(db, user, col, body.rows)
+    placed = _check(db, user, router_, body.rows)
+    router_.create_planned({(c.coin_type_id, c.finish) for _, c, _ in placed})
+    rows = body.rows
     created: list[tuple[Coin, list[str]]] = []
-    for r in rows:
-        if r.errors:
-            continue
-        data = _validate(CoinFields(**r.fields), col, col.coin_type)
-        coin = Coin(**data, user_id=user.id, coin_type_id=col.coin_type_id, collection_id=col.id,
-                    inventory_number=next_inventory_number(db, user.id, col.coin_type), lookup_raw=r.lookup_raw)
+    per_collection: dict[int, dict] = {}
+    for r, target, ct in placed:
+        data = _validate(CoinFields(**r.fields), target, ct)
+        coin = Coin(**data, user_id=user.id, coin_type_id=ct.id, collection_id=target.id,
+                    inventory_number=next_inventory_number(db, user.id, ct), lookup_raw=r.lookup_raw)
         v = ImportValuation(**r.valuation)
         if v.value_source == "custom" and v.custom_value is not None:
             coin.value_source, coin.custom_value = "custom", v.custom_value
@@ -203,6 +325,9 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
         db.add(coin)
         db.flush()
         created.append((coin, r.photo_urls[:4] if body.import_photos else []))
+        entry = per_collection.setdefault(target.id, {"id": target.id, "name": target.name, "count": 0,
+                                                       "new": (target.coin_type_id, target.finish) in router_.planned})
+        entry["count"] += 1
     db.commit()  # the coins are saved before any slow photo downloads
 
     # Photos are downloaded outside any database transaction (downloads can take a while, and holding SQLite's
@@ -221,5 +346,7 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
             db.commit()
     return {
         "created": [c.inventory_number for c, _ in created],
-        "skipped": [{"row": r.row, "description": r.description, "errors": r.errors} for r in rows if r.errors],
+        "collections": list(per_collection.values()),
+        "skipped": [{"row": r.row, "sheet": r.sheet, "description": r.description, "errors": r.errors}
+                    for r in rows if r.errors],
     }

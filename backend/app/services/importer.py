@@ -14,6 +14,7 @@ from openpyxl import load_workbook
 from pydantic import ValidationError
 
 from ..schemas import CoinFields
+from . import series_match
 
 MAX_ROWS = 2000
 
@@ -55,6 +56,9 @@ ALIASES = {
     "soldto": "sold_to", "buyer": "sold_to",
     "notes": "notes", "note": "notes", "comments": "notes",
     "tonerpremium": "toner_premium", "holderpremium": "holder_premium",
+    "type": "series_hint", "series": "series_hint", "cointype": "series_hint", "seriesname": "series_hint",
+    "denomination": "series_hint", "denom": "series_hint", "collectiontype": "series_hint",
+    "inventory": "inventory_hint", "inventorynumber": "inventory_hint", "inventoryno": "inventory_hint",
     "valuesource": "value_source", "estimatedvalue": "estimated_value", "myvalue": "estimated_value",
 }
 
@@ -144,8 +148,9 @@ def _date(v, errors: list[str], label: str) -> date | None:
     return None
 
 
-def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list[str]]:
-    """(coin fields, valuation fields, errors) for one spreadsheet row."""
+def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list[str], dict]:
+    """(coin fields, valuation fields, errors, series hints) for one spreadsheet row. The hints (a Type column,
+    words after the date, our own inventory number) say which series the coin is, for sorting a mixed file."""
     vals: dict = {}
     for header, value in raw.items():
         field = ALIASES.get(_key(header))
@@ -178,7 +183,10 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
         errors.append("No date: add a Date column like 1881-S, or Year and Mint columns")
     f["year"] = year
     f["mint_mark"] = mint or "P"
-    f["variety"] = _text(vals.get("variety")) or rest
+    # A series named in the date column ("1881-S Morgan Dollar") is used to sort the coin, not kept as a variety.
+    hint = " ".join(x for x in (_text(vals.get("series_hint")), rest) if x)
+    named = series_match.from_text(rest, year).series if rest else None
+    f["variety"] = _text(vals.get("variety")) or (series_match.strip_series_words(rest, named) if named else rest)
     f["vam"] = _text(vals.get("vam"))
 
     # Grade: "MS65+ DMPL", "PR69 DCAM", "Raw AU55", "65".
@@ -267,7 +275,8 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     else:
         f = {k: (v.isoformat() if isinstance(v, date) else str(v) if isinstance(v, Decimal) else v) for k, v in f.items()}
     valuation = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in valuation.items() if v is not None}
-    return f, valuation, errors
+    hints = {k: v for k, v in (("text", hint), ("inventory", _text(vals.get("inventory_hint")))) if v}
+    return f, valuation, errors, hints
 
 
 def split_certs(text: str) -> list[str]:

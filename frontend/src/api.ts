@@ -107,13 +107,23 @@ export interface ImportRow {
   description: string;
   lookup_raw: Record<string, unknown> | null;
   photo_urls: string[];
+  hints?: Record<string, string>;
+  /** The collection the coin will go into, and whether that collection will be created. */
+  target?: string | null;
+  target_new?: boolean;
 }
 
 export interface ImportPreview {
-  collection_id: number;
+  collection_id: number | null;
   rows: ImportRow[];
   ok_count: number;
   error_count: number;
+}
+
+export interface ImportResult {
+  created: string[];
+  collections: { id: number; name: string; count: number; new: boolean }[];
+  skipped: { row: number; sheet: string; description: string; errors: string[] }[];
 }
 
 /** What Claude read off a slab label photo. */
@@ -654,16 +664,17 @@ export const api = {
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}`, b),
   deleteCoin: (inv: string) => request<void>("DELETE", `/api/coins/${encodeURIComponent(inv)}`),
 
-  importPreview: (collectionId: number, file: File) => {
+  /** collectionId null: sort each coin into the collection for its series. */
+  importPreview: (collectionId: number | null, file: File) => {
     const fd = new FormData();
-    fd.append("collection_id", String(collectionId));
+    if (collectionId !== null) fd.append("collection_id", String(collectionId));
     fd.append("file", file);
     return request<ImportPreview>("POST", "/api/import/preview", fd);
   },
-  importCerts: (collectionId: number, certs: string) =>
+  importCerts: (collectionId: number | null, certs: string) =>
     request<ImportPreview>("POST", "/api/import/certs", { collection_id: collectionId, certs }),
-  importCommit: (collectionId: number, rows: ImportRow[], importPhotos: boolean) =>
-    request<{ created: string[]; skipped: { row: number; description: string; errors: string[] }[] }>(
+  importCommit: (collectionId: number | null, rows: ImportRow[], importPhotos: boolean) =>
+    request<ImportResult>(
       "POST",
       "/api/import/commit",
       { collection_id: collectionId, rows, import_photos: importPhotos },
