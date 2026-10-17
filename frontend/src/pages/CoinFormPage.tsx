@@ -10,6 +10,7 @@ import {
   type LabelReading,
   type LookupResult,
 } from "../api";
+import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
@@ -506,6 +507,15 @@ export default function CoinFormPage() {
             onFiles={(fs) => readLabel(fs[0])}
           />
         </div>
+        {form.grading_service === "NGC" && !editInv && (
+          <NgcPhotoLink
+            expectedCert={form.cert_number}
+            onFound={(r) => {
+              if (!form.cert_number) set("cert_number", r.cert_number);
+              setImportUrls((cur) => [...cur.filter((u) => !r.urls.includes(u)), ...r.urls]);
+            }}
+          />
+        )}
         {labelError && <p className="error small">{labelError}</p>}
         {label && <LabelSummary r={label} kept={!editInv && label.found_label} />}
         {lookupError && <p className="error">{lookupError}</p>}

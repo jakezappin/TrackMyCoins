@@ -62,6 +62,13 @@ export interface Collection {
   summary: Summary;
 }
 
+export interface NgcImages {
+  cert_number: string;
+  /** Full-size obverse / reverse */
+  urls: string[];
+  previews: string[];
+}
+
 export interface ExportColumn {
   name: string;
   /** Only on the Sold sheet (sale price, sale date, ...). */
@@ -466,6 +473,7 @@ export const api = {
     files.forEach((f) => fd.append("files", f));
     return request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos`, fd);
   },
+  ngcImages: (link: string) => request<NgcImages>("GET", `/api/ngc-images?link=${encodeURIComponent(link)}`),
   importPhotos: (inv: string, urls: string[]) =>
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos/import`, { urls }),
   reorderPhotos: (inv: string, photo_ids: number[]) =>

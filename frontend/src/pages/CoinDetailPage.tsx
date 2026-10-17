@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type CoinDetail } from "../api";
 import { useApp } from "../App";
+import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import EstimatedValueCard from "../components/EstimatedValueCard";
@@ -216,6 +217,17 @@ export default function CoinDetailPage() {
               <PhotoButtons takeLabel="Take photo" chooseLabel="Add photos" onFiles={(fs) => upload(fs)} />
             )}
           </div>
+          {coin.grading_service === "NGC" && coin.photos.length <= 8 && (
+            <details className="ngc-add" open={coin.photos.length === 0}>
+              <summary className="small">Add NGC's photos</summary>
+              <NgcPhotoLink
+                expectedCert={coin.cert_number}
+                actionLabel="Add photos"
+                busyLabel="Adding…"
+                onFound={async (r) => update(await api.importPhotos(inv, r.urls))}
+              />
+            </details>
+          )}
         </section>
 
         {/* Facts + pricing */}

@@ -42,20 +42,30 @@ def coin_dir(coin_id: int) -> Path:
     return settings.photo_dir / str(coin_id)
 
 
-def _heic_to_jpeg(data: bytes) -> bytes:
-    """iPhone photos: most browsers can't show HEIC, so keep a JPEG instead."""
+MAX_SIDE = 2000  # keeps phone and NGC full-size photos (~2-5 MB) to a few hundred KB
+
+
+def _shrink(data: bytes, content_type: str) -> tuple[bytes, str] | None:
+    """Re-encode HEIC or oversized photos as a JPEG at most MAX_SIDE px; None to keep the original."""
     import pillow_heif
     from PIL import Image, ImageOps
 
     pillow_heif.register_heif_opener()
     try:
         with Image.open(io.BytesIO(data)) as im:
+            if content_type != "image/heic" and max(im.size) <= MAX_SIDE:
+                return None
+            if content_type == "image/gif" and getattr(im, "is_animated", False):
+                return None
             im = ImageOps.exif_transpose(im).convert("RGB")
+            im.thumbnail((MAX_SIDE, MAX_SIDE))
             out = io.BytesIO()
-            im.save(out, "JPEG", quality=90)
+            im.save(out, "JPEG", quality=88)
     except Exception as e:
-        raise PhotoError("Couldn't read that HEIC photo") from e
-    return out.getvalue()
+        if content_type == "image/heic":
+            raise PhotoError("Couldn't read that HEIC photo") from e
+        return None  # store as-is; the browser may still show it
+    return out.getvalue(), "image/jpeg"
 
 
 def save_bytes(coin_id: int, data: bytes, content_type: str) -> tuple[str, str]:
@@ -68,8 +78,10 @@ def save_bytes(coin_id: int, data: bytes, content_type: str) -> tuple[str, str]:
         raise PhotoError(f"Unsupported image type: {content_type or 'unknown'}")
     if len(data) > settings.max_photo_bytes:
         raise PhotoError("Image is too large")
-    if content_type == "image/heic":
-        data, content_type, ext = _heic_to_jpeg(data), "image/jpeg", ".jpg"
+    shrunk = _shrink(data, content_type)
+    if shrunk:
+        data, content_type = shrunk
+        ext = ".jpg"
     d = coin_dir(coin_id)
     d.mkdir(parents=True, exist_ok=True)
     name = f"{uuid.uuid4().hex}{ext}"

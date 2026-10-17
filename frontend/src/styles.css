@@ -2620,3 +2620,23 @@ table {
     text-align: center;
   }
 }
+
+/* ---- NGC photo links --------------------------------------------------------- */
+.ngc-photos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ngc-thumb {
+  height: 90px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.ngc-add {
+  margin-top: 10px;
+}
+.ngc-add summary {
+  cursor: pointer;
+  color: var(--accent);
+}

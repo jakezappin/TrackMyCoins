@@ -7,6 +7,7 @@ from ..db import get_db
 from ..models import PriceQuote, User
 from ..schemas import CoinDetail, LookupResult, ManualQuoteIn, ValuationIn
 from ..services import greysheet, lookups, price_refresh
+from ..services import ngc_images as ngc_images_service
 from ..services.coins import CUSTOM, coin_detail, duplicate_info, find_duplicate_cert, latest_quote
 from .coins import get_owned_coin
 
@@ -25,6 +26,15 @@ def cert_lookup(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Lookup service error: {e}")
+
+
+@router.get("/ngc-images")
+def ngc_images(link: str = Query(..., max_length=500), _: User = Depends(current_user)):
+    """Full-size obverse and reverse photo URLs from one NGC photo link."""
+    try:
+        return ngc_images_service.resolve(link)
+    except ngc_images_service.NgcImageError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
 
 @router.get("/cert-check")
