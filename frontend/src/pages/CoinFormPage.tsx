@@ -17,8 +17,6 @@ import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
 
-const SERVICE_NAMES: Record<GradingService, string> = { PCGS: "PCGS", NGC: "NGC", ANACS: "ANACS", CACG: "CAC Grading", RAW: "Raw" };
-
 const EMPTY: CoinFields = {
   year: null,
   mint_mark: "P",
@@ -79,7 +77,8 @@ function verifyUrl(service: GradingService, cert: string, grade: number | null):
     case "NGC":
       return ngcCertUrl(cert, grade);
     case "ANACS":
-      return "https://anacs.com/verify/";
+      // ANACS's lookup form; it can't be prefilled from the address.
+      return "https://portal.anacs.com/Verify/CertVerification.aspx";
     case "CACG":
       return cert ? `https://www.cacgrading.com/lookup/${encodeURIComponent(cert)}` : "https://www.cacgrading.com/lookup";
     default:
@@ -501,6 +500,8 @@ export default function CoinFormPage() {
 
   const canLookUp = form.grading_service === "PCGS";
   const isNgc = form.grading_service === "NGC";
+  // NGC and ANACS: no lookups we can automate, so cert + grade and a Verify button that's always there.
+  const verifyOnly = isNgc || form.grading_service === "ANACS";
   const vurl = lookup?.verify_url && form.grading_service !== "NGC" ? lookup.verify_url : verifyUrl(form.grading_service, form.cert_number ?? "", form.grade);
   const isSold = Boolean(form.sale_price || form.sale_date);
 
@@ -565,7 +566,7 @@ export default function CoinFormPage() {
             <span>Cert number</span>
             <input
               {...text("cert_number")}
-              placeholder={isNgc ? "e.g. 1234567-001" : "e.g. 12345678"}
+              placeholder={isNgc ? "e.g. 1234567-001" : form.grading_service === "ANACS" ? "e.g. 8016482" : "e.g. 12345678"}
               onBlur={async () => {
                 if (!(await checkDuplicate()) && isNgc) checkCac();
               }}
@@ -578,7 +579,7 @@ export default function CoinFormPage() {
               }}
             />
           </label>
-          {isNgc && (
+          {verifyOnly && (
             <label className="field grade-mini">
               <span>Grade</span>
               <input
@@ -609,7 +610,7 @@ export default function CoinFormPage() {
             )
           ) : (
             vurl && (
-              <a className="btn" href={vurl} target="_blank" rel="noreferrer">
+              <a className={`btn${verifyOnly ? " btn-primary" : ""}`} href={vurl} target="_blank" rel="noreferrer">
                 Verify ↗
               </a>
             )
@@ -637,10 +638,15 @@ export default function CoinFormPage() {
             )}
           </p>
         )}
-        {!isRaw && !isNgc && !canLookUp && (
+        {!isRaw && form.grading_service === "ANACS" && (
           <p className="muted small">
-            {SERVICE_NAMES[form.grading_service]} doesn't allow automated lookups. Use Verify ↗, then fill in the date and
-            grade below.
+            ANACS doesn't allow automated lookups. Use <strong>Verify ↗</strong> to check the cert on ANACS's site, then
+            fill in the date below.
+          </p>
+        )}
+        {!isRaw && form.grading_service === "CACG" && (
+          <p className="muted small">
+            CAC Grading doesn't allow automated lookups. Use Verify ↗, then fill in the date and grade below.
           </p>
         )}
         {cacNote && <p className="small muted">{cacNote}</p>}
