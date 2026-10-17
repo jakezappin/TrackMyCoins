@@ -4,9 +4,12 @@ Used by bulk import to sort a mixed spreadsheet into collections, and to catch c
 collection being imported into (a 1921 Peace Dollar in a Morgan collection, say).
 """
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import date
+from functools import cache
+from pathlib import Path
 
 from ..series import BY_SLUG, SERIES, Series
 
@@ -209,6 +212,49 @@ def year_ok(slug: str, year: int | None) -> bool:
 def years_label(slug: str) -> str:
     """'1878–1904, 1921, 2021, 2023 on'."""
     return ", ".join(f"{lo}–{hi}" if hi and hi != lo else (str(lo) if hi else f"{lo} on") for lo, hi in YEARS.get(slug, ()))
+
+
+# Real dates Greysheet's catalog leaves out: {slug: {year: {"MS"|"PR": mints}}}.
+MISSING_FROM_CATALOG = {
+    "early-quarter-eagles": {1802: {"MS": "P"}},  # the 1802/"1"
+}
+MINT_NAMES = {"P": "Philadelphia (no mint mark)", "D": "D", "S": "S", "O": "O", "CC": "CC", "C": "C", "W": "W"}
+
+
+@cache
+def _issues() -> dict:
+    """Every date and mint each series was struck at (app/series_issues.json, built by scripts/build_issues.py)."""
+    path = Path(__file__).resolve().parents[1] / "series_issues.json"
+    data = json.loads(path.read_text())
+    out = {slug: {int(y): {k: set(v.split()) for k, v in s.items()} for y, s in years.items()} for slug, years in data.items()}
+    for slug, years in MISSING_FROM_CATALOG.items():
+        for y, s in years.items():
+            for k, v in s.items():
+                out.setdefault(slug, {}).setdefault(y, {}).setdefault(k, set()).update(v.split())
+    return out
+
+
+def date_problem(series: Series, year: int | None, mint: str | None, grade_prefix: str | None = None) -> str | None:
+    """Why a date can't be right for a series (wrong year, no such mint that year, or a proof-only date with a
+    business-strike grade), or None. Years newer than the catalog (e.g. the 2021+ Morgans) only get the year check."""
+    if problem := year_problem(series, year):
+        return problem
+    strikes = _issues().get(series.slug, {}).get(year) if year is not None else None
+    if not strikes or not mint or mint not in series.mint_marks:  # unknown letters: the mint-mark check says so
+        return None
+    every = set().union(*strikes.values())
+    if mint not in every:
+        made = ", ".join(MINT_NAMES.get(m, m) for m in sorted(every, key=_mint_order))
+        return f"There's no {year}-{mint} {series.name}. {year} {series.plural} were struck at: {made}."
+    prefix = (grade_prefix or "").upper()
+    if prefix and prefix not in ("PR", "PF", "SP") and mint not in strikes.get("MS", set()):
+        label = f"{year}-{mint}" if mint != "P" else str(year)
+        return f"{label} {series.plural} were only struck as proofs, so the grade should be PR (e.g. PR63)."
+    return None
+
+
+def _mint_order(m: str) -> int:
+    return ["P", "C", "CC", "D", "O", "S", "W"].index(m) if m in ("P", "C", "CC", "D", "O", "S", "W") else 9
 
 
 def year_problem(series: Series, year: int | None) -> str | None:

@@ -43,7 +43,7 @@ def coin_type_for(db: Session, collection: Collection, requested_id: int | None)
 
 def _validate(body: CoinFields, collection: Collection, coin_type: CoinType) -> dict:
     series = BY_SLUG.get(coin_type.slug)
-    if series and (problem := series_match.year_problem(series, body.year)):
+    if series and (problem := series_match.date_problem(series, body.year, body.mint_mark, body.grade_prefix)):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, problem)
     marks = coin_type.mint_marks
     if marks and body.mint_mark not in marks:

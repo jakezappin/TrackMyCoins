@@ -18,7 +18,7 @@ def test_status_morgans(authed):
     col = _collection(authed, "morgan-dollars")
     a = authed.post("/api/coins", json=coin_payload(col["id"], year=1881, mint_mark="S", grade=65)).json()
     b = authed.post("/api/coins", json=coin_payload(col["id"], year=1881, mint_mark="S", grade=64, strike_designation="DMPL")).json()
-    c = authed.post("/api/coins", json=coin_payload(col["id"], year=1895, mint_mark="P", grade=40, grade_prefix="XF")).json()
+    c = authed.post("/api/coins", json=coin_payload(col["id"], year=1889, mint_mark="P", grade=40, grade_prefix="XF")).json()
     sold_coin = authed.post("/api/coins", json=coin_payload(col["id"], year=1888, mint_mark="O", sale_price="50")).json()
 
     s = authed.get(f"/api/collections/{col['id']}/status").json()
@@ -29,7 +29,7 @@ def test_status_morgans(authed):
     assert (s["total"], s["filled"]) == (11, 1)
     row = next(r for r in s["rows"] if r["label"] == "1881-S")
     assert [x["inventory_number"] for x in row["coins"]] == [a["inventory_number"], b["inventory_number"]]  # best grade first
-    assert [x["inventory_number"] for x in s["others"]] == [c["inventory_number"]]  # 1895-P isn't in the catalog
+    assert [x["inventory_number"] for x in s["others"]] == [c["inventory_number"]]  # 1889-P isn't in the test catalog
     assert all(sold_coin["inventory_number"] not in [x["inventory_number"] for x in r["coins"]] for r in s["rows"])
 
 

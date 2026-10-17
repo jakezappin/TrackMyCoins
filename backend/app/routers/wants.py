@@ -63,7 +63,8 @@ def _resolve(db: Session, user: User, body: WantIn) -> tuple[int | None, int, st
     """(collection_id, coin_type_id, finish) for a want, after checking the year exists for the series."""
     collection_id, type_id, finish = _place(db, user, body)
     series = BY_SLUG.get(db.get(CoinType, type_id).slug)
-    if series and (problem := series_match.year_problem(series, body.year)):
+    proof = "PR" if finish in ("PR", "SPR") else "MS"
+    if series and (problem := series_match.date_problem(series, body.year, body.mint_mark, body.grade_prefix or proof)):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, problem)
     return collection_id, type_id, finish
 

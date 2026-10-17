@@ -130,7 +130,7 @@ Morgan,1910,MS63,PCGS,90000005
 Franklin Half,1955,MS64,PCGS,90000006
 ,1881 $1,MS63,PCGS,90000007
 ,1882-S,MS64,PCGS,90000008
-,1921-S Peace,MS63,PCGS,90000009
+,1922-S Peace,MS63,PCGS,90000009
 """
 
 
@@ -159,7 +159,7 @@ def test_sort_mixed_file_into_collections(authed):
     assert cols["Peace Dollar Collection 1"]["number"] == 1 and cols["Morgan Dollar Proof Collection 1"]["finish"] == "PR"
     assert [c["inventory_number"][:3] for c in authed.get(f"/api/collections/{first['id']}/coins").json()] == ["MOR"]
     peace = authed.get(f"/api/collections/{made['Peace Dollar Collection 1']['id']}/coins").json()
-    assert sorted(c["year"] for c in peace) == [1921, 1922]
+    assert sorted(c["year"] for c in peace) == [1922, 1922]
 
 
 def test_import_into_one_collection_flags_other_series(authed):
@@ -213,3 +213,19 @@ def test_year_gaps_are_invalid(authed):
 def test_invalid_year_blocked_when_adding_by_hand(authed, morgan_collection):
     r = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1910, mint_mark="S"))
     assert r.status_code == 422 and "1910 isn't a Morgan Dollar date" in r.json()["detail"]
+
+
+def test_date_and_mint_must_exist():
+    from app.series import BY_SLUG
+    from app.services.series_match import date_problem
+
+    morgan, peace = BY_SLUG["morgan-dollars"], BY_SLUG["peace-dollars"]
+    assert "There's no 1904-CC Morgan Dollar" in date_problem(morgan, 1904, "CC", "MS")
+    assert "were struck at: Philadelphia (no mint mark), O, S" in date_problem(morgan, 1904, "CC", "MS")
+    assert "only struck as proofs" in date_problem(morgan, 1895, "P", "MS")
+    assert date_problem(morgan, 1895, "P", "PR") is None and date_problem(morgan, 1895, "O", "AU") is None
+    assert "no 1921-S Peace" in date_problem(peace, 1921, "S", "MS")
+    assert date_problem(morgan, 2023, "S", "MS") is None  # newer than the catalog: year check only
+    assert date_problem(BY_SLUG["early-quarter-eagles"], 1802, "P", "MS") is None  # real, missing from Greysheet
+    assert date_problem(BY_SLUG["jefferson-nickels"], 2020, "W", "PR") is None
+    assert date_problem(BY_SLUG["kennedy-half-dollars"], 1970, "P", "MS")  # 1970 halves: D (business), S (proof)

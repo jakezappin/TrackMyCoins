@@ -78,7 +78,7 @@ SERIES: list[Series] = [
     Series("liberty-head-nickels", "Liberty Head (V) Nickel", "Liberty Head (V) Nickels", "LHN", N,
            ("P", "D", "S"), (8920,), (8921,)),
     Series("buffalo-nickels", "Buffalo Nickel", "Buffalo Nickels", "BUF", N, ("P", "D", "S"), (8922,), (8923,)),
-    Series("jefferson-nickels", "Jefferson Nickel", "Jefferson Nickels", "JEF", N, ("P", "D", "S"), (8925,), (8926,)),
+    Series("jefferson-nickels", "Jefferson Nickel", "Jefferson Nickels", "JEF", N, ("P", "D", "S", "W"), (8925,), (8926,)),
     # Half dimes & dimes
     Series("seated-liberty-half-dimes", "Seated Liberty Half Dime", "Seated Liberty Half Dimes", "SLHD", D,
            ("P", "O", "S"), (8930,), (8931,)),
