@@ -7,6 +7,7 @@ from ..db import get_db
 from ..models import PriceQuote, User
 from ..schemas import CoinDetail, LookupResult, ManualQuoteIn, ValuationIn
 from ..services import greysheet, lookups, price_refresh
+from ..services import ebay
 from ..services import ngc_images as ngc_images_service
 from ..services.coins import CUSTOM, coin_detail, duplicate_info, find_duplicate_cert, latest_quote
 from .coins import get_owned_coin
@@ -26,6 +27,20 @@ def cert_lookup(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Lookup service error: {e}")
+
+
+@router.get("/coins/{inventory_number}/ebay")
+def ebay_listings(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Current eBay listings for this coin's date, mint, service and grade (asking prices, not sales)."""
+    coin = get_owned_coin(db, user, inventory_number)
+    if not ebay.configured():
+        return {"configured": False, "search_url": ebay.search_url(ebay.query_for(coin))}
+    try:
+        return {"configured": True, **ebay.listings_for(coin)}
+    except ebay.EbayError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Couldn't reach eBay: {e}")
 
 
 @router.get("/ngc-images")

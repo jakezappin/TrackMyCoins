@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     greysheet_api_key: str = ""
     greysheet_api_token: str = ""
     greysheet_use_sandbox: bool = False
+    # eBay Browse API (Production keyset: App ID / Cert ID) for "For sale on eBay now".
+    ebay_client_id: str = ""
+    ebay_client_secret: str = ""
     # Claude (reads slab labels from photos). Without a key, "Read label" says it isn't set up.
     anthropic_api_key: str = ""
     label_model: str = "claude-opus-5-5"

@@ -7,6 +7,7 @@ import { ngcCertUrl } from "../ngcButton";
 import PhotoButtons from "../components/PhotoButtons";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import EstimatedValueCard from "../components/EstimatedValueCard";
+import EbayCard from "../components/EbayCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
 import {
   coinPath,
@@ -351,6 +352,7 @@ export default function CoinDetailPage() {
         error={pcgsError}
         onFetch={getPcgs}
       />
+      {!coin.is_sold && <EbayCard inv={coin.inventory_number} />}
     </div>
   );
 }

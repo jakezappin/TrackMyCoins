@@ -2667,3 +2667,57 @@ table {
   width: 84px;
   flex: 0 0 auto;
 }
+
+/* ---- For sale on eBay ---------------------------------------------------------- */
+.ebay-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ebay-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+.ebay-list li + li {
+  border-top: 1px solid var(--border);
+}
+.ebay-item {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  color: inherit;
+  text-decoration: none;
+}
+.ebay-item:hover {
+  background: var(--surface-2);
+}
+.ebay-item img,
+.ebay-noimg {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  background: var(--surface-2);
+  border-radius: 6px;
+}
+.ebay-title {
+  font-size: 0.88rem;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.ebay-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}

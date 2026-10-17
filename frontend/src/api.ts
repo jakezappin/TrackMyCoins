@@ -62,6 +62,29 @@ export interface Collection {
   summary: Summary;
 }
 
+export interface EbayItem {
+  title: string;
+  price: number;
+  kind: "auction" | "buy_it_now";
+  best_offer: boolean;
+  bids: number | null;
+  ends: string | null;
+  url: string | null;
+  image: string | null;
+  cac: boolean;
+}
+
+export type EbayListings =
+  | { configured: false; search_url: string }
+  | {
+      configured: true;
+      query: string;
+      search_url: string;
+      total_found: number;
+      items: EbayItem[];
+      stats: { count: number; buy_it_now_count: number; low: number | null; median: number | null; high: number | null };
+    };
+
 export interface NgcImages {
   cert_number: string;
   /** Full-size obverse / reverse */
@@ -475,6 +498,7 @@ export const api = {
     files.forEach((f) => fd.append("files", f));
     return request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos`, fd);
   },
+  ebayListings: (inv: string) => request<EbayListings>("GET", `/api/coins/${encodeURIComponent(inv)}/ebay`),
   ngcImages: (link: string) => request<NgcImages>("GET", `/api/ngc-images?link=${encodeURIComponent(link)}`),
   ngcPage: (d: { cert: string; grade: string | null; images: string[]; text: string }) =>
     request<{ reading: LabelReading; photos: { urls: string[]; previews: string[] } }>("POST", "/api/ngc-page", d),
