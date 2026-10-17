@@ -62,13 +62,6 @@ export interface Collection {
   summary: Summary;
 }
 
-export interface NgcImages {
-  cert_number: string;
-  /** Full-size obverse / reverse */
-  urls: string[];
-  previews: string[];
-}
-
 export interface ExportColumn {
   name: string;
   /** Only on the Sold sheet (sale price, sale date, ...). */
@@ -113,7 +106,7 @@ export interface LabelReading {
   confidence: "high" | "medium" | "low";
   notes: string | null;
   /** "barcode" = scanned (and, for PCGS, confirmed by lookup); "claude" = read from the printed label. */
-  source: "barcode" | "claude";
+  source: "barcode" | "claude" | "ngc_page";
   /** The PCGS lookup that confirmed a scanned barcode, when there was one. */
   lookup?: LookupResult | null;
 }
@@ -473,7 +466,8 @@ export const api = {
     files.forEach((f) => fd.append("files", f));
     return request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos`, fd);
   },
-  ngcImages: (link: string) => request<NgcImages>("GET", `/api/ngc-images?link=${encodeURIComponent(link)}`),
+  ngcPage: (d: { cert: string; grade: string | null; images: string[]; text: string }) =>
+    request<{ reading: LabelReading; photos: { urls: string[]; previews: string[] } }>("POST", "/api/ngc-page", d),
   importPhotos: (inv: string, urls: string[]) =>
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos/import`, { urls }),
   reorderPhotos: (inv: string, photo_ids: number[]) =>

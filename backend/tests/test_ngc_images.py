@@ -29,15 +29,6 @@ def test_parse_rejects(bad):
         ngc_images.parse(bad)
 
 
-def test_endpoint(authed, monkeypatch):
-    monkeypatch.setattr(ngc_images, "resolve", lambda link: {**ngc_images.parse(link)})
-    import app.routers.pricing as pr
-    monkeypatch.setattr(pr.ngc_images_service, "resolve", lambda link: {**ngc_images.parse(link)})
-    d = authed.get("/api/ngc-images", params={"link": LINK}).json()
-    assert d["cert_number"] == "6521048-002" and len(d["urls"]) == 2
-    assert authed.get("/api/ngc-images", params={"link": "nope"}).status_code == 400
-
-
 def test_big_photos_are_shrunk(tmp_path, monkeypatch):
     monkeypatch.setattr(photos.settings, "photo_dir", tmp_path)
     big, small = io.BytesIO(), io.BytesIO()

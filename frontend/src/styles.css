@@ -2640,3 +2640,16 @@ table {
   cursor: pointer;
   color: var(--accent);
 }
+
+/* ---- NGC one-tap button page ----------------------------------------------- */
+.steps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ngc-bookmarklet {
+  margin-top: 6px;
+  cursor: grab;
+}

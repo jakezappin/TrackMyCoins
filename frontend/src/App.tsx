@@ -8,6 +8,7 @@ import CollectionPage from "./pages/CollectionPage";
 import AccountPage from "./pages/AccountPage";
 import DashboardPage from "./pages/DashboardPage";
 import ImportPage from "./pages/ImportPage";
+import NgcButtonPage from "./pages/NgcButtonPage";
 import LandingPage from "./pages/LandingPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
 import SharedCollectionPage from "./pages/SharedCollectionPage";
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/ngc-button" element={<NgcButtonPage />} />
           <Route path="/collections/:typeSlug/sold" element={<SoldPage />} />
           <Route path="/collections/:typeSlug/:number" element={<CollectionPage />} />
           <Route path="/collections/:typeSlug/:number/status" element={<StatusPage />} />
@@ -90,6 +92,6 @@ export default function App() {
 function RequireAuth() {
   const { user } = useApp();
   const loc = useLocation();
-  if (!user) return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
+  if (!user) return <Navigate to="/login" state={{ from: loc.pathname + loc.search + loc.hash }} replace />;
   return <Layout />;
 }

@@ -129,3 +129,35 @@ def test_unmatched_barcode_falls_back_to_claude(authed, monkeypatch):
     monkeypatch.setattr(get_settings(), "anthropic_api_key", "")
     r = authed.post("/api/read-label", files={"file": ("label.png", _barcode_photo("99999999"), "image/png")})
     assert r.status_code == 422 and "couldn't match it" in r.json()["detail"]
+
+
+NGC_TEXT = """Verify NGC Certification
+NGC Cert #: 6346547-009
+1881 S $1 MS 62
+Morgan Dollar
+Pedigree: VAM-3
+Grade: MS 62"""
+IMG = ("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/1ba8ddce-270b-4b4a-b00e-0561b256781a/"
+       "NGC6346547-009_OBV@500x722.jpg")
+
+
+def test_ngc_page_without_claude(authed, monkeypatch):
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "")
+    other = IMG.replace("6346547-009", "1111111-001")
+    r = authed.post("/api/ngc-page", json={"cert": "6346547-009", "grade": "62", "text": NGC_TEXT,
+                                           "images": ["https://evil.example.com/x.jpg", other, IMG]})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    rd = d["reading"]
+    assert (rd["grading_service"], rd["cert_number"], rd["year"], rd["mint_mark"], rd["grade_prefix"], rd["grade"]) == (
+        "NGC", "6346547-009", 1881, "S", "MS", 62)
+    assert d["photos"]["urls"][0].endswith("NGC6346547-009_OBV.jpg")  # the other coin's photo is ignored
+
+
+def test_ngc_page_with_claude_keeps_url_cert(authed, monkeypatch):
+    msgs = _fake(monkeypatch, RESULT)  # Claude's answer names a PCGS cert; the page address wins
+    d = authed.post("/api/ngc-page", json={"cert": "6346547-009", "grade": "62", "text": NGC_TEXT}).json()
+    assert (d["reading"]["grading_service"], d["reading"]["cert_number"], d["reading"]["year"]) == ("NGC", "6346547-009", 1881)
+    assert "NGC certification" in msgs.kwargs["messages"][0]["content"][0]["text"]
+    assert d["photos"]["urls"] == []
+    assert authed.post("/api/ngc-page", json={"cert": "../x", "text": ""}).status_code == 400

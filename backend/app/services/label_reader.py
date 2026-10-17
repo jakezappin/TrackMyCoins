@@ -165,7 +165,18 @@ def read_label(data: bytes) -> dict:
             "Couldn't find a barcode in that photo. Try a closer, sharper photo of the label's barcode, "
             "or enter the cert number yourself."
         )
-    b64, media_type = _jpeg_b64(img), "image/jpeg"
+    b64 = _jpeg_b64(img)
+    result = _ask_claude(
+        [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+         {"type": "text", "text": PROMPT}],
+        "Try a closer photo of just the label.",
+    )
+    result["source"] = "claude"
+    return result
+
+
+def _ask_claude(content: list, retry_hint: str) -> dict:
+    settings = get_settings()
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=90.0)
     try:
         response = client.beta.messages.create(
@@ -174,33 +185,78 @@ def read_label(data: bytes) -> dict:
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
-                    {"type": "text", "text": PROMPT},
-                ],
-            }],
+            messages=[{"role": "user", "content": content}],
         )
     except anthropic.RateLimitError as e:
-        raise LabelError("Too many label reads right now. Try again in a minute.") from e
+        raise LabelError("Too many requests right now. Try again in a minute.") from e
     except anthropic.APIStatusError as e:
-        log.warning("Label read failed: %s %s", e.status_code, e.message)
-        raise LabelError("Couldn't read the label right now. Try again, or enter the cert number yourself.") from e
+        log.warning("Claude read failed: %s %s", e.status_code, e.message)
+        raise LabelError("Couldn't read the details right now. Try again, or enter them yourself.") from e
     except anthropic.APIConnectionError as e:
-        raise LabelError("Couldn't reach the label reader. Check the connection and try again.") from e
+        raise LabelError("Couldn't reach the reader. Check the connection and try again.") from e
 
     if response.stop_reason == "refusal":
-        raise LabelError("The label reader declined this photo. Enter the details yourself.")
+        raise LabelError("The reader declined this. Enter the details yourself.")
     if response.stop_reason == "max_tokens":
-        raise LabelError("Couldn't read the label. Try a closer photo of just the label.")
+        raise LabelError(f"Couldn't read the details. {retry_hint}")
     text = next((b.text for b in response.content if b.type == "text"), None)
     try:
         result = json.loads(text or "")
     except json.JSONDecodeError as e:
-        raise LabelError("Couldn't read the label. Try a closer photo of just the label.") from e
-    result = _clean(result)
-    result["source"] = "claude"
+        raise LabelError(f"Couldn't read the details. {retry_hint}") from e
+    return _clean(result)
+
+
+# ---- NGC cert page (sent by the "Add to TrackMyCoins" bookmark from the user's own browser) ----------
+
+NGC_PAGE_PROMPT = """Below is the visible text of an NGC certification verification page for one coin, copied from
+the collector's browser. Fill in the fields for that coin. The grading service is NGC and the page is a certification
+lookup, so set found_label true if the text describes a coin.
+
+- year and mint_mark from the coin's date, e.g. "1881-S" or "1881 S $1" gives 1881 and "S"; no mint mark is "P".
+- coin_type: the series, e.g. "Morgan Dollar".
+- grade_prefix and grade from the grade, e.g. "MS 62" gives "MS" and 62. NGC's "PF" proofs are "PR". A "+" sets
+  grade_plus; a star (★) sets grade_star.
+- strike_designation: designations next to the grade, abbreviated as PL, DPL, DMPL, RD, RB, BN, FB, FBL, FS, FH,
+  FT, CAM, DCAM, UCAM (NGC's "Ultra Cameo" is UCAM). Several are separated by spaces.
+- variety: variety or pedigree text (e.g. "VAM-3 Hot Lips", "8TF", "Toned"), else null. vam: the VAM number alone.
+- cac_sticker: "none" unless the text says the coin has a CAC sticker, then "green" or "gold".
+- Ignore navigation, ads, and other coins mentioned on the page.
+
+Page text:
+"""
+
+DATE_IN_TEXT = re.compile(r"\b(1[789]\d\d|20[0-4]\d)(?:[\s-]+(CC|[PDSOW]))?\b")
+GRADE_IN_TEXT = re.compile(r"\b(MS|PF|PR|SP|AU|XF|EF|VF|F|VG|G|AG|FR|PO)\s?(\d{1,2})(\s?\+)?(\s?(?:★|\*))?", re.I)
+
+
+def read_ngc_page(cert: str, grade_in_url: str | None, text: str) -> dict:
+    """Coin details from NGC's cert page text: Claude when configured, a simple parser otherwise.
+    The cert comes from the page address, so it is always trusted over anything in the text."""
+    text = (text or "")[:4000]
+    result = None
+    if get_settings().anthropic_api_key and text.strip():
+        try:
+            result = _ask_claude([{"type": "text", "text": NGC_PAGE_PROMPT + text}], "")
+            result["source"] = "ngc_page"
+        except LabelError as e:
+            log.warning("NGC page read fell back to the simple parser: %s", e)
+    if result is None:
+        result = _blank(source="ngc_page", confidence="medium")
+        m = DATE_IN_TEXT.search(text)
+        if m:
+            result["year"], result["mint_mark"] = int(m.group(1)), (m.group(2) or "P").upper()
+        g = GRADE_IN_TEXT.search(text)
+        if g:
+            result["grade_prefix"] = "PR" if g.group(1).upper() in ("PF", "PR") else g.group(1).upper()
+            result["grade"] = int(g.group(2))
+            result["grade_plus"] = bool(g.group(3))
+            result["grade_star"] = bool(g.group(4))
+    result.update(found_label=True, grading_service="NGC", cert_number=cert)
+    # The grade in NGC's address is the numeric grade; use it when the text didn't give one.
+    m = re.fullmatch(r"(\d{1,2})", (grade_in_url or "").strip())
+    if result.get("grade") is None and m and 1 <= int(m.group(1)) <= 70:
+        result["grade"] = int(m.group(1))
     return result
 
 

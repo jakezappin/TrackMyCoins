@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -10,8 +10,8 @@ import {
   type LabelReading,
   type LookupResult,
 } from "../api";
-import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
+import { readNgcHandoff } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
@@ -107,6 +107,10 @@ export default function CoinFormPage() {
   const [findBusy, setFindBusy] = useState(false);
   const [findMsg, setFindMsg] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CatalogCandidate[]>([]);
+  const location = useLocation();
+  const [ngcHandoff] = useState(() => (editInv ? null : readNgcHandoff(location.hash)));
+  const [ngcState, setNgcState] = useState<"idle" | "busy" | "done">(ngcHandoff ? "busy" : "idle");
+  const [ngcPreviews, setNgcPreviews] = useState<string[]>([]);
   const [labelBusy, setLabelBusy] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelReading | null>(null);
@@ -284,6 +288,22 @@ export default function CoinFormPage() {
       const r = await api.readLabel(file);
       setLabel(r);
       if (!r.found_label) return;
+      applyReading(r);
+      if (!editInv) setFiles((cur) => (cur.length + importUrls.length < 10 ? [...cur, file] : cur));
+      // PCGS certs can be looked up for the rest (PCGS number, photos, price guide).
+      // A scanned PCGS barcode was already confirmed by a lookup, so use that one.
+      if (r.lookup) {
+        if (!(await checkDuplicate(r.lookup.grading_service, r.lookup.cert_number))) applyLookup(r.lookup);
+      } else if (r.grading_service === "PCGS" && r.cert_number) await doLookup("PCGS", r.cert_number);
+      else if (r.grading_service && r.cert_number) await checkDuplicate(r.grading_service, r.cert_number);
+    } catch (e) {
+      setLabelError((e as Error).message);
+    } finally {
+      setLabelBusy(false);
+    }
+  }
+
+  function applyReading(r: LabelReading) {
       setForm((f) => ({
         ...f,
         grading_service: r.grading_service ?? (f.grading_service === "RAW" ? "PCGS" : f.grading_service),
@@ -300,19 +320,32 @@ export default function CoinFormPage() {
         cac: r.cac_sticker ? true : f.cac,
         cac_sticker: r.cac_sticker ?? f.cac_sticker,
       }));
-      if (!editInv) setFiles((cur) => (cur.length + importUrls.length < 10 ? [...cur, file] : cur));
-      // PCGS certs can be looked up for the rest (PCGS number, photos, price guide).
-      // A scanned PCGS barcode was already confirmed by a lookup, so use that one.
-      if (r.lookup) {
-        if (!(await checkDuplicate(r.lookup.grading_service, r.lookup.cert_number))) applyLookup(r.lookup);
-      } else if (r.grading_service === "PCGS" && r.cert_number) await doLookup("PCGS", r.cert_number);
-      else if (r.grading_service && r.cert_number) await checkDuplicate(r.grading_service, r.cert_number);
-    } catch (e) {
-      setLabelError((e as Error).message);
-    } finally {
-      setLabelBusy(false);
-    }
   }
+
+  // Arrived from the "Add to TrackMyCoins" bookmark on an NGC cert page.
+  useEffect(() => {
+    if (!ngcHandoff) return;
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    let cancelled = false;
+    api
+      .ngcPage(ngcHandoff)
+      .then(async ({ reading, photos }) => {
+        if (cancelled) return;
+        applyReading(reading);
+        setLabel(reading);
+        setImportUrls(photos.urls);
+        setNgcPreviews(photos.previews);
+        const match = pickCollection(collections, coinTypes, reading.coin_type, reading.grade_prefix);
+        if (match && !search.get("collection")) setCollectionId(match);
+        await checkDuplicate("NGC", reading.cert_number);
+      })
+      .catch((e) => setLabelError(`Couldn't read NGC's page: ${(e as Error).message}`))
+      .finally(() => !cancelled && setNgcState("done"));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ngcHandoff, collections.length > 0]);
 
   async function removeCoin() {
     if (!editInv) return;
@@ -442,7 +475,23 @@ export default function CoinFormPage() {
         </div>
       </div>
       {error && <p className="error banner">{error}</p>}
-      {dup && <DuplicateCertModal {...dup} onClose={() => setDup(null)} />}
+      {dup && (
+        <DuplicateCertModal
+          {...dup}
+          onClose={() => setDup(null)}
+          extraAction={
+            ngcHandoff && importUrls.length
+              ? {
+                  label: `Add NGC's photos to ${dup.duplicate.inventory_number}`,
+                  run: async () => {
+                    await api.importPhotos(dup.duplicate.inventory_number, importUrls);
+                    navigate(coinPath(dup.duplicate.inventory_number));
+                  },
+                }
+              : undefined
+          }
+        />
+      )}
 
       {/* ---- Lookup ---- */}
       <section className="card form-section lookup">
@@ -507,14 +556,22 @@ export default function CoinFormPage() {
             onFiles={(fs) => readLabel(fs[0])}
           />
         </div>
-        {form.grading_service === "NGC" && !editInv && (
-          <NgcPhotoLink
-            expectedCert={form.cert_number}
-            onFound={(r) => {
-              if (!form.cert_number) set("cert_number", r.cert_number);
-              setImportUrls((cur) => [...cur.filter((u) => !r.urls.includes(u)), ...r.urls]);
-            }}
-          />
+        {ngcState === "busy" && <p className="muted small">Reading NGC's page…</p>}
+        {ngcPreviews.length > 0 && (
+          <div className="ngc-photos">
+            <span className="small muted">NGC's photos (saved with the coin):</span>
+            <div className="thumb-row">
+              {ngcPreviews.map((u) => (
+                <img key={u} className="ngc-thumb" src={u} alt="" />
+              ))}
+            </div>
+          </div>
+        )}
+        {form.grading_service === "NGC" && !editInv && !ngcHandoff && (
+          <p className="small muted">
+            Adding NGC coins? <Link to="/ngc-button">Get the one-tap button</Link> to fill this in, photos included,
+            straight from NGC's page.
+          </p>
         )}
         {labelError && <p className="error small">{labelError}</p>}
         {label && <LabelSummary r={label} kept={!editInv && label.found_label} />}
@@ -868,7 +925,7 @@ function LabelSummary({ r, kept }: { r: LabelReading; kept: boolean }) {
   return (
     <div className="lookup-result">
       <p className="small">
-        <strong>{r.source === "barcode" ? "Barcode scanned:" : "Label read:"}</strong> {r.grading_service ?? "Unknown service"}
+        <strong>{r.source === "barcode" ? "Barcode scanned:" : r.source === "ngc_page" ? "From NGC's page:" : "Label read:"}</strong> {r.grading_service ?? "Unknown service"}
         {r.cert_number ? ` #${r.cert_number}` : ""}
         {parts ? ` · ${parts}` : ""}
         {r.cac_sticker ? ` · CAC ${r.cac_sticker}` : ""}
@@ -878,10 +935,11 @@ function LabelSummary({ r, kept }: { r: LabelReading; kept: boolean }) {
       )}
       {r.notes && r.source === "claude" && <p className="muted small">{r.notes}</p>}
       <p className="muted small">
-        {r.source === "barcode" && !r.year
-          ? `The barcode only holds the cert number. Use Verify ↗ to see ${r.grading_service ?? "the grading service"}'s details, then fill in the date and grade below`
-          : "Fields below were filled in from the label"}
-        {kept ? ". The photo will be saved with the coin." : "."}
+        {r.source === "ngc_page"
+          ? "Fields below were filled in from NGC's page. Check them, pick the collection, and save."
+          : r.source === "barcode" && !r.year
+            ? `The barcode only holds the cert number. Use Verify ↗ to see ${r.grading_service ?? "the grading service"}'s details, then fill in the date and grade below.`
+            : `Fields below were filled in from the label${kept ? ". The photo will be saved with the coin." : "."}`}
       </p>
     </div>
   );
@@ -898,4 +956,27 @@ function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
       </button>
     </span>
   );
+}
+
+/** The collection an NGC coin most likely belongs in, from the series named on NGC's page. */
+function pickCollection(
+  collections: { id: number; coin_type_id: number; finish: string }[],
+  coinTypes: { id: number; name: string; is_type_set: boolean }[],
+  coinType: string | null,
+  gradePrefix: string | null,
+): number | null {
+  if (!coinType) return null;
+  const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
+  const want = new Set(words(coinType));
+  let best: { id: number; score: number } | null = null;
+  for (const c of collections) {
+    const t = coinTypes.find((x) => x.id === c.coin_type_id);
+    if (!t || t.is_type_set) continue;
+    const tw = words(t.name);
+    let score = tw.filter((w) => want.has(w)).length / Math.max(tw.length, 1);
+    if (score < 0.99) continue; // every word of the series name must appear
+    if ((gradePrefix === "PR") === (c.finish !== "MS")) score += 0.5;
+    if (!best || score > best.score) best = { id: c.id, score };
+  }
+  return best?.id ?? null;
 }

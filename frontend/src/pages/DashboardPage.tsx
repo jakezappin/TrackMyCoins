@@ -60,6 +60,7 @@ export default function DashboardPage() {
           <span className="act-more">
             <MoreMenu>
               <Link to="/import">Import coins</Link>
+              <Link to="/ngc-button">NGC one-tap button</Link>
               <a href={api.insuranceUrl(null)} download>
                 Insurance report (PDF)
               </a>
