@@ -12,7 +12,7 @@ import {
 } from "../api";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
-import { readNgcHandoff } from "../ngcButton";
+import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
@@ -72,16 +72,16 @@ const VARIETY_HINTS: Record<string, string> = {
 };
 
 function verifyUrl(service: GradingService, cert: string, grade: number | null): string | null {
-  if (!cert) return null;
+  if (!cert && service !== "ANACS" && service !== "CACG") return null;
   switch (service) {
     case "PCGS":
       return `https://www.pcgs.com/cert/${encodeURIComponent(cert)}`;
     case "NGC":
-      return `https://www.ngccoin.com/certlookup/${encodeURIComponent(cert)}/${grade ? `${grade}/` : ""}`;
+      return ngcCertUrl(cert, grade);
     case "ANACS":
       return "https://anacs.com/verify/";
     case "CACG":
-      return `https://www.cacgrading.com/lookup/${encodeURIComponent(cert)}`;
+      return cert ? `https://www.cacgrading.com/lookup/${encodeURIComponent(cert)}` : "https://www.cacgrading.com/lookup";
     default:
       return null;
   }
@@ -112,9 +112,14 @@ export default function CoinFormPage() {
   const [candidates, setCandidates] = useState<CatalogCandidate[]>([]);
   const location = useLocation();
   const [ngcHandoff] = useState(() => (editInv ? null : readNgcHandoff(location.hash)));
+  // What the user had typed before going to NGC in this tab.
+  const [draft] = useState(() =>
+    ngcHandoff ? readCoinDraft<{ form: CoinFields; collectionId: number | null; memberTypeId: number | null }>() : null,
+  );
   const [ngcState, setNgcState] = useState<"idle" | "busy" | "done">(ngcHandoff ? "busy" : "idle");
   const [ngcPreviews, setNgcPreviews] = useState<string[]>([]);
   const [cacNote, setCacNote] = useState<string | null>(null);
+  const [showPaste, setShowPaste] = useState(false);
   const [labelBusy, setLabelBusy] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelReading | null>(null);
@@ -331,16 +336,25 @@ export default function CoinFormPage() {
     if (!ngcHandoff) return;
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     let cancelled = false;
+    if (draft) {
+      setForm(draft.form);
+      if (draft.collectionId) setCollectionId(draft.collectionId);
+      if (draft.memberTypeId) setMemberTypeId(draft.memberTypeId);
+    }
     api
       .ngcPage(ngcHandoff)
       .then(async ({ reading, photos }) => {
         if (cancelled) return;
+        clearCoinDraft();
         applyReading(reading);
         setLabel(reading);
         setImportUrls(photos.urls);
         setNgcPreviews(photos.previews);
         const match = pickCollection(collections, coinTypes, reading.coin_type, reading.grade_prefix);
-        if (match && !search.get("collection")) setCollectionId(match);
+        // Keep the user's collection if it's the right series (they may have several); otherwise switch.
+        const typeOf = (id: number | null | undefined) => collections.find((c) => c.id === id)?.coin_type_id;
+        const current = draft?.collectionId ?? (Number(search.get("collection")) || null);
+        if (match && (!current || typeOf(current) !== typeOf(match))) setCollectionId(match);
         await checkDuplicate("NGC", reading.cert_number);
       })
       .catch((e) => setLabelError(`Couldn't read NGC's page: ${(e as Error).message}`))
@@ -362,6 +376,13 @@ export default function CoinFormPage() {
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  /** Go to NGC's page for this coin in this tab; the bookmark there brings us back with its details. */
+  function openNgc() {
+    if (files.length && !confirm("Photos you've attached here can't come along to NGC and back. Continue and re-add them later?")) return;
+    if (!editInv) saveCoinDraft({ form, collectionId, memberTypeId });
+    window.location.href = ngcCertUrl(form.cert_number, form.grade);
   }
 
   /** NGC has no lookup we can use, but CAC's site still tells us about a sticker. */
@@ -479,6 +500,7 @@ export default function CoinFormPage() {
     );
 
   const canLookUp = form.grading_service === "PCGS";
+  const isNgc = form.grading_service === "NGC";
   const vurl = lookup?.verify_url && form.grading_service !== "NGC" ? lookup.verify_url : verifyUrl(form.grading_service, form.cert_number ?? "", form.grade);
   const isSold = Boolean(form.sale_price || form.sale_date);
 
@@ -539,45 +561,86 @@ export default function CoinFormPage() {
               ))}
             </select>
           </label>
-          {
-            <>
-              <label className="field grow">
-                <span>Cert number</span>
-                <input
-                  {...text("cert_number")}
-                  placeholder="e.g. 12345678"
-                  onBlur={async () => {
-                    if (!(await checkDuplicate()) && form.grading_service === "NGC") checkCac();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      if (canLookUp) doLookup();
-                    }
-                  }}
-                />
-              </label>
-              {canLookUp && (
-                <button type="button" className="btn btn-primary" onClick={() => doLookup()} disabled={!form.cert_number || lookupBusy}>
-                  {lookupBusy ? "Looking up…" : "Look up"}
-                </button>
-              )}
-              {vurl && (
-                <a className="btn" href={vurl} target="_blank" rel="noreferrer">
-                  Verify ↗
-                </a>
-              )}
-            </>
-          }
+          <label className="field grow">
+            <span>Cert number</span>
+            <input
+              {...text("cert_number")}
+              placeholder={isNgc ? "e.g. 1234567-001" : "e.g. 12345678"}
+              onBlur={async () => {
+                if (!(await checkDuplicate()) && isNgc) checkCac();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (canLookUp) doLookup();
+                  else if (isNgc && NGC_BOOKMARK_ENABLED) openNgc();
+                }
+              }}
+            />
+          </label>
+          {isNgc && (
+            <label className="field grade-mini">
+              <span>Grade</span>
+              <input
+                type="number"
+                min={1}
+                max={70}
+                inputMode="numeric"
+                placeholder="62"
+                value={form.grade ?? ""}
+                onChange={(e) => set("grade", e.target.value ? Number(e.target.value) : null)}
+              />
+            </label>
+          )}
+          {canLookUp && (
+            <button type="button" className="btn btn-primary" onClick={() => doLookup()} disabled={!form.cert_number || lookupBusy}>
+              {lookupBusy ? "Looking up…" : "Look up"}
+            </button>
+          )}
+          {isNgc ? (
+            NGC_BOOKMARK_ENABLED ? (
+              <button type="button" className="btn btn-primary" onClick={openNgc}>
+                Open on NGC ↗
+              </button>
+            ) : (
+              <a className="btn btn-primary" href={ngcCertUrl(form.cert_number, form.grade)} target="_blank" rel="noreferrer">
+                Verify ↗
+              </a>
+            )
+          ) : (
+            vurl && (
+              <a className="btn" href={vurl} target="_blank" rel="noreferrer">
+                Verify ↗
+              </a>
+            )
+          )}
         </div>
         )}
-        {!isRaw && !canLookUp && (
+        {!isRaw && isNgc && !NGC_BOOKMARK_ENABLED && (
           <p className="muted small">
-            {SERVICE_NAMES[form.grading_service]} doesn't allow automated lookups.{" "}
-            {form.grading_service === "ANACS"
-              ? "Use Verify ↗ to open ANACS's verification page and enter the cert there"
-              : `Use Verify ↗ to open this coin on ${SERVICE_NAMES[form.grading_service]}'s site`}
-            , then fill in the date and grade below.
+            NGC doesn't allow automated lookups. Use <strong>Verify ↗</strong> to open this coin on NGC, then fill in the
+            date below.{!editInv && ngcPreviews.length === 0 ? " To save NGC's photos, copy one photo's address there and paste it here." : ""}
+          </p>
+        )}
+        {!isRaw && isNgc && NGC_BOOKMARK_ENABLED && (
+          <p className="muted small">
+            NGC doesn't allow automated lookups. On NGC's page, click your <strong>Add to TrackMyCoins</strong> bookmark
+            to come back here with the photos and details filled in.{" "}
+            <Link to="/ngc-button">Set up the bookmark</Link>
+            {!editInv && ngcPreviews.length === 0 && (
+              <>
+                {" · "}
+                <button type="button" className="link-btn" onClick={() => setShowPaste((v) => !v)}>
+                  {showPaste ? "Hide photo link" : "Paste a photo link instead"}
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        {!isRaw && !isNgc && !canLookUp && (
+          <p className="muted small">
+            {SERVICE_NAMES[form.grading_service]} doesn't allow automated lookups. Use Verify ↗, then fill in the date and
+            grade below.
           </p>
         )}
         {cacNote && <p className="small muted">{cacNote}</p>}
@@ -602,22 +665,16 @@ export default function CoinFormPage() {
             </div>
           </div>
         )}
-        {form.grading_service === "NGC" && !editInv && ngcPreviews.length === 0 && (
-          <>
-            <NgcPhotoLink
-              expectedCert={form.cert_number}
-              onFound={(r) => {
-                if (!form.cert_number) set("cert_number", r.cert_number);
-                setImportUrls((cur) => [...cur.filter((u) => !r.urls.includes(u)), ...r.urls]);
-              }}
-            />
-            {!ngcHandoff && (
-              <p className="small muted">
-                Or skip the copying: <Link to="/ngc-button">get the one-tap button</Link> and add the coin, photos
-                included, straight from NGC's page.
-              </p>
-            )}
-          </>
+        {isNgc && (showPaste || !NGC_BOOKMARK_ENABLED) && !editInv && ngcPreviews.length === 0 && (
+          <NgcPhotoLink
+            expectedCert={form.cert_number}
+            onFound={(r) => {
+              if (!form.cert_number) set("cert_number", r.cert_number);
+              setImportUrls((cur) => [...cur.filter((u) => !r.urls.includes(u)), ...r.urls]);
+              setNgcPreviews(r.previews);
+              setShowPaste(false);
+            }}
+          />
         )}
         {labelError && <p className="error small">{labelError}</p>}
         {label && <LabelSummary r={label} kept={!editInv && label.found_label} />}

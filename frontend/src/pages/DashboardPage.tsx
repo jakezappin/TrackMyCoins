@@ -8,6 +8,7 @@ import NewCollectionDialog from "../components/NewCollectionDialog";
 import QuickSearch from "../components/QuickSearch";
 import ValueHistoryChart from "../components/ValueHistoryChart";
 import MoreMenu from "../components/MoreMenu";
+import { NGC_BOOKMARK_ENABLED } from "../ngcButton";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import { ValueNote } from "../components/SummaryCards";
 import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, metalFor, money, shortDate, soldPath } from "../format";
@@ -60,7 +61,7 @@ export default function DashboardPage() {
           <span className="act-more">
             <MoreMenu>
               <Link to="/import">Import coins</Link>
-              <Link to="/ngc-button">NGC one-tap button</Link>
+              {NGC_BOOKMARK_ENABLED && <Link to="/ngc-button">NGC one-tap button</Link>}
               <a href={api.insuranceUrl(null)} download>
                 Insurance report (PDF)
               </a>

@@ -93,9 +93,10 @@ export default function NgcButtonPage() {
         <div>
           <h1>Add NGC coins in one tap</h1>
           <p className="muted">
-            NGC doesn't let other sites look up its coins, so this button works from NGC's own page in your browser. On
-            a coin's NGC cert page, tap <strong>Add to TrackMyCoins</strong>: the add-coin form opens with NGC's photos
-            (both sides, full size), the cert, grade, date and designation already filled in.
+            NGC doesn't let other sites look up its coins, so this bookmark works from NGC's own page in your browser.
+            In the add-coin form, choose NGC, enter the cert and grade, and click <strong>Open on NGC</strong>. On NGC's
+            page, click <strong>Add to TrackMyCoins</strong>: you're back in the same tab with your form as you left
+            it, plus NGC's photos (both sides, full size), cert, grade, date and designation.
           </p>
         </div>
       </div>

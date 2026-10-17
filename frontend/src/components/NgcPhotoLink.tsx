@@ -41,8 +41,8 @@ export default function NgcPhotoLink({
   return (
     <div className="ngc-photos">
       <span className="small muted">
-        NGC photos: on NGC's cert page, right-click (or long-press) the coin photo, choose <strong>Copy Image Address</strong>,
-        and paste it here. Both sides are saved at full size.
+        <strong>NGC photos:</strong> on NGC's page, right-click (or long-press) a coin photo, choose{" "}
+        <strong>Copy Image Address</strong>, and paste it here. Both sides are saved at full size.
       </span>
       <div className="share-link">
         <input

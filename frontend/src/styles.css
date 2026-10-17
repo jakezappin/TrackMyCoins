@@ -2662,3 +2662,8 @@ table {
   margin-top: 6px;
   cursor: grab;
 }
+
+.grade-mini {
+  width: 84px;
+  flex: 0 0 auto;
+}

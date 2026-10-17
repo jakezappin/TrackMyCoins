@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type CoinDetail } from "../api";
 import { useApp } from "../App";
 import NgcPhotoLink from "../components/NgcPhotoLink";
+import { ngcCertUrl } from "../ngcButton";
 import PhotoButtons from "../components/PhotoButtons";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import EstimatedValueCard from "../components/EstimatedValueCard";
@@ -223,11 +224,10 @@ export default function CoinDetailPage() {
               {coin.cert_number && (
                 <p className="small muted">
                   Open{" "}
-                  <a href={`https://www.ngccoin.com/certlookup/${encodeURIComponent(coin.cert_number)}/${coin.grade ? `${coin.grade}/` : ""}`} target="_blank" rel="noreferrer">
+                  <a href={ngcCertUrl(coin.cert_number, coin.grade)} target="_blank" rel="noreferrer">
                     this coin on NGC ↗
                   </a>
-                  , then copy a photo's address into the box below, or tap <Link to="/ngc-button">Add to TrackMyCoins</Link>{" "}
-                  there.
+                  , then copy a coin photo's address there and paste it below.
                 </p>
               )}
               <NgcPhotoLink
