@@ -41,6 +41,7 @@ opentelemetry-proto==1.45.1
 opentelemetry-sdk==1.45.1
 opentelemetry-semantic-conventions==0.66b1
 packaging==26.3
+pillow==13.0.0
 pluggy==1.7.0
 protobuf==7.36.2
 pycparser==3.11
@@ -48,11 +49,13 @@ pydantic==2.14.1
 pydantic-extra-types==2.11.1
 pydantic-settings==2.16.0
 pydantic_core==2.50.1
+pyflakes==4.0.3
 Pygments==2.21.0
 pytest==9.1.1
 python-dotenv==1.2.4
 python-multipart==0.0.32
 PyYAML==6.0.3
+reportlab==5.0.1
 requests==2.34.2
 rich==15.0.0
 rich-toolkit==0.20.6

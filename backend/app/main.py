@@ -47,6 +47,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Coin App", lifespan=lifespan)
 for r in (auth, catalog, collections, coins, dashboard, jobs, photos, pricing, reports):
     app.include_router(r.router)
+app.include_router(reports.insurance_router)
 
 
 @app.get("/api/health")

@@ -195,3 +195,23 @@ def test_gold_type_set(authed, monkeypatch):
     # A coin can't switch series once added
     body = coin_payload(col["id"], year=1870, mint_mark="CC", coin_type_id=types["liberty-eagles"]["id"])
     assert authed.put(f"/api/coins/{t2['inventory_number']}", json=body).status_code == 400
+
+
+def test_insurance_pdf(authed):
+    from PIL import Image as PILImage
+
+    col = _collection(authed, "morgan-dollars", name="My Morgans")
+    coin = authed.post("/api/coins", json=coin_payload(col["id"], year=1881, mint_mark="S", price_paid="100.00", cac_sticker="green")).json()
+    authed.post("/api/coins", json=coin_payload(col["id"], year=1878, mint_mark="P", sale_price="200", sale_date="2026-10-01"))
+    buf = io.BytesIO()
+    PILImage.new("RGB", (600, 400), (180, 180, 190)).save(buf, "PNG")
+    files = [("files", ("good.png", buf.getvalue(), "image/png")), ("files", ("bad.png", b"not an image", "image/png"))]
+    authed.post(f"/api/coins/{coin['inventory_number']}/photos", files=files)
+
+    for url in ("/api/reports/insurance", f"/api/reports/insurance?collection_id={col['id']}"):
+        r = authed.get(url)
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"] == "application/pdf"
+        assert r.content.startswith(b"%PDF")
+        assert "Insurance_Inventory_" in r.headers["content-disposition"]
+    assert authed.get("/api/reports/insurance?collection_id=99999").status_code == 404

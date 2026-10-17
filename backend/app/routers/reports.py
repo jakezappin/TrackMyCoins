@@ -18,9 +18,9 @@ from sqlalchemy.orm import Session, selectinload
 from ..auth import current_user
 from ..config import get_settings
 from ..db import get_db
-from ..models import Coin, Collection, User
+from ..models import Coin, CoinType, Collection, User
 from ..schemas import CoinOut
-from ..services import checklist
+from ..services import checklist, insurance
 from ..services.coins import CPG, coin_out, collection_summary, latest_quote, on_hand, sold, value_estimate
 from ..services.greysheet import PricingError
 from .collections import _type_label, get_owned_collection
@@ -247,4 +247,35 @@ def export_collection(collection_id: int, db: Session = Depends(get_db), user: U
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}_{date.today():%Y-%m-%d}.xlsx"'},
+    )
+
+
+# ---- Insurance report (PDF) -------------------------------------------------------------------
+
+insurance_router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+
+@insurance_router.get("/insurance")
+def insurance_report(collection_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """PDF inventory of every coin on hand (or one collection), for insurance."""
+    if collection_id is not None:
+        cols = [get_owned_collection(db, user, collection_id)]
+        scope = cols[0].name
+    else:
+        cols = db.scalars(select(Collection).where(Collection.user_id == user.id).order_by(Collection.name)).all()
+        scope = "All collections"
+    load = (selectinload(Coin.photos), selectinload(Coin.price_quotes))
+    groups = []
+    for col in cols:
+        coins = db.scalars(on_hand(select(Coin).where(Coin.collection_id == col.id)).options(*load)).all()
+        coins = sorted(coins, key=lambda c: (c.year, checklist.MINT_ORDER.get(c.mint_mark, 9), c.inventory_number))
+        if coins:
+            groups.append((col, coins))
+    type_names = {t.id: t.name for t in db.scalars(select(CoinType)).all()}
+    pdf = insurance.build_pdf(user, groups, type_names, scope)
+    filename = re.sub(r"[^A-Za-z0-9 _-]+", "", scope).strip().replace(" ", "_") or "collection"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Insurance_Inventory_{filename}_{date.today():%Y-%m-%d}.pdf"'},
     )

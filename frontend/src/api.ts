@@ -353,6 +353,8 @@ export const api = {
   collectionStatus: (id: number, mode: StatusMode = "full") =>
     request<CollectionStatus>("GET", `/api/collections/${id}/status?mode=${mode}`),
   exportUrl: (id: number) => `/api/collections/${id}/export`,
+  insuranceUrl: (collectionId: number | null) =>
+    `/api/reports/insurance${collectionId == null ? "" : `?collection_id=${collectionId}`}`,
 
   coin: (inv: string) => request<CoinDetail>("GET", `/api/coins/${encodeURIComponent(inv)}`),
   createCoin: (b: CoinFields & { collection_id: number; coin_type_id?: number | null; lookup_raw?: unknown }) =>

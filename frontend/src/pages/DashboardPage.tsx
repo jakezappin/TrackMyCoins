@@ -54,6 +54,9 @@ export default function DashboardPage() {
         </div>
         <div className="row">
           <RefreshPrices collectionId={null} coinCount={t.coin_count} onDone={refresh} />
+          <a className="btn" href={api.insuranceUrl(null)} download title="PDF inventory of every coin with photos and values, for your insurer">
+            Insurance report
+          </a>
           <button className="btn btn-primary" onClick={() => setCreating(true)}>
             + New collection
           </button>

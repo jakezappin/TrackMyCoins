@@ -101,6 +101,9 @@ export default function CollectionPage() {
           <a className="btn" href={api.exportUrl(collection.id)} download>
             Export
           </a>
+          <a className="btn" href={api.insuranceUrl(collection.id)} download title="PDF inventory with photos and values, for your insurer">
+            Insurance report
+          </a>
           <Link className="btn btn-primary" to={`/coins/new?collection=${collection.id}`}>
             + Add coin
           </Link>
