@@ -187,7 +187,8 @@ def _is_silver(variety: str | None) -> bool:
 
 
 # Overdates ("1880/79", "80/79", "1887/6", "8/7") and over-mintmarks ("O/S", "O/CC", "D/S").
-_OVER_RE = re.compile(r"\b\d{1,4}/\d{1,2}\b|\b[A-Z]{1,2}/[A-Z]{1,2}\b", re.I)
+# Not fractions like the 1936-D Buffalo's "3 1/2 Legs" (a digit, a space, then n/m).
+_OVER_RE = re.compile(r"(?<!\d\s)\b\d{1,4}/\d{1,2}\b|\b[A-Z]{1,2}/[A-Z]{1,2}\b", re.I)
 
 
 def _variety_hits(entries, variety: str, year: int, mint_mark: str) -> list:

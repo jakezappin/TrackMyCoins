@@ -293,3 +293,12 @@ def test_get_cpg_uses_gsa_entry(authed, morgan_collection):
     assert d["pcgs_number"] == "518999" and d["gsa_soft_pack"] is True
     both = coin_payload(morgan_collection["id"], year=1880, mint_mark="CC", gsa_soft_pack=True, gsa_hard_pack=True)
     assert authed.post("/api/coins", json=both).status_code == 422
+
+
+def test_over_pattern_skips_fractions():
+    from app.services.catalog import _OVER_RE
+
+    for text in ("1880/79", "80/79", "1942/1", "'1/0', Overdate", "D/S", "O/CC", "S/S"):
+        assert _OVER_RE.search(text), text
+    for text in ("3 1/2 Legs", "7/8TF, Strong", "Large/Small 47", "Buffalo"):
+        assert not _OVER_RE.search(text), text
