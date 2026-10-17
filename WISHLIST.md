@@ -58,6 +58,20 @@ value-over-time chart from real history instead of the dashed backfill.
 - Where each coin is kept (home safe, bank box). Probably unpopular: many collectors don't want to record where their
   stack is; the Notes field covers anyone who does.
 
+### Historical spot prices (gold, silver, platinum)
+- Today the app only knows the current spot price (gold-api.com). Daily history would show what bullion was
+  worth when bought, chart a stack's value over time, and give past melt values for numismatic coins.
+- Options: a metals-price API with daily history (free/cheap tiers) or the LBMA daily fix. Check current terms,
+  limits and cost before choosing.
+- Decide when designing the Bullion collection; that feature depends on it.
+
+### Numista catalog
+- Free API (needs a key; monthly request limit) with type photos, mintages, weight and metal content, and
+  many bullion rounds and bars.
+- Uses: a product catalog to pick bullion items from; real type photos in place of the placeholder artwork on
+  coins without photos; a starting point for world coins later.
+- Decide alongside the Bullion collection design. Check current API terms first.
+
 ## Ideas
 
 - **Single-use invite codes** with a list of who joined with which code (today one shared code works for everyone).
