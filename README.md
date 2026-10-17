@@ -99,9 +99,13 @@ cd backend && .venv/bin/python -m scripts.greysheet_check kennedy-half-dollars  
 
 Each fetch uses 2 of PCGS's 1,000 free API calls a day.
 
+PCGS auction prices include the buyer's premium. The chart's toggle can show the estimated hammer price instead, removing each house's premium (e.g. Stack's 20–22%, Heritage 20%).
+
 ## Coin types
 
-44 series: copper through Ike dollars, classic commemoratives, classic $1-$20 gold, American Silver Eagles and the four American Gold Eagle sizes.
+52 series: copper through Ike dollars, classic commemoratives, early and classic gold ($1 to $20, plus the proof-only $4 Stella), American Silver Eagles, the four American Gold Eagle sizes and $50 Gold Buffalos.
+
+**Type sets** mix series: the Gold Type Set has one line per gold design (23 types). When adding a coin to a type set, choose which series it's from.
 
 The supported series, their inventory prefixes and their Greysheet catalog sections are listed in `backend/app/series.py`.
 

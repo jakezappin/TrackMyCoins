@@ -91,6 +91,7 @@ export default function CoinFormPage() {
   const [form, setForm] = useState<CoinFields>(EMPTY);
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
   const [inventoryNumber, setInventoryNumber] = useState<string | null>(null);
+  const [memberTypeId, setMemberTypeId] = useState<number | null>(null);
   const [loading, setLoading] = useState(editInv !== null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +114,7 @@ export default function CoinFormPage() {
         const fields = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, c[k as keyof CoinFields]])) as unknown as CoinFields;
         setForm(fields);
         setCollectionId(c.collection_id);
+        setMemberTypeId(c.coin_type_id);
         setInventoryNumber(c.inventory_number);
       })
       .catch((e) => setError(e.message))
@@ -125,7 +127,11 @@ export default function CoinFormPage() {
   }, [collections, collectionId]);
 
   const collection = collections.find((c) => c.id === collectionId);
-  const coinType = coinTypes.find((t) => t.id === collection?.coin_type_id) ?? coinTypes[0];
+  // In a type set (e.g. Gold Type Set) each coin comes from one of the set's member series, chosen below.
+  const collectionType = coinTypes.find((t) => t.id === collection?.coin_type_id);
+  const isTypeSet = Boolean(collectionType?.is_type_set);
+  const memberTypes = isTypeSet ? coinTypes.filter((t) => collectionType!.member_ids.includes(t.id)) : [];
+  const coinType = isTypeSet ? coinTypes.find((t) => t.id === memberTypeId) : collectionType ?? coinTypes[0];
   const finish = collection?.finish ?? "MS";
   const isProof = finish !== "MS";
   const isRaw = form.grading_service === "RAW";
@@ -137,11 +143,16 @@ export default function CoinFormPage() {
   if (coinType?.slug === "ike-dollars") {
     packaging.push(isProof ? ["ike_brown_pack", "Brown Pack (40% silver proof)", null] : ["ike_blue_pack", "Blue Pack (40% silver)", null]);
   }
-  // When editing, a coin can only move between collections of its own series. Grouped by series.
+  // When editing, a coin can only move to collections of its own series, or type sets that include it.
   const collectionGroups = useMemo(() => {
-    const pool = editInv && collection ? collections.filter((c) => c.coin_type_id === collection.coin_type_id) : collections;
+    const own = memberTypeId;
+    const fits = (c: (typeof collections)[number]) => {
+      const t = coinTypes.find((x) => x.id === c.coin_type_id);
+      return c.coin_type_id === own || Boolean(t?.is_type_set && own != null && t.member_ids.includes(own));
+    };
+    const pool = editInv && own != null ? collections.filter(fits) : collections;
     return collectionsBySeries(coinTypes, pool);
-  }, [collections, coinTypes, collection, editInv]);
+  }, [collections, coinTypes, memberTypeId, editInv]);
 
   // Proof collections take PR grades; business-strike collections take MS and circulated grades.
   useEffect(() => {
@@ -303,7 +314,11 @@ export default function CoinFormPage() {
     }
     setSaving(true);
     setError(null);
-    const body = { ...form, collection_id: collectionId, year: form.year ? Number(form.year) : null, grade: form.grade ? Number(form.grade) : null };
+    if (isTypeSet && !memberTypeId) {
+      setError("Choose which series this coin is from.");
+      return;
+    }
+    const body = { ...form, collection_id: collectionId, coin_type_id: isTypeSet ? memberTypeId : undefined, year: form.year ? Number(form.year) : null, grade: form.grade ? Number(form.grade) : null };
     try {
       let coin = editInv
         ? await api.updateCoin(editInv, body)
@@ -475,6 +490,24 @@ export default function CoinFormPage() {
               ))}
             </select>
           </label>
+          {isTypeSet && (
+            <label className="field">
+              <span>Series</span>
+              <select
+                value={memberTypeId ?? ""}
+                onChange={(e) => setMemberTypeId(Number(e.target.value) || null)}
+                disabled={Boolean(editInv)}
+                required
+              >
+                <option value="">Choose a series…</option>
+                {memberTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="field">
             <span>Year</span>
             <input type="number" min={1700} max={2200} required {...text("year")} />

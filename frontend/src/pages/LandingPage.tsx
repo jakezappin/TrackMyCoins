@@ -13,7 +13,7 @@ const FEATURES = [
   },
   {
     title: "Know what's missing",
-    body: "Collection Status lists every date and mint in the series, earliest first, with your coins beside each. One click shows only the holes.",
+    body: "Collection Status lists every date and mint in the series, earliest first, with your coins beside each. Type sets too, like the 23-coin Gold Type Set and classic commemoratives. One click shows only the holes.",
     icon: <path d="M5 6h3m-3 6h3m-3 6h3M11 6h9m-9 6h9m-9 6h9M4.5 12l1 1 2-2" />,
   },
   {
@@ -23,12 +23,12 @@ const FEATURES = [
   },
   {
     title: "Recent auction sales",
-    body: "The last ten auction results for your coin and grade, charted against the price guides, with links to every lot.",
+    body: "The last ten auction results for your coin and grade, charted against the price guides with or without the buyer's premium, and linked to every lot.",
     icon: <path d="M5 17l4-5 4 3 6-8M5 7h.01M9 12h.01M13 15h.01M19 7h.01" />,
   },
   {
     title: "Every major U.S. series",
-    body: "Half cents to Ike dollars, classic commemoratives, $1 to $20 gold, and American Silver and Gold Eagles. Business strikes, proofs and silver proofs.",
+    body: "Half cents to Ike dollars, classic commemoratives, early and classic gold from Draped Bust to Saint-Gaudens, the $4 Stella, Silver and Gold Eagles and Gold Buffalos. Business strikes, proofs and silver proofs.",
     icon: <path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3v10m-3-7h6" />,
   },
   {
@@ -146,7 +146,7 @@ function MarketPreview() {
 
 export default function LandingPage() {
   // Counts come from the server so they stay right as series are added.
-  const [stats, setStats] = useState({ series: 44, collection_types: 89 });
+  const [stats, setStats] = useState({ series: 52, collection_types: 103 });
   useEffect(() => {
     api.publicStats().then(setStats).catch(() => undefined);
   }, []);
@@ -216,8 +216,8 @@ export default function LandingPage() {
           <span>collection types (MS, Proof &amp; Silver Proof)</span>
         </div>
         <div>
-          <strong>3</strong>
-          <span>price sources</span>
+          <strong>23</strong>
+          <span>gold types in the Gold Type Set</span>
         </div>
         <div>
           <strong>10</strong>
@@ -245,7 +245,7 @@ export default function LandingPage() {
           <h2>See the holes. Watch the market.</h2>
           <p>
             Work through a set from the earliest date to the latest, with your best grade beside each one. Then check
-            how the coins you own are actually selling at auction, next to the price guides.
+            how the coins you own are actually selling at auction, next to the CPG and PCGS price guides.
           </p>
         </div>
         <div className="lp-previews">

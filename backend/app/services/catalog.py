@@ -122,26 +122,26 @@ def series_nodes(coin_type: CoinType) -> list[int]:
     if overrides:
         return list(overrides)
     s = BY_SLUG.get(coin_type.slug)
-    if s is None:
+    if s is None or s.is_type_set:
         raise PricingError(f"No Greysheet catalog sections configured for {coin_type.name}")
     return list(dict.fromkeys([*s.ms_nodes, *s.pr_nodes]))
 
 
 def sync(db: Session, coin_type: CoinType) -> SyncResult:
     nodes = series_nodes(coin_type)
-    raw: list[dict] = []
+    raw: list[tuple[int, dict]] = []
     with greysheet.client() as c:
         for nid in nodes:
-            raw.extend(greysheet.get(c, "/GetCollectibleByNodeRequest", NodeId=nid))
+            raw.extend((nid, d) for d in greysheet.get(c, "/GetCollectibleByNodeRequest", NodeId=nid))
 
     now = datetime.now(timezone.utc)
     rows: dict[int, dict] = {}
-    for d in raw:
+    for nid, d in raw:
         if d.get("Gsid") is None:
             continue
         parsed = parse_collectible(d)
         if parsed:
-            rows[parsed["gsid"]] = parsed
+            rows.setdefault(parsed["gsid"], {**parsed, "node_id": nid})
     if not rows:
         raise PricingError(f"Greysheet returned no {coin_type.name} items")
 

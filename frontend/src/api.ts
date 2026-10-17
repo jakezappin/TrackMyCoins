@@ -27,6 +27,8 @@ export interface CoinType {
   mint_marks: string[];
   finishes: FinishInfo[];
   metal: "gold" | "silver";
+  is_type_set: boolean;
+  member_ids: number[]; // type sets: series their coins can come from
 }
 
 export interface Summary {
@@ -317,9 +319,9 @@ export const api = {
   exportUrl: (id: number) => `/api/collections/${id}/export`,
 
   coin: (inv: string) => request<CoinDetail>("GET", `/api/coins/${encodeURIComponent(inv)}`),
-  createCoin: (b: CoinFields & { collection_id: number; lookup_raw?: unknown }) =>
+  createCoin: (b: CoinFields & { collection_id: number; coin_type_id?: number | null; lookup_raw?: unknown }) =>
     request<CoinDetail>("POST", "/api/coins", b),
-  updateCoin: (inv: string, b: CoinFields & { collection_id: number }) =>
+  updateCoin: (inv: string, b: CoinFields & { collection_id: number; coin_type_id?: number | null }) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}`, b),
   deleteCoin: (inv: string) => request<void>("DELETE", `/api/coins/${encodeURIComponent(inv)}`),
 

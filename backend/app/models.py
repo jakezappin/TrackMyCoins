@@ -60,6 +60,8 @@ class CatalogEntry(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     coin_type_id: Mapped[int] = mapped_column(ForeignKey("coin_types.id"), index=True)
     gsid: Mapped[int] = mapped_column(Integer, unique=True)
+    # Greysheet catalog section the entry came from (e.g. 10339 = $20 Liberty Type 1); used by type sets.
+    node_id: Mapped[int | None] = mapped_column(Integer, index=True)
     pcgs_number: Mapped[str | None] = mapped_column(String(20), index=True)
     ngc_id: Mapped[int | None] = mapped_column(Integer)
     year: Mapped[int | None] = mapped_column(Integer, index=True)

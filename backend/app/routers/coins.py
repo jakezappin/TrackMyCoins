@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
-from ..models import Coin, Collection, User
+from ..models import Coin, CoinType, Collection, User
+from ..series import BY_SLUG, type_set_members
 from ..schemas import CoinDetail, CoinFields, CoinIn, CoinUpdate
 from ..services.coins import coin_detail, duplicate_info, find_duplicate_cert, next_inventory_number
 from ..services.photos import delete_coin_photo_files
@@ -23,14 +24,29 @@ def get_owned_coin(db: Session, user: User, inventory_number: str) -> Coin:
     return coin
 
 
-def _validate(body: CoinFields, collection: Collection) -> dict:
-    marks = collection.coin_type.mint_marks
+def coin_type_for(db: Session, collection: Collection, requested_id: int | None) -> CoinType:
+    """The series a coin belongs to: the collection's own, or (in a type set) the member series chosen."""
+    series = BY_SLUG.get(collection.coin_type.slug)
+    if series is None or not series.is_type_set:
+        return collection.coin_type
+    members = {m.slug for m in type_set_members(series)}
+    chosen = db.get(CoinType, requested_id) if requested_id else None
+    if chosen is None or chosen.slug not in members:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Choose which series this coin is from (one of the {len(members)} in a {series.name}).",
+        )
+    return chosen
+
+
+def _validate(body: CoinFields, collection: Collection, coin_type: CoinType) -> dict:
+    marks = coin_type.mint_marks
     if marks and body.mint_mark not in marks:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"Mint mark must be one of {', '.join(marks)} for {collection.coin_type.name}",
+            f"Mint mark must be one of {', '.join(marks)} for {coin_type.name}",
         )
-    data = body.model_dump(exclude={"collection_id", "lookup_raw"})
+    data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw"})
     # Proof collections hold proofs; business-strike collections don't.
     if collection.finish in ("PR", "SPR"):
         if data["grade_prefix"] in (None, "PF"):
@@ -79,14 +95,15 @@ def _reject_duplicate(db: Session, user: User, data: dict, exclude_coin_id: int 
 @router.post("", response_model=CoinDetail, status_code=status.HTTP_201_CREATED)
 def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     col = get_owned_collection(db, user, body.collection_id)
-    data = _validate(body, col)
+    coin_type = coin_type_for(db, col, body.coin_type_id)
+    data = _validate(body, col, coin_type)
     _reject_duplicate(db, user, data)
     coin = Coin(
         **data,
         user_id=user.id,
-        coin_type_id=col.coin_type_id,
+        coin_type_id=coin_type.id,
         collection_id=col.id,
-        inventory_number=next_inventory_number(db, user.id, col.coin_type),
+        inventory_number=next_inventory_number(db, user.id, coin_type),
         lookup_raw=body.lookup_raw,
     )
     db.add(coin)
@@ -104,9 +121,11 @@ def get_coin(inventory_number: str, db: Session = Depends(get_db), user: User = 
 def update_coin(inventory_number: str, body: CoinUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     coin = get_owned_coin(db, user, inventory_number)
     col = get_owned_collection(db, user, body.collection_id)
-    if col.coin_type_id != coin.coin_type_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A coin can only move to a collection of the same coin type")
-    data = _validate(body, col)
+    coin_type = coin_type_for(db, col, body.coin_type_id or coin.coin_type_id)
+    if coin_type.id != coin.coin_type_id:
+        # Its inventory number (e.g. MOR-00005) belongs to its series, so a coin keeps its series.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"This coin is a {coin.coin_type.name}; it can't change series")
+    data = _validate(body, col, coin_type)
     # Re-check when the coin is on hand (or being returned to hand) so edits can't create a duplicate.
     if data["sale_price"] is None and data["sale_date"] is None:
         _reject_duplicate(db, user, data, exclude_coin_id=coin.id)

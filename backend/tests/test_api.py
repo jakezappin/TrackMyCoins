@@ -232,8 +232,8 @@ def test_coin_types_and_finishes(authed):
     types = authed.get("/api/coin-types").json()
     from app.series import SERIES
 
-    assert len(types) == len(SERIES) == 44
-    assert types[0]["slug"] == "half-cents" and types[-1]["slug"] == "classic-commemoratives"  # catalog order
+    assert len(types) == len(SERIES) == 52
+    assert types[0]["slug"] == "half-cents"  # catalog order
     ken = _type(authed, "kennedy-half-dollars")
     assert [f["code"] for f in ken["finishes"]] == ["MS", "PR", "SPR"]
     assert ken["finishes"][2]["collection_type_slug"] == "kennedy-half-dollars-silver-proof"
@@ -246,7 +246,12 @@ def test_coin_types_and_finishes(authed):
     assert gold["metal"] == "gold" and "C" not in gold["mint_marks"]
     assert _type(authed, "gold-eagles-50")["metal"] == "gold"
     assert _type(authed, "american-silver-eagles")["metal"] == "silver"
-    assert authed.get("/api/public/stats").json() == {"series": 44, "collection_types": 89, "categories": 9}
+    assert authed.get("/api/public/stats").json() == {"series": 52, "collection_types": 103, "categories": 10}
+    stella = _type(authed, "four-dollar-stella")
+    assert [f["code"] for f in stella["finishes"]] == ["PR"]  # proof-only
+    gts = _type(authed, "gold-type-set")
+    assert gts["is_type_set"] and len(gts["member_ids"]) == 15
+    assert types[-1]["slug"] == "gold-type-set"
 
 
 def test_proof_collections(authed):

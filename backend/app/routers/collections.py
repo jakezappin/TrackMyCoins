@@ -17,6 +17,7 @@ from ..schemas import (
 )
 from ..series import (
     BY_SLUG,
+    type_set_members,
     CATEGORIES,
     FINISHES,
     collection_type_label,
@@ -77,6 +78,7 @@ def list_coin_types(db: Session = Depends(get_db), _: User = Depends(current_use
     """All series, in catalog order (by category, then as listed in app/series.py)."""
     order = {slug: i for i, slug in enumerate(BY_SLUG)}
     types = db.scalars(select(CoinType)).all()
+    id_by_slug = {t.slug: t.id for t in types}
     types = sorted(
         types,
         key=lambda t: (CATEGORIES.index(t.category) if t.category in CATEGORIES else 99, order.get(t.slug, 999)),
@@ -91,6 +93,12 @@ def list_coin_types(db: Session = Depends(get_db), _: User = Depends(current_use
             inventory_prefix=t.inventory_prefix,
             mint_marks=t.mint_marks,
             metal=BY_SLUG[t.slug].metal if t.slug in BY_SLUG else "silver",
+            is_type_set=t.slug in BY_SLUG and BY_SLUG[t.slug].is_type_set,
+            member_ids=[
+                id_by_slug[m.slug]
+                for m in (type_set_members(BY_SLUG[t.slug]) if t.slug in BY_SLUG and BY_SLUG[t.slug].is_type_set else [])
+                if m.slug in id_by_slug
+            ],
             finishes=[
                 FinishOut(
                     code=f,

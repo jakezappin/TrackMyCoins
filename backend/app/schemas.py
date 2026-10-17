@@ -69,6 +69,8 @@ class CoinTypeOut(ORM):
     mint_marks: list[str]
     finishes: list[FinishOut]
     metal: str = "silver"  # "gold" | "silver", for placeholder artwork
+    is_type_set: bool = False
+    member_ids: list[int] = []  # type sets: the series their coins can come from
 
 
 class CollectionIn(BaseModel):
@@ -174,11 +176,14 @@ class CoinFields(BaseModel):
 
 class CoinIn(CoinFields):
     collection_id: int
+    # Only for type set collections: which member series the coin belongs to.
+    coin_type_id: int | None = None
     lookup_raw: dict | None = None
 
 
 class CoinUpdate(CoinFields):
     collection_id: int
+    coin_type_id: int | None = None
 
 
 class PhotoOut(ORM):

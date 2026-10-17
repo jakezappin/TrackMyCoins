@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..models import CatalogEntry, Coin, Collection
-from ..series import FINISHES
+from ..models import CatalogEntry, Coin, CoinType, Collection
+from ..series import BY_SLUG, FINISHES, SERIES_BY_NODE, type_set_members
 from . import catalog
 from .coins import on_hand
 
@@ -75,9 +75,13 @@ class Row:
     coins: list[Coin] = field(default_factory=list)
     years: set[int] = field(default_factory=set)
     type_row: bool = False  # a type-set line: one design, any date
+    label_text: str | None = None  # fixed label (mixed-series type sets)
+    series_id: int | None = None  # mixed-series type sets: the series that owns this line
 
     @property
     def label(self) -> str:
+        if self.label_text:
+            return self.label_text
         if self.type_row:
             lo, hi = min(self.years), max(self.years)
             return f"{self.variety} ({lo})" if lo == hi else f"{self.variety} ({lo}–{hi})"
@@ -150,7 +154,62 @@ def _catalog_entries(db: Session, col: Collection) -> list[CatalogEntry]:
     return entries
 
 
+def _held_coins(db: Session, col: Collection) -> list[Coin]:
+    return db.scalars(
+        on_hand(select(Coin).where(Coin.collection_id == col.id))
+        .options(selectinload(Coin.photos), selectinload(Coin.price_quotes))
+        .order_by(Coin.grade.desc(), Coin.inventory_number)
+    ).all()
+
+
+def _build_mixed_type_set(db: Session, col: Collection, series) -> Checklist:
+    """One line per design across several series (e.g. the Gold Type Set)."""
+    types = {t.slug: t for t in db.scalars(select(CoinType)).all()}
+    members = [types[m.slug] for m in type_set_members(series) if m.slug in types]
+    for ct in members:
+        catalog.ensure_synced(db, ct)
+    entries = db.scalars(
+        select(CatalogEntry).where(CatalogEntry.coin_type_id.in_([ct.id for ct in members]), CatalogEntry.strike == "MS")
+    ).all()
+    by_node: dict[int, list[CatalogEntry]] = {}
+    for e in entries:
+        by_node.setdefault(e.node_id, []).append(e)
+
+    rows: list[Row] = []
+    for i, (label, node) in enumerate(series.type_rows):
+        es = by_node.get(node, [])
+        owner = types.get(SERIES_BY_NODE[node].slug)
+        rows.append(
+            Row(
+                key=(node,),
+                year=min((e.year for e in es), default=0),
+                mint_mark="P",
+                variety=None,
+                order=i,
+                label_text=label,
+                series_id=owner.id if owner else None,
+                years={e.year for e in es},
+                pcgs_numbers={e.pcgs_number for e in es if e.pcgs_number},
+            )
+        )
+
+    others = []
+    for coin in _held_coins(db, col):
+        row = None
+        if coin.pcgs_number:
+            row = next((r for r in rows if r.series_id == coin.coin_type_id and coin.pcgs_number in r.pcgs_numbers), None)
+        if row is None:
+            # Same series and a year that design was struck (e.g. 1870 $20 -> Liberty Type 2).
+            fits = [r for r in rows if r.series_id == coin.coin_type_id and coin.year in r.years]
+            row = fits[0] if len(fits) == 1 else None
+        (row.coins if row else others).append(coin)
+    return Checklist(rows=rows, others=others)
+
+
 def build(db: Session, col: Collection, mode: str = "full") -> Checklist:
+    series = BY_SLUG.get(col.coin_type.slug)
+    if series is not None and series.is_type_set:
+        return _build_mixed_type_set(db, col, series)
     catalog.ensure_synced(db, col.coin_type)
     slug = col.coin_type.slug
     type_set = mode == "type" and slug in TYPE_SET_SERIES

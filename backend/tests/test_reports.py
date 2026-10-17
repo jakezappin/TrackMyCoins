@@ -154,3 +154,44 @@ def test_status_commemoratives_type_set(authed):
     from openpyxl import load_workbook
     wb = load_workbook(io.BytesIO(authed.get(f"/api/collections/{col['id']}/export").content))
     assert "Type Set" in wb.sheetnames and wb["Type Set"]["A1"].value == "Design"
+
+
+def test_gold_type_set(authed, monkeypatch):
+    import test_catalog as fake
+    from app.series import BY_SLUG
+
+    # One fake catalog coin per gold design section, plus two $20 Liberty Type 2 dates.
+    nodes = dict(fake.NODES)
+    for i, (label, node) in enumerate(BY_SLUG["gold-type-set"].type_rows):
+        year = int(label.split("(")[1][:4])
+        nodes[node] = [fake.item(1000 + i, str(70000 + i), str(year), denom="$")]
+    nodes[10340] = [fake.item(2000, "8950", "1866-S", denom="$20"), fake.item(2001, "8960", "1870-CC", denom="$20")]
+    # Each member series has a proof section too; give them something so the sync succeeds.
+    for s in {BY_SLUG[k] for k in BY_SLUG if BY_SLUG[k].category == "Gold"}:
+        for n in s.pr_nodes:
+            nodes.setdefault(n, [fake.item(5000 + n, None, "1900", strike="PR", denom="$")])
+    monkeypatch.setattr(fake, "NODES", nodes)
+
+    types = {t["slug"]: t for t in authed.get("/api/coin-types").json()}
+    col = authed.post("/api/collections", json={"name": "My Gold Type Set", "coin_type_id": types["gold-type-set"]["id"]}).json()
+    assert col["collection_type_slug"] == "gold-type-set" and col["collection_type_label"] == "Gold Type Set"
+
+    # The coin's series must be chosen, and must be one of the type set's members
+    assert authed.post("/api/coins", json=coin_payload(col["id"], year=1870, mint_mark="CC")).status_code == 422
+    morgan = coin_payload(col["id"], year=1881, mint_mark="S", coin_type_id=types["morgan-dollars"]["id"])
+    assert authed.post("/api/coins", json=morgan).status_code == 422
+
+    t2 = authed.post("/api/coins", json=coin_payload(col["id"], year=1870, mint_mark="CC", coin_type_id=types["liberty-double-eagles"]["id"])).json()
+    assert t2["inventory_number"] == "G20L-00001" and t2["coin_type_id"] == types["liberty-double-eagles"]["id"]
+    saint = authed.post("/api/coins", json=coin_payload(col["id"], year=1907, mint_mark="P", pcgs_number=str(70000 + 22), coin_type_id=types["saint-gaudens-double-eagles"]["id"])).json()
+
+    s = authed.get(f"/api/collections/{col['id']}/status").json()
+    assert s["total"] == 23 and s["filled"] == 2
+    rows = {r["label"]: [c["inventory_number"] for c in r["coins"]] for r in s["rows"]}
+    assert rows["$20 Liberty Type 2 (1866–1876)"] == [t2["inventory_number"]]  # by series + year
+    assert rows["$20 Saint-Gaudens (1907–1933)"] == [saint["inventory_number"]]  # by PCGS #
+    assert list(rows)[0] == "$1 Gold Type 1 (1849–1854)"  # checklist order
+
+    # A coin can't switch series once added
+    body = coin_payload(col["id"], year=1870, mint_mark="CC", coin_type_id=types["liberty-eagles"]["id"])
+    assert authed.put(f"/api/coins/{t2['inventory_number']}", json=body).status_code == 400

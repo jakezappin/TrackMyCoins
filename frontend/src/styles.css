@@ -2067,3 +2067,17 @@ table {
     display: none;
   }
 }
+.premium-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.premium-toggle .seg.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.bp-rate {
+  font-size: 0.75rem;
+}
