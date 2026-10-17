@@ -106,3 +106,16 @@ def test_import_rules(client, authed):
     client.post("/api/auth/logout")
     client.post("/api/auth/signup", json={"email": "x@example.com", "first_name": "X", "last_name": "Y", "password": "long enough pw"})
     assert _preview_csv(client, col).status_code == 404
+
+
+def test_overdates_and_overmintmarks():
+    cases = {
+        "1880/79-CC Reverse of 1878": (1880, "CC", "1880/79, Reverse of 1878"),
+        "1887/6-O": (1887, "O", "1887/6"),
+        "1882-O/S": (1882, "O", "O/S"),
+        "1900-o/cc": (1900, "O", "O/CC"),
+        "1878 7/8TF Strong": (1878, "P", "7/8TF Strong"),  # tail-feather variety, not an overdate
+    }
+    for date, want in cases.items():
+        f, _, errors = importer.row_to_fields({"Date": date, "Grade": "MS63", "Service": "PCGS", "Cert": "1"})
+        assert not errors and (f["year"], f["mint_mark"], f["variety"]) == want, date

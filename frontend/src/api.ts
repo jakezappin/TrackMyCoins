@@ -256,6 +256,8 @@ export interface LookupResult {
   grade_star: boolean;
   strike_designation: string | null;
   vam: string | null;
+  /** Overdate / over-mintmark from the coin name, e.g. "1880/79", "O/S". */
+  variety: string | null;
   pcgs_number: string | null;
   cac: boolean | null;
   cac_sticker: CacSticker | null;

@@ -73,6 +73,7 @@ Read the slab's printed label and fill in the fields.
 
 - cert_number: the certification number exactly as printed (digits, and a dash if NGC prints one, e.g. "1234567-001"). Not the PCGS coin number or a barcode's other numbers.
 - year and mint_mark: from the date, e.g. "1881-S" gives 1881 and "S". No mint mark (Philadelphia) is "P". For a date like "1878 8TF" the year is 1878 and "8TF" is the variety.
+- Overdates: "1880/79-CC" is year 1880, mint "CC", and the overdate "1880/79" goes first in variety. Over-mintmarks: "1882-O/S" is mint "O" (the top letter) and "O/S" goes first in variety.
 - coin_type: the series, e.g. "Morgan Dollar", "Peace Dollar", "Saint-Gaudens $20".
 - grade_prefix and grade: e.g. "MS" and 65 for "MS65"; proofs are "PR" (NGC's "PF" is also "PR"). grade_plus for a "+", grade_star for a star (★).
 - strike_designation: designations printed with the grade, using these abbreviations: PL, DMPL, DPL, RD, RB, BN, FB, FBL, FS, FH, FT, CAM, DCAM, UCAM. Several are separated by spaces, e.g. "RD CAM".
@@ -214,6 +215,8 @@ the collector's browser. Fill in the fields for that coin. The grading service i
 lookup, so set found_label true if the text describes a coin.
 
 - year and mint_mark from the coin's date, e.g. "1881-S" or "1881 S $1" gives 1881 and "S"; no mint mark is "P".
+- Overdates ("1880/79 CC $1" or "1880/79-CC"): year 1880, mint "CC", and "1880/79" goes first in variety.
+  Over-mintmarks ("1882 O/S $1"): mint "O" (the top letter), and "O/S" goes first in variety.
 - coin_type: the series, e.g. "Morgan Dollar".
 - grade_prefix and grade from the grade, e.g. "MS 62" gives "MS" and 62. NGC's "PF" proofs are "PR". A "+" sets
   grade_plus; a star (★) sets grade_star.
@@ -243,8 +246,16 @@ def read_ngc_page(cert: str, grade_in_url: str | None, text: str) -> dict:
             log.warning("NGC page read fell back to the simple parser: %s", e)
     if result is None:
         result = _blank(source="ngc_page", confidence="medium")
+        od = re.search(r"\b(1[789]\d\d|20[0-4]\d)/(\d{1,2})(?:[\s-]+(CC|[PDSOW])\b)?", text)
+        om = re.search(r"\b(1[789]\d\d|20[0-4]\d)[\s-]+(CC|[PDSOW])/(CC|[PDSOW])\b", text)
         m = DATE_IN_TEXT.search(text)
-        if m:
+        if od:
+            result["year"], result["mint_mark"] = int(od.group(1)), (od.group(3) or "P").upper()
+            result["variety"] = f"{od.group(1)}/{od.group(2)}"
+        elif om:
+            result["year"], result["mint_mark"] = int(om.group(1)), om.group(2).upper()
+            result["variety"] = f"{om.group(2)}/{om.group(3)}".upper()
+        elif m:
             result["year"], result["mint_mark"] = int(m.group(1)), (m.group(2) or "P").upper()
         g = GRADE_IN_TEXT.search(text)
         if g:
@@ -271,7 +282,10 @@ def _clean(r: dict) -> dict:
     if r["cert_number"]:
         r["cert_number"] = r["cert_number"].replace(" ", "")
     if r["mint_mark"]:
-        r["mint_mark"] = r["mint_mark"].upper()
+        top = r["mint_mark"].upper().split("/")[0].strip()  # "O/S" -> "O"; the over-mintmark belongs in variety
+        if "/" in r["mint_mark"] and not (r["variety"] or "").upper().startswith(r["mint_mark"].upper()):
+            r["variety"] = ", ".join(x for x in (r["mint_mark"].upper(), r["variety"]) if x)
+        r["mint_mark"] = top or None
     if r["grade_prefix"]:
         r["grade_prefix"] = "PR" if r["grade_prefix"].upper() in ("PF", "PR", "PROOF") else r["grade_prefix"].upper()
     g = r.get("grade")

@@ -38,6 +38,12 @@ MORGANS = [
     item(80, "518922", "1880/79-CC", variety="Reverse of 1878", variety2="GSA Hoard, Hard package"),
     item(81, "518999", "1880/79-CC", variety="Reverse of 1878", variety2="GSA Hoard, Soft Package"),
     item(13, "7296", "1921", variety="Morgan"),
+    item(19, "7138", "1882-O/S", variety="Strong"),
+    item(20, "7136", "1882-O"),
+    item(21, "7268", "1900-O/CC"),
+    item(22, "7264", "1900-O"),
+    item(23, "7178", "1887/6-O"),
+    item(24, "7176", "1887-O"),
     {"Gsid": 9, "PcgsNumber": "7068", "CoinDate": "Morgan", "Desg": "MS", "Name": "Morgan $1 Pre-1921 MS [Type]"},
 ]
 
@@ -153,7 +159,7 @@ def test_sync_pulls_series_nodes(authed):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["nodes"] == [8971, 8972]
-    assert body["count"] == 18  # 17 business strikes + 2 proofs - [Type] entry - VAM child
+    assert body["count"] == 24  # 23 business strikes + 2 proofs - [Type] entry - VAM child
     assert {c.split("NodeId=")[1].split("&")[0] for c in calls if "NodeId=" in c} == {"8971", "8972"}
 
 
@@ -179,6 +185,20 @@ def test_match_endpoint(authed):
     m, pcgs = best(year=1888, mint_mark="O", gsa="soft")  # no GSA listing at all
     assert pcgs is None and "no GSA Soft Pack listing" in m["message"]
     assert best(year=1880, mint_mark="CC", variety="1880/79")[1] == "7108"
+    # Overdates however they're typed
+    for typed in ("80/79", "1880/79-CC", "1880/79 VAM-4", "1880-CC 80/79", "1880/79 Reverse of 1878"):
+        assert best(year=1880, mint_mark="CC", variety=typed)[1] == "7108", typed
+    for typed in ("1887/6", "7/6", "87/6", "1887/6-O"):
+        assert best(year=1887, mint_mark="O", variety=typed)[1] == "7178", typed
+    # Over-mintmarks: the top letter is the mint mark, the over-mintmark is the variety
+    for typed in ("O/S", "o/s", "1882-O/S", "O/S Strong"):
+        assert best(year=1882, mint_mark="O", variety=typed)[1] == "7138", typed
+    assert best(year=1900, mint_mark="O", variety="O/CC")[1] == "7268"
+    assert best(year=1900, mint_mark="O")[1] == "7264"  # without the variety it's the regular date
+    # An overdate the catalog doesn't list never falls back to the regular date's price
+    m, pcgs = best(year=1880, mint_mark="CC", variety="80/78")
+    assert pcgs is None and "doesn't list" in m["message"]
+    assert {c["pcgs_number"] for c in m["candidates"]} == {"7108"}
 
     # 1878 has only date varieties: user must pick (VAM child is not offered)
     m, pcgs = best(year=1878, mint_mark="P")

@@ -7,7 +7,7 @@ import httpx
 
 from ...config import get_settings
 from ...schemas import LookupResult
-from .base import LookupError, normalize_mint_mark, parse_grade, set_designation
+from .base import LookupError, normalize_mint_mark, over_variety, parse_grade, set_designation, year_of
 
 BASE_URL = "https://api.pcgs.com/publicapi"
 
@@ -51,8 +51,9 @@ def lookup(cert: str) -> LookupResult:
     res = LookupResult(
         grading_service="PCGS",
         cert_number=cert,
-        year=facts.get("Year") or None,
+        year=year_of(facts.get("Year")) or year_of(facts.get("Name")),
         mint_mark=normalize_mint_mark(facts.get("MintMark")),
+        variety=over_variety(facts.get("Name")) or over_variety(str(facts.get("Year") or "")),
         pcgs_number=str(facts["PCGSNo"]),
         description=facts.get("Name"),
         image_urls=images[:10],

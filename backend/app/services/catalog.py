@@ -186,6 +186,44 @@ def _is_silver(variety: str | None) -> bool:
     return bool(variety and re.search(r"\bsilver\b", variety, re.I))
 
 
+# Overdates ("1880/79", "80/79", "1887/6", "8/7") and over-mintmarks ("O/S", "O/CC", "D/S").
+_OVER_RE = re.compile(r"\b\d{1,4}/\d{1,2}\b|\b[A-Z]{1,2}/[A-Z]{1,2}\b", re.I)
+
+
+def _variety_hits(entries, variety: str, year: int, mint_mark: str) -> list:
+    """Entries whose variety contains what the user typed. Tolerates the date and mint mark being typed too
+    ("1880/79-CC", "1880-CC 80/79") and extra words ("1880/79 VAM-4")."""
+    v = variety.strip().lower()
+    hits = [e for e in entries if e.variety and v in e.variety.lower()]
+    if hits:
+        return hits
+    # Drop a leading date ("1882-", "1880-CC ") and a trailing mint mark ("1880/79-CC"), then retry.
+    mm = re.escape(mint_mark.lower())
+    cleaned = re.sub(rf"^{year}(?:\s*-\s*{mm}(?![/a-z]))?(?=[\s,-]|$)[\s,-]*", "", v)
+    cleaned = re.sub(rf"-\s*{mm}(?![/a-z])", "", cleaned).strip(" ,-")
+    if cleaned and cleaned != v:
+        hits = [e for e in entries if e.variety and cleaned in e.variety.lower()]
+        if hits:
+            return hits
+    # Otherwise match on the overdate itself, comparing just the digits after the slash and the year it's on.
+    for token in _OVER_RE.findall(cleaned or v):
+        hits = [e for e in entries if e.variety and _same_over(token, e.variety, year)]
+        if hits:
+            return hits
+    return []
+
+
+def _same_over(token: str, catalog_variety: str, year: int) -> bool:
+    """'80/79' and '1880/79' are the same overdate on an 1880 coin; so are '7/6' and '1887/6' on 1887."""
+    def key(t: str) -> str | None:
+        top, under = t.split("/")
+        if top.isdigit() and under.isdigit():
+            return under if str(year).endswith(top) else None
+        return t.lower()
+    k = key(token)
+    return k is not None and any(key(t) == k for t in _OVER_RE.findall(catalog_variety))
+
+
 def match(
     db: Session,
     coin_type_id: int,
@@ -233,12 +271,21 @@ def match(
     elif gsa_entries and len(gsa_entries) < len(entries):
         entries = [e for e in entries if e not in gsa_entries]
 
-    # A variety typed on the coin (e.g. "Alabama", "8TF") narrows the list.
+    # A variety typed on the coin (e.g. "Alabama", "8TF", "1880/79") narrows the list.
     if variety:
-        v = variety.strip().lower()
-        hits = [e for e in entries if e.variety and v in e.variety.lower()]
+        hits = _variety_hits(entries, variety, year, mint_mark)
         if hits:
             entries = hits
+        elif _OVER_RE.search(variety):
+            # An overdate / over-mintmark the catalog doesn't list under that name: never quietly price it as
+            # the regular date (worth far less). Offer the listings that are overdates instead.
+            overs = [e for e in entries if e.variety and _OVER_RE.search(e.variety)] or entries
+            cands = [Candidate(pcgs_number=e.pcgs_number, gsid=e.gsid, name=e.name, variety=e.variety,
+                               designation=e.designation) for e in overs]
+            return MatchResult(
+                candidates=cands,
+                message=f"Greysheet doesn't list “{variety.strip()}” for {label} under that name. Pick the right one.",
+            )
 
     # Plain entries (no variety) first.
     entries.sort(key=lambda e: (bool(_GSA_RE.sub("", e.variety or "").strip(" ,")), e.pcgs_number is None, e.gsid))

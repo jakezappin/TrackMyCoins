@@ -67,6 +67,7 @@ type PackKey = "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_
 const VARIETY_HINTS: Record<string, string> = {
   "classic-commemoratives": "e.g. Alabama, Boone",
   "washington-quarters": "Design from 1999 on, e.g. Delaware, Yellowstone",
+  "morgan-dollars": "e.g. 8TF, 1880/79 (overdate), O/S (over-mintmark)",
 };
 
 function verifyUrl(service: GradingService, cert: string, grade: number | null): string | null {
@@ -280,6 +281,7 @@ export default function CoinFormPage() {
       grade_star: r.grade ? r.grade_star : f.grade_star,
       strike_designation: r.strike_designation ?? f.strike_designation,
       vam: r.vam ?? f.vam,
+      variety: r.variety ?? f.variety,
       pcgs_number: r.pcgs_number ?? f.pcgs_number,
       cac: r.cac ?? f.cac,
       cac_sticker: r.cac === null ? f.cac_sticker : r.cac_sticker,
@@ -774,7 +776,7 @@ export default function CoinFormPage() {
             <span>Variety / issue (optional)</span>
             <input
               {...text("variety")}
-              placeholder={VARIETY_HINTS[coinType?.slug ?? ""] ?? "e.g. 8TF, Type 2"}
+              placeholder={VARIETY_HINTS[coinType?.slug ?? ""] ?? "e.g. Type 2, 1942/1 (overdate), D/S (over-mintmark)"}
               maxLength={150}
             />
           </label>

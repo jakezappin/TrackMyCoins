@@ -300,6 +300,7 @@ class LookupResult(BaseModel):
     grade_star: bool = False
     strike_designation: str | None = None
     vam: str | None = None
+    variety: str | None = None  # overdate / over-mintmark from the name, e.g. "1880/79", "O/S"
     pcgs_number: str | None = None
     cac: bool | None = None
     cac_sticker: CacSticker | None = None

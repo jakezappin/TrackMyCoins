@@ -24,9 +24,9 @@ def test_status_morgans(authed):
     s = authed.get(f"/api/collections/{col['id']}/status").json()
     assert [r["label"] for r in s["rows"]] == [
         "1878 8TF", "1878 7TF, Reverse of 1878", "1878 7/8TF, Strong", "1878 7/8TF, Weak",  # 1878-P by variety
-        "1880-CC", "1881-S", "1888-O", "1921",
-    ]
-    assert (s["total"], s["filled"]) == (8, 1)
+        "1880-CC", "1881-S", "1882-O", "1887-O", "1888-O", "1900-O", "1921",
+    ]  # overdates (1880/79-CC, 1887/6-O) and over-mintmarks (1882-O/S, 1900-O/CC) don't get lines of their own
+    assert (s["total"], s["filled"]) == (11, 1)
     row = next(r for r in s["rows"] if r["label"] == "1881-S")
     assert [x["inventory_number"] for x in row["coins"]] == [a["inventory_number"], b["inventory_number"]]  # best grade first
     assert [x["inventory_number"] for x in s["others"]] == [c["inventory_number"]]  # 1895-P isn't in the catalog
@@ -231,3 +231,14 @@ def test_export_chosen_columns(authed):
     assert list(wb["Coins"].values)[0] == ("Date", "Price paid")
     assert list(wb["Sold"].values)[0] == ("Date", "Price paid", "Sale price")
     assert authed.get(f"/api/collections/{col['id']}/export", params={"columns": "Nope"}).status_code == 400
+
+
+def test_status_overdates_fill_the_date(authed):
+    col = _collection(authed, "morgan-dollars")
+    od = authed.post("/api/coins", json=coin_payload(col["id"], year=1880, mint_mark="CC", variety="1880/79")).json()
+    om = authed.post("/api/coins", json=coin_payload(col["id"], year=1900, mint_mark="O", variety="O/CC")).json()
+    s = authed.get(f"/api/collections/{col['id']}/status").json()
+    rows = {r["label"]: [c["inventory_number"] for c in r["coins"]] for r in s["rows"]}
+    assert rows["1880-CC"] == [od["inventory_number"]] and rows["1900-O"] == [om["inventory_number"]]
+    assert not any("/" in label and not label.startswith("1878") for label in rows)
+    assert s["others"] == []

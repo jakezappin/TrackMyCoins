@@ -64,3 +64,15 @@ def test_sale_date_parsing():
     assert pcgs._sale_date("6/2025") == "2025-06"
     assert pcgs._sale_date("2024-11-03") == "2024-11"
     assert pcgs._sale_date("") is None
+
+
+def test_overdate_and_overmint_helpers():
+    from app.services.lookups.base import normalize_mint_mark, over_variety, year_of
+
+    assert year_of("1880/79") == 1880 and year_of(1887) == 1887 and year_of(None) is None
+    assert over_variety("1880/79-CC $1 Reverse of 1878") == "1880/79"
+    assert over_variety("1882-O/S $1 Strong") == "O/S"
+    assert over_variety("1900-O/CC $1") == "O/CC"
+    assert over_variety("1887/6-O $1") == "1887/6"
+    assert over_variety("1881-S $1") is None
+    assert normalize_mint_mark("O/S") == "O" and normalize_mint_mark("-S") == "S" and normalize_mint_mark("") == "P"

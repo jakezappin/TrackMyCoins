@@ -60,6 +60,8 @@ ALIASES = {
 
 # "1881-S" / "1881/CC" (any letters after a dash are the mint mark, so typos get flagged), or "1881 S".
 DATE_RE = re.compile(r"^\s*(\d{4})(?:\s*[-/]\s*([A-Z]{1,2})\b|\s+(CC|[PDSOW])\b)?\s*(.*)$", re.I)
+OVERDATE_RE = re.compile(r"^\s*(\d{4})/(\d{1,2})(?:\s*-\s*([A-Z]{1,2})\b)?\s*(.*)$", re.I)
+OVERMINT_RE = re.compile(r"^\s*(\d{4})\s*-\s*([A-Z]{1,2})/([A-Z]{1,2})\b\s*(.*)$", re.I)
 GRADE_RE = re.compile(r"^(?:(raw)\s*)?([A-Za-z]{1,3})?[\s-]*(\d{1,2})?\s*(\+)?\s*(★|\*|star)?\s*(.*)$", re.I)
 SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
             "RAW": "RAW", "UNGRADED": "RAW", "NONE": "RAW"}
@@ -150,8 +152,14 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     year = mint = rest = None
     d = _text(vals.get("date"))
     if d:
-        m = DATE_RE.match(d)
-        if m:
+        od, om, m = OVERDATE_RE.match(d), OVERMINT_RE.match(d), DATE_RE.match(d)
+        if od:  # "1880/79-CC Reverse of 1878": year 1880, mint CC, variety "1880/79, Reverse of 1878"
+            year, mint = int(od.group(1)), (od.group(3) or "").upper() or None
+            rest = ", ".join(x for x in (f"{od.group(1)}/{od.group(2)}", od.group(4).strip()) if x)
+        elif om:  # "1882-O/S Strong": the top letter is the mint mark, the over-mintmark is the variety
+            year, mint = int(om.group(1)), om.group(2).upper()
+            rest = ", ".join(x for x in (f"{om.group(2)}/{om.group(3)}".upper(), om.group(4).strip()) if x)
+        elif m:
             year, mint, rest = int(m.group(1)), (m.group(2) or m.group(3) or "").upper() or None, m.group(4).strip() or None
     if _text(vals.get("year")):
         try:
