@@ -108,6 +108,8 @@ class CollectionOut(ORM):
     collection_type_label: str  # e.g. "Kennedy Half Dollars – Proof"
     created_at: datetime
     last_viewed_at: datetime | None = None
+    share_token: str | None = None
+    share_show_values: bool = False
 
 
 class CollectionWithSummary(CollectionOut):
@@ -307,3 +309,55 @@ class LookupResult(BaseModel):
     verify_url: str | None = None
     warnings: list[str] = []
     raw: dict | None = None
+
+
+# ---- Shared (public, read-only) collections --------------------------------------------------
+
+
+class ShareIn(BaseModel):
+    show_values: bool = False
+
+
+class SharedCoin(BaseModel):
+    """What a visitor to a shared link sees: no cost, seller, notes or sale details."""
+
+    id: int
+    year: int
+    mint_mark: str
+    vam: str | None
+    variety: str | None
+    grading_service: str
+    cert_number: str | None
+    grade_prefix: str | None
+    grade: int | None
+    grade_plus: bool
+    grade_star: bool
+    strike_designation: str | None
+    cac: bool
+    cac_sticker: str | None
+    slab_soapbox: bool
+    slab_ngc_fatty: bool
+    slab_rattler: bool
+    slab_ogh: bool
+    gsa_hard_pack: bool
+    gsa_soft_pack: bool
+    ike_blue_pack: bool
+    ike_brown_pack: bool
+    toning_obverse: bool
+    toning_reverse: bool
+    toning_dual: bool
+    toning_rainbow: bool
+    value_estimate: Decimal | None = None  # only when the owner chose to show values
+    photo_urls: list[str]
+
+
+class SharedCollection(BaseModel):
+    name: str
+    owner: str  # "Jane D."
+    collection_type_label: str
+    coin_type_name: str
+    metal: str
+    show_values: bool
+    coin_count: int
+    total_estimated_value: Decimal | None = None
+    coins: list[SharedCoin]

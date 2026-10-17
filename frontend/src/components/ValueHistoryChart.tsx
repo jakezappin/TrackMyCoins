@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { api, type HistoryPoint } from "../api";
 import { money, shortDate } from "../format";
 
-const W = 760;
 const H = 220;
-const PAD = { top: 14, right: 110, bottom: 26, left: 58 };
 const compact = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 });
 
 function niceMax(v: number) {
@@ -20,6 +18,18 @@ const day = (iso: string) => new Date(iso + "T00:00:00").getTime();
 export default function ValueHistoryChart({ collectionId, refreshKey }: { collectionId: number | null; refreshKey?: unknown }) {
   const [points, setPoints] = useState<HistoryPoint[] | null>(null);
   const [hover, setHover] = useState<number | null>(null);
+  // Draw at the real on-screen width so text stays readable on phones.
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(760);
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(280, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [points]);
+  const narrow = W < 520;
+  const PAD = { top: 14, right: narrow ? 62 : 110, bottom: 26, left: narrow ? 48 : 58 };
 
   useEffect(() => {
     api.history(collectionId).then(setPoints).catch(() => setPoints([]));
@@ -51,13 +61,25 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
       return d;
     };
     const ticks = [0, 1, 2, 3, 4].map((i) => (top / 4) * i);
-    // About 4 date labels.
+    // About 4 date labels; on a phone just the first and last.
     const step = Math.max(1, Math.ceil(points.length / 4));
-    const dateTicks = points.filter((_, i) => i % step === 0 || i === points.length - 1);
+    const dateTicks = narrow
+      ? [points[0], points[points.length - 1]]
+      : points.filter((_, i) => i % step === 0 || i === points.length - 1);
     return { xs, x, y, ticks, dateTicks, valuePath: path((p) => (p.value == null ? null : Number(p.value))), costPath: path((p) => Number(p.cost)) };
-  }, [points]);
+  }, [points, W]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!points) return null;
+  const track = (e: PointerEvent<SVGSVGElement>) => {
+    if (!geo) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const mx = ((e.clientX - r.left) / r.width) * W;
+    let best = 0;
+    geo.xs.forEach((t, i) => {
+      if (Math.abs(geo.x(t) - mx) < Math.abs(geo.x(geo.xs[best]) - mx)) best = i;
+    });
+    setHover(best);
+  };
   const hasValue = points.some((p) => p.value != null);
   const last = points[points.length - 1];
 
@@ -75,20 +97,13 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
           The chart fills in as you add coins and record prices. Use Refresh prices to get CPG values for every coin.
         </p>
       ) : (
-        <div className="history-plot" onMouseLeave={() => setHover(null)}>
+        <div className="history-plot" ref={plotRef} onMouseLeave={() => setHover(null)}>
           <svg
             viewBox={`0 0 ${W} ${H}`}
             role="img"
             aria-label={`Estimated value ${money(last.value)} and cost ${money(last.cost)} as of ${shortDate(last.date)}`}
-            onMouseMove={(e) => {
-              const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-              const mx = ((e.clientX - r.left) / r.width) * W;
-              let best = 0;
-              geo.xs.forEach((t, i) => {
-                if (Math.abs(geo.x(t) - mx) < Math.abs(geo.x(geo.xs[best]) - mx)) best = i;
-              });
-              setHover(best);
-            }}
+            onPointerMove={track}
+            onPointerDown={track}
           >
             {geo.ticks.map((t) => (
               <g key={t}>
@@ -108,11 +123,11 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
             {/* Direct labels at the right end */}
             {last.value != null && (
               <text className="end-label" x={W - PAD.right + 8} y={geo.y(Number(last.value))} dy="0.32em">
-                {compact.format(Number(last.value))} value
+                {compact.format(Number(last.value))}{narrow ? "" : " value"}
               </text>
             )}
             <text className="end-label" x={W - PAD.right + 8} y={geo.y(Number(last.cost)) + (last.value != null && Math.abs(geo.y(Number(last.cost)) - geo.y(Number(last.value))) < 14 ? 14 : 0)} dy="0.32em">
-              {compact.format(Number(last.cost))} cost
+              {compact.format(Number(last.cost))}{narrow ? "" : " cost"}
             </text>
             {hover != null && (
               <g>

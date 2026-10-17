@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +15,7 @@ from ..schemas import (
     CollectionRename,
     CollectionWithSummary,
     FinishOut,
+    ShareIn,
 )
 from ..series import (
     BY_SLUG,
@@ -48,6 +50,8 @@ def _with_summary(db: Session, col: Collection) -> CollectionWithSummary:
         collection_type_label=_type_label(col.coin_type, col.finish),
         created_at=col.created_at,
         last_viewed_at=col.last_viewed_at,
+        share_token=col.share_token,
+        share_show_values=col.share_show_values,
         summary=collection_summary(db, col.id),
     )
 
@@ -184,6 +188,28 @@ def rename_collection(
 ):
     col = get_owned_collection(db, user, collection_id)
     col.name = body.name.strip()
+    db.commit()
+    return _with_summary(db, col)
+
+
+@router.put("/collections/{collection_id}/share", response_model=CollectionWithSummary)
+def share_collection(
+    collection_id: int, body: ShareIn, db: Session = Depends(get_db), user: User = Depends(current_user)
+):
+    """Turn on the read-only link (or change its options). The link stays the same until sharing is stopped."""
+    col = get_owned_collection(db, user, collection_id)
+    if not col.share_token:
+        col.share_token = secrets.token_urlsafe(24)
+    col.share_show_values = body.show_values
+    db.commit()
+    return _with_summary(db, col)
+
+
+@router.delete("/collections/{collection_id}/share", response_model=CollectionWithSummary)
+def stop_sharing(collection_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    col = get_owned_collection(db, user, collection_id)
+    col.share_token = None
+    col.share_show_values = False
     db.commit()
     return _with_summary(db, col)
 

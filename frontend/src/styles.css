@@ -2222,3 +2222,128 @@ table {
 .history-legend .lg.cost::before {
   border-color: var(--series-cost);
 }
+
+/* ---- Shared (public) collection ------------------------------------------- */
+.share-link {
+  display: flex;
+  gap: 8px;
+}
+.share-link input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.shared {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.shared-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.shared-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.shared-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.shared-head h1 {
+  margin: 2px 0 4px;
+}
+.shared-head p {
+  margin: 0;
+}
+.shared-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.shared-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+}
+.shared-coin {
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+.shared-coin:hover {
+  border-color: var(--gold);
+}
+.shared-coin > img,
+.shared-coin > svg {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--surface-2);
+  display: block;
+}
+.shared-coin-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.shared-modal {
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.shared-modal h2 {
+  margin: 0;
+}
+.shared-photo {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+.shared-foot {
+  text-align: center;
+  padding: 18px;
+}
+@media (max-width: 520px) {
+  .shared-main {
+    padding: 18px 16px 36px;
+  }
+  .shared-bar {
+    padding: 12px 16px;
+  }
+  .shared-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .shared-head .stat {
+    width: 100%;
+  }
+}

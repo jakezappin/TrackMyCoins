@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type Coin, type Collection } from "../api";
 import { useApp } from "../App";
 import CoinTable from "../components/CoinTable";
+import ShareCollection from "../components/ShareCollection";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import SummaryCards from "../components/SummaryCards";
 import ValueHistoryChart from "../components/ValueHistoryChart";
@@ -101,6 +102,7 @@ export default function CollectionPage() {
           <a className="btn" href={api.exportUrl(collection.id)} download>
             Export
           </a>
+          <ShareCollection collection={collection} onChange={setCollection} />
           <a className="btn" href={api.insuranceUrl(collection.id)} download title="PDF inventory with photos and values, for your insurer">
             Insurance report
           </a>

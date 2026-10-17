@@ -112,7 +112,11 @@ class Collection(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     # When the owner last opened it (orders "Recent collections" on the dashboard).
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Read-only public link /shared/{share_token}; None = not shared. Regenerating it revokes old links.
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    share_show_values: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
+    user: Mapped["User"] = relationship()
     coin_type: Mapped[CoinType] = relationship()
     coins: Mapped[list["Coin"]] = relationship(back_populates="collection")
 

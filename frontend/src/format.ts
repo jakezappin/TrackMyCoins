@@ -46,7 +46,14 @@ export function dateMint(c: Pick<CoinFields, "year" | "mint_mark">): string {
 }
 
 /** "MS65+ DMPL", or for raw coins "Raw AU55", "Raw AU" or just "Raw". */
-export function gradeLabel(c: CoinFields): string {
+type GradeFields = Pick<CoinFields, "grading_service" | "grade_prefix" | "grade" | "grade_plus" | "grade_star" | "strike_designation">;
+type ToningFields = Pick<CoinFields, "toning_obverse" | "toning_reverse" | "toning_dual" | "toning_rainbow">;
+type SlabFields = Pick<
+  CoinFields,
+  "slab_soapbox" | "slab_ngc_fatty" | "slab_rattler" | "slab_ogh" | "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_pack"
+>;
+
+export function gradeLabel(c: GradeFields): string {
   let s = `${c.grade_prefix ?? ""}${c.grade ?? ""}`;
   if (s && c.grade_plus) s += "+";
   if (s && c.grade_star) s += "★";
@@ -57,7 +64,7 @@ export function gradeLabel(c: CoinFields): string {
 
 export const serviceLabel = (service: string) => (service === "RAW" ? "Raw" : service);
 
-export function toningLabel(c: CoinFields): string[] {
+export function toningLabel(c: ToningFields): string[] {
   const t: string[] = [];
   if (c.toning_obverse) t.push("Obverse");
   if (c.toning_reverse) t.push("Reverse");
@@ -66,7 +73,7 @@ export function toningLabel(c: CoinFields): string[] {
   return t;
 }
 
-export function slabLabel(c: CoinFields): string[] {
+export function slabLabel(c: SlabFields): string[] {
   const s: string[] = [];
   if (c.slab_soapbox) s.push("Soapbox");
   if (c.slab_ngc_fatty) s.push("NGC Fatty");

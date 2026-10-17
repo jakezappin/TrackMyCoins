@@ -56,7 +56,32 @@ export interface Collection {
   collection_type_label: string;
   created_at: string;
   last_viewed_at: string | null;
+  /** Read-only public link token; null = not shared. */
+  share_token: string | null;
+  share_show_values: boolean;
   summary: Summary;
+}
+
+/** A coin as a visitor to a shared link sees it: no cost, seller, notes or sale details. */
+export type SharedCoin = Omit<
+  CoinFields,
+  "pcgs_number" | "price_paid" | "purchase_date" | "purchased_from" | "sale_price" | "sale_date" | "sold_to" | "notes"
+> & {
+  id: number;
+  value_estimate: string | null;
+  photo_urls: string[];
+};
+
+export interface SharedCollection {
+  name: string;
+  owner: string;
+  collection_type_label: string;
+  coin_type_name: string;
+  metal: "silver" | "gold";
+  show_values: boolean;
+  coin_count: number;
+  total_estimated_value: string | null;
+  coins: SharedCoin[];
 }
 
 export interface CoinFields {
@@ -349,6 +374,10 @@ export const api = {
     request<Collection>("POST", "/api/collections", { name, coin_type_id, finish }),
   renameCollection: (id: number, name: string) => request<Collection>("PATCH", `/api/collections/${id}`, { name }),
   deleteCollection: (id: number) => request<void>("DELETE", `/api/collections/${id}`),
+  shareCollection: (id: number, showValues: boolean) =>
+    request<Collection>("PUT", `/api/collections/${id}/share`, { show_values: showValues }),
+  stopSharing: (id: number) => request<Collection>("DELETE", `/api/collections/${id}/share`),
+  shared: (token: string) => request<SharedCollection>("GET", `/api/shared/${encodeURIComponent(token)}`),
   collectionCoins: (id: number) => request<Coin[]>("GET", `/api/collections/${id}/coins`),
   collectionStatus: (id: number, mode: StatusMode = "full") =>
     request<CollectionStatus>("GET", `/api/collections/${id}/status?mode=${mode}`),

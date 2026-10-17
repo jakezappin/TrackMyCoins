@@ -9,6 +9,7 @@ import AccountPage from "./pages/AccountPage";
 import DashboardPage from "./pages/DashboardPage";
 import LandingPage from "./pages/LandingPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
+import SharedCollectionPage from "./pages/SharedCollectionPage";
 import SoldPage from "./pages/SoldPage";
 import StatusPage from "./pages/StatusPage";
 
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
         <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
         <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <SignupPage />} />
+        <Route path="/shared/:token" element={<SharedCollectionPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />
