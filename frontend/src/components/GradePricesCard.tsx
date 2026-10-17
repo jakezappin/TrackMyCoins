@@ -102,6 +102,7 @@ export default function GradePricesCard({
             </table>
           </div>
           <p className="muted small">
+            {"name" in data && data.name ? `Greysheet listing: ${data.name}. ` : ""}
             Est. wholesale is CPG − {Math.round(("wholesale_discount" in data ? data.wholesale_discount : 0.1) * 100)}%.
             {"fetched_at" in data ? ` CPG as of ${shortDate(data.fetched_at)}.` : ""}
           </p>

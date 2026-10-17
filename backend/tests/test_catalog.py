@@ -104,7 +104,7 @@ def handler(request: httpx.Request) -> httpx.Response:
     if path == "GetPricingRequest":
         ident = q.get("PcgsNumber") or f"gs{q.get('Gsid')}"
         return httpx.Response(200, json={"Data": [{
-            "GsId": 3, "Name": f"item {ident}",
+            "GsId": 3, "Name": "1881-S $1 MS PL" if ident == "7131" else f"item {ident}",
             "PricingData": [
                 {"Grade": 64, "GradeLabel": "MS64", "IsCac": False, "CpgVal": "$900", "GreyVal": ""},
                 {"Grade": 65, "GradeLabel": "65", "IsCac": False, "CpgVal": "$1,150", "GreyVal": ""},
@@ -330,3 +330,12 @@ def test_price_by_grade_comes_with_one_cpg_call(authed, morgan_collection):
     other = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1881, mint_mark="S", grade=64,
                                                         pcgs_number="7130")).json()
     assert len(authed.get(f"/api/coins/{other['inventory_number']}/grade-prices").json()["rows"]) == 3
+
+
+def test_designation_shown_with_grade(authed, morgan_collection):
+    coin = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1881, mint_mark="S", grade=65,
+                                                       strike_designation="PL", pcgs_number="7131")).json()
+    d = authed.post(f"/api/coins/{coin['inventory_number']}/cpg").json()
+    assert d["latest_cpg"]["grade_used"] == "65 PL"
+    t = authed.get(f"/api/coins/{coin['inventory_number']}/grade-prices").json()
+    assert t["designation"] == "PL" and [r["label"] for r in t["rows"]] == ["MS64 PL", "65 PL", "MS66 PL"]

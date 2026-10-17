@@ -7,6 +7,7 @@ import httpx
 
 from ...config import get_settings
 from ...schemas import LookupResult
+from ...designations import from_pcgs, with_designation
 from .base import LookupError, normalize_mint_mark, over_variety, parse_grade, set_designation, year_of
 
 BASE_URL = "https://api.pcgs.com/publicapi"
@@ -138,7 +139,7 @@ def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10)
     return {
         "facts": coin_facts(facts),
         "pcgs_number": str(pcgs_number),
-        "grade": facts.get("Grade") or f"{grade}{'+' if plus else ''}",
+        "grade": with_designation(facts.get("Grade") or f"{grade}{'+' if plus else ''}", from_pcgs(facts)),
         "price_guide": str(guide) if guide not in (None, "", 0) else None,
         "population": facts.get("Population"),
         "pop_higher": facts.get("PopHigher"),

@@ -291,7 +291,14 @@ export interface GradePriceRow {
 
 export type GradePrices =
   | { rows: null }
-  | { rows: GradePriceRow[]; name: string | null; fetched_at: string; wholesale_discount: number; has_cac: boolean };
+  | {
+      rows: GradePriceRow[];
+      name: string | null;
+      designation: string | null;
+      fetched_at: string;
+      wholesale_discount: number;
+      has_cac: boolean;
+    };
 
 export interface CoinDetail extends Coin {
   facts: CoinFacts | null;

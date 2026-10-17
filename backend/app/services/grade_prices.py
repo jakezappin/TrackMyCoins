@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..designations import from_greysheet_name, with_designation
 from ..models import Coin, GradePriceSheet
 from .coins import CPG, latest_quote
 
@@ -51,8 +52,12 @@ def table_for(db: Session, coin: Coin) -> dict | None:
         row[f"{prefix}cpg"] = str(cpg)
         row[f"{prefix}wholesale"] = str((cpg * keep).quantize(Decimal("0.01")))
     rows = sorted(by_label.values(), key=lambda r: (int(r["grade"] or 0), "+" in r["label"]))
+    designation = from_greysheet_name(sheet.name)
+    for r in rows:
+        r["label"] = with_designation(r["label"], designation)
     return {
         "name": sheet.name,
+        "designation": designation,
         "fetched_at": sheet.fetched_at,
         "wholesale_discount": get_settings().wholesale_discount,
         "has_cac": any("cac_cpg" in r for r in rows),

@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 import httpx
 
 from ..config import get_settings
+from ..designations import from_greysheet_name, with_designation
 from ..models import Coin
 
 PROD_URL = "https://cpgpublicapiv2.greysheet.com/api"
@@ -115,7 +116,8 @@ def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
     if row is None:
         raise PricingError(f"No CPG price for grade {coin.grade} on {ident}")
 
-    label = str(row.get("GradeLabel") or row.get("Grade"))
+    designation = from_greysheet_name(entry.get("Name"))
+    label = with_designation(str(row.get("GradeLabel") or row.get("Grade")), designation)
     if row.get("IsCac"):
         label += " CAC"
     return {
@@ -128,6 +130,7 @@ def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
             "key": f"gsid:{gsid}" if gsid else f"pcgs:{coin.pcgs_number}",
             "gsid": entry.get("GsId"),
             "name": entry.get("Name"),
+            "designation": designation,
             "rows": [
                 {"grade": r.get("Grade"), "label": str(r.get("GradeLabel") or r.get("Grade")), "cac": bool(r.get("IsCac")),
                  "cpg": str(v) if (v := _money(r.get("CpgVal"))) is not None else None}
