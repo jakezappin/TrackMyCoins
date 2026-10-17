@@ -101,6 +101,8 @@ Each fetch uses 2 of PCGS's 1,000 free API calls a day.
 
 ## Coin types
 
+44 series: copper through Ike dollars, classic commemoratives, classic $1-$20 gold, American Silver Eagles and the four American Gold Eagle sizes.
+
 The supported series, their inventory prefixes and their Greysheet catalog sections are listed in `backend/app/series.py`.
 
 - **Adding a series:** add an entry there and restart the app.

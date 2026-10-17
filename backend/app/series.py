@@ -20,6 +20,8 @@ CATEGORIES = [
     "Quarters",
     "Half Dollars",
     "Dollars",
+    "Gold",
+    "American Eagles",
     "Commemoratives",
 ]
 
@@ -41,11 +43,17 @@ class Series:
         f = ["MS"] + (["PR"] if self.pr_nodes else []) + (["SPR"] if self.silver_proofs else [])
         object.__setattr__(self, "finishes", tuple(f))
 
+    @property
+    def metal(self) -> str:
+        """For the placeholder artwork: gold for gold series, silver otherwise."""
+        return "gold" if self.category == "Gold" or self.slug.startswith("gold-eagles") else "silver"
+
     def nodes_for(self, finish: str) -> tuple[int, ...]:
         return self.ms_nodes if finish == "MS" else self.pr_nodes
 
 
-C, N, D, Q, H, DOL, COM = CATEGORIES
+C, N, D, Q, H, DOL, GOLD, ASE, COM = CATEGORIES
+GOLD_MINTS = ("P", "C", "D", "O", "S", "CC")  # C = Charlotte, D = Dahlonega (to 1861) or Denver
 SERIES: list[Series] = [
     # Cents
     Series("half-cents", "Half Cent", "Half Cents", "HFC", C, ("P",),
@@ -99,6 +107,31 @@ SERIES: list[Series] = [
     # Includes Native American dollars (2009-), which share the Sacagawea obverse.
     Series("sacagawea-dollars", "Sacagawea Dollar", "Sacagawea Dollars", "SAC", DOL, ("P", "D", "S", "W"),
            (9299, 15901), (9556, 15902)),
+    # Classic U.S. gold. Name and plural match because collectors say "$20 Saint-Gaudens" for both.
+    Series("gold-dollars", "$1 Gold", "$1 Gold", "G1", GOLD, GOLD_MINTS, (8978, 10336, 10335), (8979,)),
+    Series("liberty-quarter-eagles", "$2.50 Liberty", "$2.50 Liberty", "G2L", GOLD, GOLD_MINTS, (8981,), (8982,)),
+    Series("indian-quarter-eagles", "$2.50 Indian", "$2.50 Indian", "G2I", GOLD, ("P", "D"), (8983,), (8984,)),
+    Series("three-dollar-gold", "$3 Princess", "$3 Princess", "G3", GOLD, GOLD_MINTS, (8985,), (8986,)),
+    Series("liberty-half-eagles", "$5 Liberty", "$5 Liberty", "G5L", GOLD, GOLD_MINTS, (10337, 8989), (8990,)),
+    Series("indian-half-eagles", "$5 Indian", "$5 Indian", "G5I", GOLD, ("P", "D", "O", "S"), (8991,), (8992,)),
+    Series("liberty-eagles", "$10 Liberty", "$10 Liberty", "G10L", GOLD, GOLD_MINTS, (10338, 8994), (8995,)),
+    Series("indian-eagles", "$10 Indian", "$10 Indian", "G10I", GOLD, ("P", "D", "S"), (8996,), (8997,)),
+    Series("liberty-double-eagles", "$20 Liberty", "$20 Liberty", "G20L", GOLD, GOLD_MINTS,
+           (10339, 10340, 8998), (8999,)),
+    Series("saint-gaudens-double-eagles", "$20 Saint-Gaudens", "$20 Saint-Gaudens", "G20S", GOLD, ("P", "D", "S"),
+           (9000,), (9001,)),
+    # American Silver Eagles (1986-): bullion and burnished uncirculated (MS), and proofs.
+    Series("american-silver-eagles", "American Silver Eagle", "American Silver Eagles", "ASE", ASE,
+           ("P", "S", "W"), (9011,), (9540,)),
+    # American Gold Eagles (1986-), one series per size since each is collected as its own date set.
+    Series("gold-eagles-5", "$5 Gold Eagle (1/10 oz)", "$5 Gold Eagles (1/10 oz)", "AGE5", ASE, ("P", "W"),
+           (9012,), (9541,)),
+    Series("gold-eagles-10", "$10 Gold Eagle (1/4 oz)", "$10 Gold Eagles (1/4 oz)", "AGE10", ASE, ("P", "W"),
+           (9013,), (9542,)),
+    Series("gold-eagles-25", "$25 Gold Eagle (1/2 oz)", "$25 Gold Eagles (1/2 oz)", "AGE25", ASE, ("P", "W"),
+           (9014,), (9543,)),
+    Series("gold-eagles-50", "$50 Gold Eagle (1 oz)", "$50 Gold Eagles (1 oz)", "AGE50", ASE, ("P", "W"),
+           (9015,), (9544,)),
     # Classic silver commemoratives 1892-1954: half dollars plus the Isabella quarter and Lafayette dollar.
     Series("classic-commemoratives", "Classic Commemorative", "Classic Commemoratives", "COM", COM,
            ("P", "D", "S"), (9003,)),

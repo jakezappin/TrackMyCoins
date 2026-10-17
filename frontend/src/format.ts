@@ -6,6 +6,10 @@ export const collectionPath = (c: Pick<Collection, "collection_type_slug" | "num
 export const soldPath = (typeSlug: string) => `/collections/${typeSlug}/sold`;
 export const coinPath = (inv: string) => `/coins/${inv}`;
 
+/** "gold" or "silver" for a coin's placeholder artwork. */
+export const metalFor = (coinTypes: CoinType[], coinTypeId: number) =>
+  coinTypes.find((t) => t.id === coinTypeId)?.metal ?? "silver";
+
 const FINISH_ORDER = { MS: 0, PR: 1, SPR: 2 } as const;
 export const FINISH_LABEL = { MS: "MS", PR: "Proof", SPR: "Silver Proof" } as const;
 

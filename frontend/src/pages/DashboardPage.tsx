@@ -6,7 +6,7 @@ import CoinPlaceholder from "../components/CoinPlaceholder";
 import HScroll from "../components/HScroll";
 import NewCollectionDialog from "../components/NewCollectionDialog";
 import QuickSearch from "../components/QuickSearch";
-import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, money, shortDate, soldPath } from "../format";
+import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, metalFor, money, shortDate, soldPath } from "../format";
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "Not opened yet";
@@ -148,7 +148,7 @@ export default function DashboardPage() {
                     {coin.thumbnail_url ? (
                       <img src={coin.thumbnail_url} alt="" className="sale-thumb" />
                     ) : (
-                      <CoinPlaceholder className="sale-thumb ph" />
+                      <CoinPlaceholder className="sale-thumb ph" metal={metalFor(coinTypes, coin.coin_type_id)} />
                     )}
                     <div className="sale-title">
                       <strong>

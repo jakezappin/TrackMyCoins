@@ -7,6 +7,7 @@ import PcgsMarketCard from "../components/PcgsMarketCard";
 import {
   coinPath,
   collectionPath,
+  metalFor,
   dateMint,
   gradeLabel,
   money,
@@ -177,6 +178,7 @@ export default function CoinDetailPage() {
             <div className="hero-photo empty">
               <CoinPlaceholder
                 className="ph-hero"
+                metal={metalFor(coinTypes, coin.coin_type_id)}
                 date={dateMint(coin)}
                 typeName={coinTypes.find((t) => t.id === coin.coin_type_id)?.name}
               />

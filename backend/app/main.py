@@ -54,6 +54,16 @@ def health():
     return {"ok": True}
 
 
+@app.get("/api/public/stats")
+def public_stats():
+    """Numbers for the public landing page (no login needed)."""
+    return {
+        "series": len(SERIES),
+        "collection_types": sum(len(s.finishes) for s in SERIES),
+        "categories": len({s.category for s in SERIES}),
+    }
+
+
 # In production the built React app is served from here too (one server, one origin).
 _dist = get_settings().frontend_dist
 if (_dist / "index.html").exists():

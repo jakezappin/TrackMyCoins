@@ -68,6 +68,7 @@ class CoinTypeOut(ORM):
     inventory_prefix: str
     mint_marks: list[str]
     finishes: list[FinishOut]
+    metal: str = "silver"  # "gold" | "silver", for placeholder artwork
 
 
 class CollectionIn(BaseModel):

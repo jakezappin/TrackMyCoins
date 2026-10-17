@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { api } from "../api";
 import Logo from "../components/Logo";
 
 const FEATURES = [
@@ -25,8 +27,8 @@ const FEATURES = [
     icon: <path d="M5 17l4-5 4 3 6-8M5 7h.01M9 12h.01M13 15h.01M19 7h.01" />,
   },
   {
-    title: "29 U.S. series",
-    body: "Half cents to Ike dollars, classic commemoratives, Morgans with the 1878 tail-feather varieties. Business strikes, proofs and silver proofs.",
+    title: "Every major U.S. series",
+    body: "Half cents to Ike dollars, classic commemoratives, $1 to $20 gold, and American Silver and Gold Eagles. Business strikes, proofs and silver proofs.",
     icon: <path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3v10m-3-7h6" />,
   },
   {
@@ -143,6 +145,12 @@ function MarketPreview() {
 }
 
 export default function LandingPage() {
+  // Counts come from the server so they stay right as series are added.
+  const [stats, setStats] = useState({ series: 44, collection_types: 89 });
+  useEffect(() => {
+    api.publicStats().then(setStats).catch(() => undefined);
+  }, []);
+
   return (
     <div className="landing">
       <header className="lp-hero">
@@ -200,12 +208,12 @@ export default function LandingPage() {
 
       <section className="lp-strip">
         <div>
-          <strong>29</strong>
-          <span>U.S. series</span>
+          <strong>{stats.series}</strong>
+          <span>U.S. coin series</span>
         </div>
         <div>
-          <strong>59</strong>
-          <span>collection types</span>
+          <strong>{stats.collection_types}</strong>
+          <span>collection types (MS, Proof &amp; Silver Proof)</span>
         </div>
         <div>
           <strong>3</strong>

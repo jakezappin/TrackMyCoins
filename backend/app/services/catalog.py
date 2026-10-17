@@ -57,14 +57,15 @@ def _clean(v) -> str | None:
     return None if not v or v.startswith("[requires") else v
 
 
-# CoinDate looks like "1881-S", "1880/79-CC", "1882-O/S", "1887/6", "1878 8TF" or "1793 Chain".
+# CoinDate looks like "1881-S", "1880/79-CC", "1882-O/S", "1887/6", "1878 8TF", "1793 Chain", "1840-C"
+# (Charlotte gold) or "2011-(W)" (struck at West Point but carrying no mint mark, e.g. bullion eagles).
 _DATE_RE = re.compile(
     r"^(?P<year>1[789]\d\d|20\d\d)(?P<over>/\d{1,2})?"
-    r"(?:-(?P<mint>CC|O|S|D|W|P)(?P<mint_over>/(?:CC|O|S|D))?)?"
+    r"(?:-(?:(?P<mint>CC|C|O|S|D|W|P)(?P<mint_over>/(?:CC|C|O|S|D))?|\((?P<struck>[A-Z]{1,2})\)))?"
     r"(?:\s+(?P<extra>.+))?$"
 )
 # Varieties that don't distinguish a coin (1921 "Morgan" just separates it from the Peace dollar).
-_IGNORED_VARIETIES = {"MORGAN"}
+_IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE"}
 
 
 def parse_collectible(d: dict) -> dict | None:
@@ -94,6 +95,8 @@ def parse_collectible(d: dict) -> dict | None:
         parts.append(f"{m.group('year')}{m.group('over')}")
     if m.group("mint_over"):
         parts.append(f"{m.group('mint')}{m.group('mint_over')}")
+    if m.group("struck"):
+        parts.append(f"({m.group('struck')})")  # no mint mark on the coin
     for v in (m.group("extra"), _clean(d.get("Variety")), _clean(d.get("Variety2"))):
         if v and v.upper() not in _IGNORED_VARIETIES:
             parts.append(v)

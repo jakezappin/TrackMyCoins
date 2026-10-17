@@ -90,6 +90,7 @@ def list_coin_types(db: Session = Depends(get_db), _: User = Depends(current_use
             category=t.category,
             inventory_prefix=t.inventory_prefix,
             mint_marks=t.mint_marks,
+            metal=BY_SLUG[t.slug].metal if t.slug in BY_SLUG else "silver",
             finishes=[
                 FinishOut(
                     code=f,

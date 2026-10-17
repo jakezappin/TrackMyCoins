@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Coin } from "../api";
 import CoinPlaceholder from "./CoinPlaceholder";
-import { coinPath, dateMint, serviceLabel, gradeLabel, money, profit, shortDate, slabLabel, toningLabel } from "../format";
+import { useApp } from "../App";
+import { coinPath, dateMint, metalFor, serviceLabel, gradeLabel, money, profit, shortDate, slabLabel, toningLabel } from "../format";
 
 type SortKey = "inventory" | "date" | "grade" | "paid" | "cpg" | "sold";
 
@@ -13,6 +14,7 @@ interface Props {
 
 export default function CoinTable({ coins, mode }: Props) {
   const navigate = useNavigate();
+  const { coinTypes } = useApp();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "toned" | "cac" | "slab">("all");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
@@ -124,7 +126,7 @@ export default function CoinTable({ coins, mode }: Props) {
                 return (
                   <tr key={c.id} onClick={() => navigate(coinPath(c.inventory_number))}>
                     <td className="thumb-col">
-                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="thumb" /> : <CoinPlaceholder className="thumb ph" />}
+                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="thumb" /> : <CoinPlaceholder className="thumb ph" metal={metalFor(coinTypes, c.coin_type_id)} />}
                     </td>
                     <td className="mono">{c.inventory_number}</td>
                     <td className="strong">

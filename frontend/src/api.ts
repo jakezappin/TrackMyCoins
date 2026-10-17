@@ -26,6 +26,7 @@ export interface CoinType {
   inventory_prefix: string;
   mint_marks: string[];
   finishes: FinishInfo[];
+  metal: "gold" | "silver";
 }
 
 export interface Summary {
@@ -298,6 +299,7 @@ export const api = {
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
   dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
+  publicStats: () => request<{ series: number; collection_types: number; categories: number }>("GET", "/api/public/stats"),
   searchCoins: (q: string, limit = 8) =>
     request<SearchHit[]>("GET", `/api/search/coins?q=${encodeURIComponent(q)}&limit=${limit}`),
   soldCoins: (typeSlug: string) => request<Coin[]>("GET", `/api/coin-types/${encodeURIComponent(typeSlug)}/sold`),

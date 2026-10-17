@@ -230,7 +230,9 @@ def _type(c, slug):
 
 def test_coin_types_and_finishes(authed):
     types = authed.get("/api/coin-types").json()
-    assert len(types) == 29
+    from app.series import SERIES
+
+    assert len(types) == len(SERIES) == 44
     assert types[0]["slug"] == "half-cents" and types[-1]["slug"] == "classic-commemoratives"  # catalog order
     ken = _type(authed, "kennedy-half-dollars")
     assert [f["code"] for f in ken["finishes"]] == ["MS", "PR", "SPR"]
@@ -239,7 +241,12 @@ def test_coin_types_and_finishes(authed):
     peace = _type(authed, "peace-dollars")
     assert [f["code"] for f in peace["finishes"]] == ["MS"]
     assert peace["finishes"][0]["collection_type_label"] == "Peace Dollars"
-    assert len({t["inventory_prefix"] for t in types}) == 29  # prefixes unique
+    assert len({t["inventory_prefix"] for t in types}) == len(types)  # prefixes unique
+    gold = _type(authed, "saint-gaudens-double-eagles")
+    assert gold["metal"] == "gold" and "C" not in gold["mint_marks"]
+    assert _type(authed, "gold-eagles-50")["metal"] == "gold"
+    assert _type(authed, "american-silver-eagles")["metal"] == "silver"
+    assert authed.get("/api/public/stats").json() == {"series": 44, "collection_types": 89, "categories": 9}
 
 
 def test_proof_collections(authed):

@@ -1,12 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type SearchHit } from "../api";
-import { coinPath, dateMint, gradeLabel, serviceLabel } from "../format";
+import { useApp } from "../App";
+import { coinPath, dateMint, gradeLabel, metalFor, serviceLabel } from "../format";
 import CoinPlaceholder from "./CoinPlaceholder";
 
 /** Search the user's coins and jump straight to one. Press "/" anywhere to focus. */
 export default function QuickSearch() {
   const navigate = useNavigate();
+  const { coinTypes } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   const [q, setQ] = useState("");
@@ -124,7 +126,7 @@ export default function QuickSearch() {
                 {h.coin.thumbnail_url ? (
                   <img src={h.coin.thumbnail_url} alt="" className="qs-thumb" />
                 ) : (
-                  <CoinPlaceholder className="qs-thumb ph" />
+                  <CoinPlaceholder className="qs-thumb ph" metal={metalFor(coinTypes, h.coin.coin_type_id)} />
                 )}
                 <span className="qs-main">
                   <strong>

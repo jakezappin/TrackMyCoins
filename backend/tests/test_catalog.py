@@ -131,6 +131,13 @@ def test_parse_collectible():
     assert parse_collectible(item(8, "7315", "1880", strike="PR"))["strike"] == "PR"
     assert parse_collectible(item(31, "3301", "1936", "CAM RD", strike="PR", denom="1c"))["designation"] == "RD CAM"
     assert parse_collectible(item(1, "1", "1793 Chain", "BN", denom="1c"))["year"] == 1793
+    # Charlotte gold, and bullion struck at a branch mint without a mint mark
+    p = parse_collectible(item(90, "7718", "1840-C", denom="$2 1/2"))
+    assert (p["year"], p["mint_mark"]) == (1840, "C")
+    p = parse_collectible(item(91, "1", "2011-(W)", variety="Silver Eagle", denom="$1"))
+    assert (p["mint_mark"], p["variety"]) == ("P", "(W)")
+    p = parse_collectible(item(92, "2", "2011-W", variety="Silver Eagle", denom="$1"))
+    assert (p["mint_mark"], p["variety"]) == ("W", None)  # "Silver Eagle" alone isn't a variety
     p = parse_collectible(item(12, "7108", "1880/79-CC", variety="Reverse of 1878"))
     assert (p["year"], p["mint_mark"], p["variety"]) == (1880, "CC", "1880/79, Reverse of 1878")
     p = parse_collectible(item(14, "7999", "1882-O/S"))
