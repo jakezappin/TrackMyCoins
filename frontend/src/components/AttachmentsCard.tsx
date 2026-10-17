@@ -55,7 +55,8 @@ export default function AttachmentsCard({ inventoryNumber }: { inventoryNumber: 
         <h2>Receipts &amp; Documents</h2>
         <span className="photo-buttons">
           <button type="button" className="btn" disabled={busy !== null} onClick={() => camera.current?.click()}>
-            📷 Photo
+            <span className="btn-icon" aria-hidden="true">📷</span>
+            Photo
           </button>
           <button type="button" className="btn" disabled={busy !== null} onClick={() => picker.current?.click()}>
             {busy === "upload" ? "Uploading…" : "Add file"}

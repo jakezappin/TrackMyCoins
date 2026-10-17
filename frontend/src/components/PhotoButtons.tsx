@@ -29,7 +29,8 @@ export default function PhotoButtons({
   return (
     <span className="photo-buttons">
       <button type="button" className={`btn${primary ? " btn-primary" : ""}`} disabled={disabled} onClick={() => camera.current?.click()}>
-        📷 {takeLabel}
+        <span className="btn-icon" aria-hidden="true">📷</span>
+        {takeLabel}
       </button>
       <button type="button" className="btn" disabled={disabled} onClick={() => picker.current?.click()}>
         {chooseLabel}

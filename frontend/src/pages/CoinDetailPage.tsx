@@ -13,6 +13,7 @@ import MoveCoin from "../components/MoveCoin";
 import EbayCard from "../components/EbayCard";
 import GradePricesCard from "../components/GradePricesCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
+import ValueHistoryChart from "../components/ValueHistoryChart";
 import {
   coinPath,
   collectionPath,
@@ -185,7 +186,7 @@ export default function CoinDetailPage() {
   const slabs = slabLabel(coin);
 
   return (
-    <div className="page">
+    <div className="page coin-page">
       <div>
         <Link
           className="btn back-btn"
@@ -237,9 +238,10 @@ export default function CoinDetailPage() {
         </div>
       </div>
 
-      <div className="detail-grid">
-        {/* Photos */}
-        <div className="stack">
+      <CoinSummary coin={coin} />
+
+      {/* Rows keep cards side by side and aligned; on phones each row stacks. */}
+      <div className="coin-row">
         <section className="card gallery">
           {photo ? (
             <div className="hero-photo">
@@ -313,12 +315,165 @@ export default function CoinDetailPage() {
             </details>
           )}
         </section>
-        <CoinFactsCard
-          facts={coin.facts}
-          canFetch={Boolean(coin.grade && (coin.pcgs_number || coin.grading_service !== "RAW"))}
-          busy={pcgsBusy}
-          onFetch={getPcgs}
-        />
+
+        <section className="card details-card">
+          <h2>Details</h2>
+          <dl className="facts">
+            <dt>Grade</dt>
+            <dd>{gradeLabel(coin)}</dd>
+            <dt>Graded by</dt>
+            <dd>
+              {coin.grading_service === "RAW" ? "Raw (ungraded)" : coin.grading_service}
+              {coin.cert_number && <span className="muted"> #{coin.cert_number}</span>}
+            </dd>
+            {coin.variety && (
+              <>
+                <dt>Variety</dt>
+                <dd>{coin.variety}</dd>
+              </>
+            )}
+            {coin.vam && (
+              <>
+                <dt>VAM</dt>
+                <dd>{coin.vam}</dd>
+              </>
+            )}
+            <dt>CAC</dt>
+            <dd>
+              {coin.cac ? <span className={`tag cac-${coin.cac_sticker ?? "green"}`}>CAC {coin.cac_sticker ?? ""}</span> : "No"}
+            </dd>
+            <dt>Slab / holder</dt>
+            <dd>{slabs.length ? slabs.join(", ") : "—"}</dd>
+            <dt>Toning</dt>
+            <dd>{toning.length ? toning.join(", ") : "—"}</dd>
+            <dt>PCGS #</dt>
+            <dd>{coin.pcgs_number ?? "—"}</dd>
+          </dl>
+
+          <h3 className="details-sub">Purchase</h3>
+          <dl className="facts">
+            <dt>Paid</dt>
+            <dd>
+              {money(coin.price_paid)} {coin.purchase_date && <span className="muted">on {shortDate(coin.purchase_date)}</span>}
+            </dd>
+            <dt>From</dt>
+            <dd>{coin.purchased_from ?? "—"}</dd>
+            <dt>Value at purchase</dt>
+            <dd>
+              {coin.purchase_value?.value != null ? (
+                <>
+                  {money(coin.purchase_value.value)}
+                  <span className="muted small dd-note">
+                    {coin.purchase_value.detail}
+                    {coin.purchase_value.pending && " · checking PCGS auction sales…"}
+                  </span>
+                </>
+              ) : (
+                "—"
+              )}
+            </dd>
+          </dl>
+
+          {coin.is_sold && (
+            <>
+              <h3 className="details-sub">Sale</h3>
+              <dl className="facts">
+                <dt>Sold</dt>
+                <dd>
+                  {money(coin.sale_price)} {coin.sale_date && <span className="muted">on {shortDate(coin.sale_date)}</span>}
+                  {coin.sold_to && <span className="muted"> to {coin.sold_to}</span>}
+                </dd>
+                <dt>Profit / loss</dt>
+                <dd className={pl == null ? "" : pl >= 0 ? "pos" : "neg"}>{pl == null ? "—" : money(pl)}</dd>
+              </dl>
+            </>
+          )}
+          {coin.notes && <p className="notes">{coin.notes}</p>}
+        </section>
+      </div>
+
+      <ValueHistoryChart coinInv={coin.inventory_number} refreshKey={`${coin.latest_cpg?.id}-${coin.purchase_value?.value}`} />
+
+      <div className="coin-row">
+        <EstimatedValueCard coin={coin} onChange={update} />
+        <section className="card">
+          <div className="section-head">
+            <h2>CPG Value</h2>
+            <button className="btn btn-primary" onClick={getCpg} disabled={cpgBusy}>
+              {cpgBusy ? "Fetching…" : "Get CPG Price"}
+            </button>
+          </div>
+          <div className="big-number">{money(coin.latest_cpg?.value)}</div>
+          {coin.latest_cpg && (
+            <p className="muted small">
+              {coin.latest_cpg.grade_used && `Grade ${coin.latest_cpg.grade_used} · `}as of {shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}
+            </p>
+          )}
+          {coin.latest_greysheet && (
+            <p className="small">
+              Greysheet (wholesale): <strong>{money(coin.latest_greysheet.value)}</strong>
+            </p>
+          )}
+          {cpgError && <p className="error small">{cpgError}</p>}
+          <form className="row tight manual-quote" onSubmit={addManual}>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="Enter CPG value by hand"
+              aria-label="CPG value entered by hand"
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+            />
+            <button className="btn" disabled={!manual || busyAction !== null}>
+              {busyAction === "Adding the price" ? "Adding…" : "Add"}
+            </button>
+          </form>
+
+          {coin.price_quotes.length > 0 && (
+            <table className="history">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Source</th>
+                  <th>Grade</th>
+                  <th className="num">Value</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {coin.price_quotes.map((q) => (
+                  <tr key={q.id}>
+                    <td>{shortDate(q.fetched_at)}</td>
+                    <td title={q.description ?? undefined}>{SOURCE_LABEL[q.source] ?? q.source}</td>
+                    <td>{q.grade_used ?? "—"}</td>
+                    <td className="num">{money(q.value)}</td>
+                    <td>
+                      <button
+                        className="link-btn small icon-x"
+                        onClick={() => removeQuote(q.id)}
+                        aria-label={`Remove the ${SOURCE_LABEL[q.source] ?? q.source} price of ${money(q.value)}`}
+                        disabled={busyAction !== null}
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+
+      <PcgsMarketCard
+        market={coin.pcgs_market}
+        cpgValue={coin.latest_cpg?.value ?? null}
+        busy={pcgsBusy}
+        error={pcgsError}
+        onFetch={getPcgs}
+      />
+
+      <div className="coin-row">
         <GradePricesCard
           inv={coin.inventory_number}
           grade={coin.grade}
@@ -329,148 +484,89 @@ export default function CoinDetailPage() {
           busy={cpgBusy}
           onFetch={getCpg}
         />
-        </div>
-
-        {/* Facts + pricing */}
-        <div className="stack">
-          <section className="card">
-            <h2>Details</h2>
-            <dl className="facts">
-              <dt>Grade</dt>
-              <dd>{gradeLabel(coin)}</dd>
-              {coin.variety && (
-                <>
-                  <dt>Variety</dt>
-                  <dd>{coin.variety}</dd>
-                </>
-              )}
-              <dt>CAC</dt>
-              <dd>
-                {coin.cac ? <span className={`tag cac-${coin.cac_sticker ?? "green"}`}>CAC {coin.cac_sticker ?? ""}</span> : "No"}
-              </dd>
-              <dt>Slab / holder</dt>
-              <dd>{slabs.length ? slabs.join(", ") : "—"}</dd>
-              <dt>Toning</dt>
-              <dd>{toning.length ? toning.join(", ") : "—"}</dd>
-              <dt>PCGS #</dt>
-              <dd>{coin.pcgs_number ?? "—"}</dd>
-              <dt>Paid</dt>
-              <dd>
-                {money(coin.price_paid)} {coin.purchase_date && <span className="muted">on {shortDate(coin.purchase_date)}</span>}
-              </dd>
-              <dt>From</dt>
-              <dd>{coin.purchased_from ?? "—"}</dd>
-              <dt>Value at purchase</dt>
-              <dd>
-                {coin.purchase_value?.value != null ? (
-                  <>
-                    {money(coin.purchase_value.value)}{" "}
-                    <span className="muted small">
-                      {coin.purchase_value.detail}
-                      {coin.purchase_value.pending && " · checking PCGS auction sales…"}
-                    </span>
-                  </>
-                ) : (
-                  "—"
-                )}
-              </dd>
-              {coin.is_sold && (
-                <>
-                  <dt>Sold</dt>
-                  <dd>
-                    {money(coin.sale_price)} {coin.sale_date && <span className="muted">on {shortDate(coin.sale_date)}</span>}
-                    {coin.sold_to && <span className="muted"> to {coin.sold_to}</span>}
-                  </dd>
-                  <dt>Profit / loss</dt>
-                  <dd className={pl == null ? "" : pl >= 0 ? "pos" : "neg"}>{pl == null ? "—" : money(pl)}</dd>
-                </>
-              )}
-            </dl>
-            {coin.notes && <p className="notes">{coin.notes}</p>}
-          </section>
-
-          <AttachmentsCard inventoryNumber={coin.inventory_number} />
-
-          <EstimatedValueCard coin={coin} onChange={update} />
-
-          <section className="card">
-            <div className="section-head">
-              <h2>CPG Value</h2>
-              <button className="btn btn-primary" onClick={getCpg} disabled={cpgBusy}>
-                {cpgBusy ? "Fetching…" : "Get CPG Price"}
-              </button>
-            </div>
-            <div className="big-number">{money(coin.latest_cpg?.value)}</div>
-            {coin.latest_cpg && (
-              <p className="muted small">
-                {coin.latest_cpg.grade_used && `Grade ${coin.latest_cpg.grade_used} · `}as of {shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}
-              </p>
-            )}
-            {coin.latest_greysheet && (
-              <p className="small">
-                Greysheet (wholesale): <strong>{money(coin.latest_greysheet.value)}</strong>
-              </p>
-            )}
-            {cpgError && <p className="error small">{cpgError}</p>}
-            <form className="row tight manual-quote" onSubmit={addManual}>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="Enter CPG value by hand"
-                aria-label="CPG value entered by hand"
-                value={manual}
-                onChange={(e) => setManual(e.target.value)}
-              />
-              <button className="btn" disabled={!manual || busyAction !== null}>
-                {busyAction === "Adding the price" ? "Adding…" : "Add"}
-              </button>
-            </form>
-
-            {coin.price_quotes.length > 0 && (
-              <table className="history">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Source</th>
-                    <th>Grade</th>
-                    <th className="num">Value</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {coin.price_quotes.map((q) => (
-                    <tr key={q.id}>
-                      <td>{shortDate(q.fetched_at)}</td>
-                      <td title={q.description ?? undefined}>{SOURCE_LABEL[q.source] ?? q.source}</td>
-                      <td>{q.grade_used ?? "—"}</td>
-                      <td className="num">{money(q.value)}</td>
-                      <td>
-                        <button
-                          className="link-btn small icon-x"
-                          onClick={() => removeQuote(q.id)}
-                          aria-label={`Remove the ${SOURCE_LABEL[q.source] ?? q.source} price of ${money(q.value)}`}
-                          disabled={busyAction !== null}
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
-        </div>
+        <CoinFactsCard
+          facts={coin.facts}
+          canFetch={Boolean(coin.grade && (coin.pcgs_number || coin.grading_service !== "RAW"))}
+          busy={pcgsBusy}
+          onFetch={getPcgs}
+        />
       </div>
 
-      <PcgsMarketCard
-        market={coin.pcgs_market}
-        cpgValue={coin.latest_cpg?.value ?? null}
-        busy={pcgsBusy}
-        error={pcgsError}
-        onFetch={getPcgs}
-      />
-      {!coin.is_sold && <EbayCard inv={coin.inventory_number} />}
+      <div className={`coin-row${coin.is_sold ? " single" : ""}`}>
+        <AttachmentsCard inventoryNumber={coin.inventory_number} />
+        {!coin.is_sold && <EbayCard inv={coin.inventory_number} />}
+      </div>
+    </div>
+  );
+}
+
+const PV_SOURCE: Record<string, string> = {
+  custom: "Your value",
+  cpg: "CPG",
+  cpg_history: "CPG history",
+  auctions: "PCGS auctions",
+  paid: "Price paid",
+};
+
+const pct = (a: number, b: number) => `${a >= b ? "+" : "−"}${Math.abs(((a - b) / b) * 100).toFixed(1)}%`;
+
+/** The numbers that matter at a glance: value now, what was paid, gain or loss, and value at purchase. */
+function CoinSummary({ coin }: { coin: CoinDetail }) {
+  const paid = coin.price_paid != null ? Number(coin.price_paid) : null;
+  const now = coin.is_sold
+    ? coin.sale_price != null
+      ? Number(coin.sale_price)
+      : null
+    : coin.value_estimate != null
+      ? Number(coin.value_estimate)
+      : null;
+  const gain = now != null && paid != null ? now - paid : null;
+  const pv = coin.purchase_value;
+  const pvNum = pv?.value != null ? Number(pv.value) : null;
+  return (
+    <div className="coin-summary">
+      <div className="card stat">
+        <div className="stat-label">{coin.is_sold ? "Sold For" : "Estimated Value"}</div>
+        <div className="stat-value">{money(now)}</div>
+        <div className="stat-note">
+          {coin.is_sold
+            ? coin.sale_date
+              ? `on ${shortDate(coin.sale_date)}`
+              : "Sold"
+            : now == null
+              ? "No price yet"
+              : coin.value_source === "custom"
+                ? "Your own value"
+                : `CPG${coin.latest_cpg ? ` · ${shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}` : ""}`}
+        </div>
+      </div>
+      <div className="card stat">
+        <div className="stat-label">Paid</div>
+        <div className="stat-value">{money(paid)}</div>
+        <div className="stat-note">{coin.purchase_date ? shortDate(coin.purchase_date) : "No purchase date"}</div>
+      </div>
+      <div className="card stat">
+        <div className="stat-label">{coin.is_sold ? "Profit / Loss" : "Gain / Loss"}</div>
+        <div className={`stat-value ${gain == null || Math.abs(gain) < 0.005 ? "" : gain > 0 ? "pos" : "neg"}`}>
+          {gain == null ? "—" : `${Math.abs(gain) < 0.005 ? "" : gain > 0 ? "+" : "−"}${money(Math.abs(gain))}`}
+        </div>
+        <div className="stat-note">{gain != null && paid ? pct(now!, paid) : "Needs a price and what you paid"}</div>
+      </div>
+      <div className="card stat">
+        <div className="stat-label">Value at Purchase</div>
+        <div className="stat-value">{money(pvNum)}</div>
+        <div className="stat-note">
+          {pv?.pending
+            ? "Checking PCGS auctions…"
+            : pvNum == null
+              ? "—"
+              : `${PV_SOURCE[pv?.source ?? ""] ?? ""}${
+                  paid && pvNum && pv?.source !== "paid" && Math.round(Math.abs(paid - pvNum)) > 0
+                    ? ` · paid ${Math.abs(((paid - pvNum) / pvNum) * 100).toFixed(0)}% ${paid > pvNum ? "above" : "below"}`
+                    : ""
+                }`}
+        </div>
+      </div>
     </div>
   );
 }

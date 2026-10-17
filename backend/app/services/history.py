@@ -36,10 +36,12 @@ def _day(dt: datetime | date | None) -> date | None:
     return dt
 
 
-def value_history(db: Session, user_id: int, collection_id: int | None = None) -> list[dict]:
+def value_history(db: Session, user_id: int, collection_id: int | None = None, coin_id: int | None = None) -> list[dict]:
     q = select(Coin).where(Coin.user_id == user_id).options(selectinload(Coin.price_quotes))
     if collection_id is not None:
         q = q.where(Coin.collection_id == collection_id)
+    if coin_id is not None:
+        q = q.where(Coin.id == coin_id)
     coins = db.scalars(q).all()
 
     # Per coin: when it was held, and its value estimates in time order.

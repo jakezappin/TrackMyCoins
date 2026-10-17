@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { api, type HistoryPoint } from "../api";
 import { money, shortDate } from "../format";
+import CollapseHead from "./CollapseHead";
+import useCollapsed from "./useCollapsed";
 
 const H = 220;
 const compact = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 });
@@ -8,7 +10,7 @@ const compact = new Intl.NumberFormat("en-US", { style: "currency", currency: "U
 function niceMax(v: number) {
   if (v <= 0) return 100;
   const mag = 10 ** Math.floor(Math.log10(v));
-  const step = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((s) => s * 4 >= v) ?? v / 4;
+  const step = [1, 1.25, 1.5, 2, 2.5, 5, 10].map((f) => f * mag).find((s) => s * 4 >= v) ?? v / 4;
   return step * 4;
 }
 
@@ -19,8 +21,19 @@ const isoDay = (t: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-/** Estimated value and cost over time, as step lines (values change when a price is recorded). */
-export default function ValueHistoryChart({ collectionId, refreshKey }: { collectionId: number | null; refreshKey?: unknown }) {
+/** Estimated value and cost over time, as step lines (values change when a price is recorded). For everything,
+ * one collection, or (with `coinInv`) one coin, where cost is what was paid and the card collapses. */
+export default function ValueHistoryChart({
+  collectionId = null,
+  coinInv,
+  refreshKey,
+}: {
+  collectionId?: number | null;
+  coinInv?: string;
+  refreshKey?: unknown;
+}) {
+  const one = coinInv !== undefined;
+  const [collapsed, toggle] = useCollapsed("collapse-coin-history", true);
   const [points, setPoints] = useState<HistoryPoint[] | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   // Draw at the real on-screen width so text stays readable on phones.
@@ -37,8 +50,8 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
   const PAD = { top: 14, right: narrow ? 62 : 110, bottom: 26, left: narrow ? 48 : 58 };
 
   useEffect(() => {
-    api.history(collectionId).then(setPoints).catch(() => setPoints([]));
-  }, [collectionId, refreshKey]);
+    (one ? api.coinHistory(coinInv) : api.history(collectionId)).then(setPoints).catch(() => setPoints([]));
+  }, [collectionId, coinInv, one, refreshKey]);
 
   const geo = useMemo(() => {
     if (!points || points.length === 0) return null;
@@ -68,7 +81,10 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
     const ticks = [0, 1, 2, 3, 4].map((i) => (top / 4) * i);
     // Date labels evenly spaced in time (not at data points, which can bunch up and overlap).
     const nTicks = narrow ? 2 : Math.max(2, Math.min(5, Math.floor((W - PAD.left - PAD.right) / 150) + 1));
-    const dateTicks = Array.from({ length: nTicks }, (_, i) => x0 + ((x1 - x0) * i) / (nTicks - 1));
+    // Over a short span several ticks would show the same day: keep one label per day.
+    const dateTicks = Array.from({ length: nTicks }, (_, i) => x0 + ((x1 - x0) * i) / (nTicks - 1)).filter(
+      (t, i, all) => i === 0 || isoDay(t) !== isoDay(all[i - 1]),
+    );
     // Value as step lines, split into recorded (solid) and backfilled (dashed) pieces.
     let solid = "";
     let dashed = "";
@@ -91,6 +107,14 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
   }, [points, W]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!points) return null;
+  const costWord = one ? "Paid" : "Cost";
+  if (one && collapsed) {
+    return (
+      <section className="card history-card collapsed">
+        <CollapseHead title="Value Over Time" collapsed onToggle={toggle} />
+      </section>
+    );
+  }
   const track = (e: PointerEvent<SVGSVGElement>) => {
     if (!geo) return;
     const r = e.currentTarget.getBoundingClientRect();
@@ -107,24 +131,37 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
 
   return (
     <section className="card history-card">
-      <div className="section-head">
-        <h2>Value Over Time</h2>
-        <div className="history-legend small">
-          <span className="lg value">Estimated value</span>
-          <span className="lg cost">Cost</span>
-          {anyBackfilled && <span className="lg value dashed">Before prices were recorded</span>}
-        </div>
-      </div>
+      {(() => {
+        const legend = (
+          <div className="history-legend small">
+            <span className="lg value">Estimated value</span>
+            <span className="lg cost">{costWord}</span>
+            {anyBackfilled && <span className="lg value dashed">Before {one ? "first price" : "prices were recorded"}</span>}
+          </div>
+        );
+        return one ? (
+          <CollapseHead title="Value Over Time" collapsed={false} onToggle={toggle}>
+            {legend}
+          </CollapseHead>
+        ) : (
+          <div className="section-head">
+            <h2>Value Over Time</h2>
+            {legend}
+          </div>
+        );
+      })()}
       {!geo || points.length < 2 || !hasValue ? (
         <p className="muted small">
-          The chart fills in as you add coins and record prices. Use Refresh prices to get CPG values for every coin.
+          {one
+            ? "The chart fills in once this coin has a price. Use Get CPG Price below."
+            : "The chart fills in as you add coins and record prices. Use Refresh prices to get CPG values for every coin."}
         </p>
       ) : (
         <div className="history-plot" ref={plotRef} onMouseLeave={() => setHover(null)}>
           <svg
             viewBox={`0 0 ${W} ${H}`}
             role="img"
-            aria-label={`Estimated value ${money(last.value)} and cost ${money(last.cost)} as of ${shortDate(last.date)}`}
+            aria-label={`Estimated value ${money(last.value)} and ${costWord.toLowerCase()} ${money(last.cost)} as of ${shortDate(last.date)}`}
             onPointerMove={track}
             onPointerDown={track}
           >
@@ -158,7 +195,7 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
               </text>
             )}
             <text className="end-label" x={W - PAD.right + 8} y={geo.y(Number(last.cost)) + (last.value != null && Math.abs(geo.y(Number(last.cost)) - geo.y(Number(last.value))) < 14 ? 14 : 0)} dy="0.32em">
-              {compact.format(Number(last.cost))}{narrow ? "" : " cost"}
+              {compact.format(Number(last.cost))}{narrow ? "" : ` ${costWord.toLowerCase()}`}
             </text>
             {hover != null && (
               <g>
@@ -178,12 +215,16 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
                 Estimated value {money(points[hover].value)}
                 {points[hover].backfilled ? " *" : ""}
               </span>
-              <span>Cost {money(points[hover].cost)}</span>
-              {points[hover].backfilled && <span className="muted">* using first recorded prices</span>}
-              <span className="muted">
-                {points[hover].coin_count} coin{points[hover].coin_count === 1 ? "" : "s"}
-                {points[hover].priced_count < points[hover].coin_count ? `, ${points[hover].coin_count - points[hover].priced_count} without a value` : ""}
+              <span>
+                {costWord} {money(points[hover].cost)}
               </span>
+              {points[hover].backfilled && <span className="muted">* estimated from value at purchase and auction prices</span>}
+              {!one && (
+                <span className="muted">
+                  {points[hover].coin_count} coin{points[hover].coin_count === 1 ? "" : "s"}
+                  {points[hover].priced_count < points[hover].coin_count ? `, ${points[hover].coin_count - points[hover].priced_count} without a value` : ""}
+                </span>
+              )}
             </div>
           )}
         </div>

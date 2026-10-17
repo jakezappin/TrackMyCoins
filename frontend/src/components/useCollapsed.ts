@@ -1,12 +1,13 @@
 import { useState } from "react";
 
 /** Open/closed state for a card, remembered on this device. */
-export default function useCollapsed(key: string): [boolean, () => void] {
+export default function useCollapsed(key: string, startCollapsed = false): [boolean, () => void] {
   const [collapsed, setCollapsed] = useState(() => {
     try {
-      return localStorage.getItem(key) === "1";
+      const v = localStorage.getItem(key);
+      return v === null ? startCollapsed : v === "1";
     } catch {
-      return false;
+      return startCollapsed;
     }
   });
   const toggle = () =>

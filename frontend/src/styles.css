@@ -3118,3 +3118,95 @@ table {
 .import-report-cols li .muted { margin-left: auto; }
 .import-report-bad li { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .import-report-cols li:last-child, .import-report-bad li:last-child { border-bottom: 0; }
+
+/* ---- Coin page: summary tiles, then rows of side-by-side cards that line up ---- */
+.btn-icon {
+  margin-right: 6px;
+}
+.coin-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.coin-summary .stat {
+  padding: 14px 16px;
+}
+.coin-summary .stat-value {
+  font-size: 1.45rem;
+}
+.coin-summary .stat-note {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.coin-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch; /* open cards side by side: same height, bottoms line up */
+}
+.coin-row > .collapsed {
+  align-self: start; /* a collapsed card stays a slim bar beside an open one */
+}
+.coin-row > :only-child,
+.coin-row.single > * {
+  grid-column: 1 / -1;
+}
+.coin-page .gallery .hero-photo {
+  aspect-ratio: 5 / 4;
+}
+.details-card h2 {
+  margin-bottom: 12px;
+}
+.details-sub {
+  margin: 16px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.dd-note {
+  display: block;
+  margin-top: 2px;
+}
+.coin-page .card > h2:first-child,
+.coin-page .card .section-head h2 {
+  margin-top: 0;
+}
+@media (max-width: 900px) {
+  .coin-row {
+    grid-template-columns: 1fr;
+  }
+  .coin-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .coin-summary .stat-value {
+    font-size: 1.2rem;
+  }
+  .coin-summary .stat-note {
+    white-space: normal;
+  }
+}
+
+.history-legend .lg {
+  white-space: nowrap;
+}
+.history-legend {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.grade-table td:first-child {
+  white-space: nowrap;
+}
+.grade-table tr.mine td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+@media (max-width: 520px) {
+  .grade-table tr.mine .tag {
+    display: none; /* the highlighted row says it */
+  }
+}

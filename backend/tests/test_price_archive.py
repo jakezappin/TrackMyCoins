@@ -116,3 +116,10 @@ def test_chart_follows_the_market(authed, morgan_collection):
     assert pts[0]["value"] == "100.00" and pts[-1]["value"] == "200.00"  # still starts and ends where it should
     assert float(mid["value"]) > straight + 50  # but follows the mid-year rise
     assert all(p["backfilled"] for p in pts[:-1])
+
+
+def test_one_coins_history(authed, morgan_collection):
+    a = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], price_paid="100", purchase_date="2025-01-05")).json()
+    authed.post("/api/coins", json=coin_payload(morgan_collection["id"], price_paid="999", purchase_date="2025-01-05"))
+    pts = authed.get(f"/api/coins/{a['inventory_number']}/history").json()
+    assert pts[0]["date"] == "2025-01-05" and {p["cost"] for p in pts} == {"100.00"}  # only this coin

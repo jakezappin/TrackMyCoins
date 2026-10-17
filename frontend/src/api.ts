@@ -652,6 +652,7 @@ export const api = {
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
   dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
+  coinHistory: (inv: string) => request<HistoryPoint[]>("GET", `/api/coins/${encodeURIComponent(inv)}/history`),
   history: (collectionId: number | null) =>
     request<HistoryPoint[]>("GET", `/api/history${collectionId == null ? "" : `?collection_id=${collectionId}`}`),
   refreshAllowance: () =>

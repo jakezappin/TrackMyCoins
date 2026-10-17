@@ -9,6 +9,7 @@ from ..schemas import CoinDetail, LookupResult, ManualQuoteIn, ValuationIn
 from ..services import greysheet, lookups, price_refresh, purchase_value
 from ..services import ebay, grade_prices
 from ..services import ngc_images as ngc_images_service
+from ..services.history import value_history
 from ..services.coins import CUSTOM, coin_detail, duplicate_info, find_duplicate_cert, latest_quote
 from .coins import get_owned_coin
 
@@ -71,6 +72,13 @@ def cert_check(
     exclude_id = get_owned_coin(db, user, exclude).id if exclude else None
     dup = find_duplicate_cert(db, user.id, service.upper(), cert, exclude_id)
     return {"duplicate": duplicate_info(dup) if dup else None}
+
+
+@router.get("/coins/{inventory_number}/history")
+def coin_history(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """This coin's estimated value over time (see services/history.py), from purchase to today."""
+    coin = get_owned_coin(db, user, inventory_number)
+    return value_history(db, user.id, coin_id=coin.id)
 
 
 @router.post("/coins/{inventory_number}/purchase-value", response_model=CoinDetail)
