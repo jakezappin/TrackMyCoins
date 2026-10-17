@@ -389,6 +389,8 @@ export interface HistoryPoint {
   priced_count: number;
   cost: string;
   value: string | null;
+  /** Some coins weren't priced yet on this day; their first recorded estimate stands in. */
+  backfilled: boolean;
 }
 
 export class ApiError extends Error {
@@ -406,6 +408,43 @@ export class ApiError extends Error {
   }
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  year: "Year",
+  mint_mark: "Mint mark",
+  grade: "Grade",
+  grade_prefix: "Grade",
+  cert_number: "Cert number",
+  pcgs_number: "PCGS #",
+  price_paid: "Price paid",
+  purchase_date: "Purchase date",
+  sale_price: "Sale price",
+  sale_date: "Sale date",
+  custom_value: "Your estimated value",
+  toner_premium: "Toner premium",
+  holder_premium: "Holder premium",
+  value: "Value",
+  notes: "Notes",
+};
+
+/** Pydantic's wording, in plain English. */
+function plain(msg: string): string {
+  const rules: [RegExp, string][] = [
+    [/^Input should be a valid (decimal|number|integer).*/i, "must be a number"],
+    [/^Input should be greater than or equal to 0.*/i, "can't be negative"],
+    [/^Input should be greater than or equal to (\d+).*/i, "must be at least $1"],
+    [/^Input should be less than or equal to (\d+).*/i, "must be at most $1"],
+    [/^Decimal input should have no more than 2 decimal places.*/i, "use dollars and cents (2 decimal places)"],
+    [/^Decimal input should have no more than \d+ digits.*/i, "is too large"],
+    [/^Input should be a finite number.*/i, "must be a number"],
+    [/^Input should be a valid date.*/i, "isn't a real date"],
+    [/^String should have at most (\d+) characters.*/i, "is too long (at most $1 characters)"],
+    [/^String should have at least 1 character.*/i, "is required"],
+    [/^Field required.*/i, "is required"],
+  ];
+  for (const [re, out] of rules) if (re.test(msg)) return msg.replace(re, out);
+  return msg;
+}
+
 function errorMessage(body: unknown, fallback: string): string {
   const detail = (body as { detail?: unknown })?.detail;
   if (typeof detail === "string") return detail;
@@ -413,10 +452,13 @@ function errorMessage(body: unknown, fallback: string): string {
   if (Array.isArray(detail)) {
     return detail
       .map((d: { loc?: unknown[]; msg?: string }) => {
-        const field = d.loc?.filter((x) => x !== "body").join(".");
-        return field ? `${field}: ${d.msg}` : d.msg;
+        const msg = plain((d.msg ?? "").replace(/^(Value error|Assertion failed), /, ""));
+        const field = d.loc?.filter((x) => x !== "body" && typeof x === "string").pop() as string | undefined;
+        // Our own messages already name the field ("The sale date is before..."); pydantic's need a label.
+        const own = /^[A-Z]/.test(msg) && !/^(Input|Value|String|Field|Decimal|Date)\b/.test(msg);
+        return field && !own ? `${FIELD_LABELS[field] ?? field.replace(/_/g, " ")}: ${msg}` : msg;
       })
-      .join("; ");
+      .join(" ");
   }
   return fallback;
 }
@@ -518,6 +560,7 @@ export const api = {
     files.forEach((f) => fd.append("files", f));
     return request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos`, fd);
   },
+  features: () => request<{ ebay: boolean }>("GET", "/api/features"),
   ebayListings: (inv: string) => request<EbayListings>("GET", `/api/coins/${encodeURIComponent(inv)}/ebay`),
   ngcImages: (link: string) => request<NgcImages>("GET", `/api/ngc-images?link=${encodeURIComponent(link)}`),
   ngcPage: (d: { cert: string; grade: string | null; images: string[]; text: string }) =>

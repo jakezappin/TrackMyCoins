@@ -4,6 +4,10 @@ import { money } from "../format";
 
 const COLLAPSE_KEY = "ebay-card-collapsed";
 
+// Asked once per page load: is eBay set up on the server? (The card stays hidden until it is.)
+let enabled: Promise<boolean> | null = null;
+const ebayEnabled = () => (enabled ??= api.features().then((f) => f.ebay).catch(() => false));
+
 function timeLeft(iso: string | null): string {
   if (!iso) return "";
   const ms = new Date(iso).getTime() - Date.now();
@@ -14,6 +18,14 @@ function timeLeft(iso: string | null): string {
 
 /** Listings for this coin's date, mint, service and grade on eBay right now (asking prices, not sales). */
 export default function EbayCard({ inv }: { inv: string }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    ebayEnabled().then(setOn);
+  }, []);
+  return on ? <EbayListingsCard inv={inv} /> : null;
+}
+
+function EbayListingsCard({ inv }: { inv: string }) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === "1";

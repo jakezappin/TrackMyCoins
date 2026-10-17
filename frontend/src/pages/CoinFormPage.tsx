@@ -17,6 +17,8 @@ import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
 
+const TODAY = new Date().toISOString().slice(0, 10);
+
 const EMPTY: CoinFields = {
   year: null,
   mint_mark: "P",
@@ -54,7 +56,7 @@ const EMPTY: CoinFields = {
 };
 
 const SERVICES: GradingService[] = ["PCGS", "NGC", "ANACS", "CACG", "RAW"];
-const CIRC_PREFIXES = ["MS", "AU", "XF", "VF", "F", "VG", "G", "AG"];
+const CIRC_PREFIXES = ["MS", "SP", "AU", "XF", "VF", "F", "VG", "G", "AG", "FR", "PO"];
 // Used until the catalog's designations for the series load (or if it can't be reached).
 const FALLBACK_DESIGNATIONS: Record<string, string[]> = {
   MS: ["PL", "DMPL", "RD", "RB", "BN", "FB", "FS", "FH"],
@@ -760,7 +762,7 @@ export default function CoinFormPage() {
           )}
           <label className="field">
             <span>Year</span>
-            <input type="number" min={1700} max={2200} required {...text("year")} />
+            <input type="number" min={1700} max={new Date().getFullYear() + 1} step={1} required {...text("year")} />
           </label>
           <label className="field">
             <span>Mint</span>
@@ -805,7 +807,7 @@ export default function CoinFormPage() {
                   </>
                 )}
               </select>
-              <input type="number" min={1} max={70} {...text("grade")} placeholder="65" />
+              <input type="number" min={1} max={70} step={1} {...text("grade")} placeholder="65" />
             </div>
           </label>
           <label className="field">
@@ -952,7 +954,7 @@ export default function CoinFormPage() {
             </label>
             <label className="field">
               <span>Date purchased</span>
-              <input type="date" {...text("purchase_date")} />
+              <input type="date" min="1900-01-01" max={TODAY} {...text("purchase_date")} />
             </label>
           </div>
           <label className="field">
@@ -969,7 +971,7 @@ export default function CoinFormPage() {
             </label>
             <label className="field">
               <span>Sale date</span>
-              <input type="date" {...text("sale_date")} />
+              <input type="date" min={form.purchase_date || "1900-01-01"} max={TODAY} {...text("sale_date")} />
             </label>
           </div>
           <label className="field">

@@ -23,13 +23,21 @@ def test_value_history(authed, morgan_collection):
     _quote(a["id"], "PREMIUM", "250.00", "2026-04-01")  # toner premium added
 
     pts = {p["date"]: p for p in authed.get("/api/history", params={"collection_id": cid}).json()}
-    assert (pts["2026-01-10"]["cost"], pts["2026-01-10"]["value"]) == ("100.00", None)  # bought, not yet priced
-    assert pts["2026-02-01"]["value"] == "150.00"
-    assert (pts["2026-03-01"]["cost"], pts["2026-03-01"]["value"], pts["2026-03-01"]["priced_count"]) == ("400.00", "150.00", 1)
-    assert pts["2026-03-05"]["value"] == "500.00"
+    # Bought before its first price: the first recorded price stands in, marked as backfilled
+    assert (pts["2026-01-10"]["cost"], pts["2026-01-10"]["value"], pts["2026-01-10"]["backfilled"]) == ("100.00", "150.00", True)
+    assert (pts["2026-02-01"]["value"], pts["2026-02-01"]["backfilled"]) == ("150.00", False)
+    # b bought 03-01, first priced 03-05: backfilled with its 350 until then
+    assert (pts["2026-03-01"]["cost"], pts["2026-03-01"]["value"], pts["2026-03-01"]["backfilled"]) == ("400.00", "500.00", True)
+    assert (pts["2026-03-05"]["value"], pts["2026-03-05"]["backfilled"]) == ("500.00", False)
     assert pts["2026-04-01"]["value"] == "600.00"
     assert (pts["2026-06-01"]["cost"], pts["2026-06-01"]["value"], pts["2026-06-01"]["coin_count"]) == ("100.00", "250.00", 1)  # sold
     assert list(pts) == sorted(pts)  # in date order, ending today
 
     assert authed.get("/api/history").json()[-1]["cost"] == "100.00"  # all collections
     assert authed.get("/api/history", params={"collection_id": 99999}).status_code == 404
+
+
+def test_unpriced_coins_have_no_value(authed, morgan_collection):
+    authed.post("/api/coins", json=coin_payload(morgan_collection["id"], price_paid="80.00", purchase_date="2026-01-10"))
+    pts = authed.get("/api/history").json()
+    assert all(p["value"] is None and not p["backfilled"] for p in pts)

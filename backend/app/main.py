@@ -8,6 +8,7 @@ from sqlalchemy import select
 from .config import get_settings
 from .db import SessionLocal
 from .models import CoinType
+from .services import ebay
 from .routers import auth, catalog, coins, collections, dashboard, importer, jobs, label, photos, pricing, reports, shared
 from .series import SERIES
 
@@ -53,6 +54,12 @@ app.include_router(reports.insurance_router)
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/api/features")
+def features():
+    """Optional integrations that are switched on (so the UI can hide what isn't set up)."""
+    return {"ebay": ebay.configured()}
 
 
 @app.get("/api/public/stats")

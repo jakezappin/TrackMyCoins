@@ -1,8 +1,9 @@
-from datetime import date, datetime
+import re
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from .designations import canonical
 
@@ -119,8 +120,12 @@ class CollectionWithSummary(CollectionOut):
 # ---- Coins --------------------------------------------------------------------
 
 
+# Grades a coin can carry: business strikes, proofs (PR), specimens (SP) and circulated grades.
+GRADE_PREFIXES = {"MS", "PR", "SP", "AU", "XF", "VF", "F", "VG", "G", "AG", "FR", "PO"}
+
+
 class CoinFields(BaseModel):
-    year: int = Field(ge=1700, le=2200)
+    year: int = Field(ge=1700)
     mint_mark: str = Field(min_length=1, max_length=5)
     vam: str | None = Field(default=None, max_length=50)
     variety: str | None = Field(default=None, max_length=150)
@@ -158,7 +163,57 @@ class CoinFields(BaseModel):
     sale_date: date | None = None
     sold_to: str | None = Field(default=None, max_length=200)
 
-    notes: str | None = None
+    notes: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("year")
+    @classmethod
+    def _year(cls, v: int):
+        if v > date.today().year + 1:  # next year's issues (e.g. bullion) go on sale late in the year
+            raise ValueError(f"{v} is in the future. Check the year.")
+        return v
+
+    @field_validator("grade_prefix")
+    @classmethod
+    def _grade_prefix(cls, v):
+        if v is None:
+            return v
+        v = {"PF": "PR", "PROOF": "PR", "EF": "XF"}.get(v, v)
+        if v not in GRADE_PREFIXES:
+            raise ValueError(f"Unknown grade “{v}”. Use one of {', '.join(sorted(GRADE_PREFIXES))}.")
+        return v
+
+    @field_validator("cert_number")
+    @classmethod
+    def _cert(cls, v):
+        if v and not re.fullmatch(r"[0-9A-Za-z-]+", v):
+            raise ValueError("Cert numbers are letters, digits and dashes only (e.g. 12345678 or 1234567-001).")
+        return v
+
+    @field_validator("pcgs_number")
+    @classmethod
+    def _pcgs_number(cls, v):
+        if v and not re.fullmatch(r"\d{1,8}", v):
+            raise ValueError("A PCGS coin number is digits only (e.g. 7130).")
+        return v
+
+    @model_validator(mode="after")
+    def _sale_after_purchase(self):
+        if self.purchase_date and self.sale_date and self.sale_date < self.purchase_date:
+            raise ValueError("The sale date is before the purchase date.")
+        return self
+
+    @field_validator("purchase_date", "sale_date")
+    @classmethod
+    def _sensible_date(cls, v, info):
+        """Catch typos like year 0017 or 2107 (they wreck the value-over-time chart)."""
+        if v is None:
+            return v
+        label = "Purchase date" if info.field_name == "purchase_date" else "Sale date"
+        if v.year < 1900:
+            raise ValueError(f"{label} {v.isoformat()} looks mistyped. Use the full year, e.g. {v.year % 100 + 2000}.")
+        if v > date.today() + timedelta(days=1):
+            raise ValueError(f"{label} {v.isoformat()} is in the future.")
+        return v
 
     @field_validator("strike_designation", mode="before")
     @classmethod
@@ -294,8 +349,17 @@ class ValuationIn(BaseModel):
     holder_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)  # cpg only
 
 
+class ImportValuation(BaseModel):
+    """Value fields carried by an imported spreadsheet row."""
+
+    value_source: Literal["cpg", "custom"] = "cpg"
+    custom_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    toner_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    holder_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
 class ManualQuoteIn(BaseModel):
-    source: str = Field(default="CPG", max_length=20)
+    source: Literal["CPG", "PCGS", "GREYSHEET", "cpg", "pcgs", "greysheet"] = "CPG"
     value: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
     description: str | None = Field(default=None, max_length=255)
 

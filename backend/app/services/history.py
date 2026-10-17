@@ -3,6 +3,10 @@
 At each date where something changed, a coin counts if it had been bought (purchase date, or the day it was
 added) and not yet sold. Its value is its latest estimate as of that day: a CPG price, a "CPG + premiums"
 estimate or the owner's own value, whichever was recorded most recently.
+
+Before a coin's first estimate was recorded, its first estimate stands in for it, and the point is marked
+"backfilled" (the chart draws those stretches dashed). Without this, a collection priced for the first time
+today would have a value on one day only, and no line.
 """
 
 from datetime import date, datetime, timezone
@@ -57,6 +61,7 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
     for d in sorted(days):
         cost = value = Decimal(0)
         count = priced = 0
+        backfilled = False
         for c in coins:
             start, end = held[c.id]
             if start > d or (end is not None and end <= d):
@@ -69,6 +74,9 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
                     latest = v
                 else:
                     break
+            if latest is None and estimates[c.id]:
+                latest = estimates[c.id][0][1]  # not priced yet on this day: use its first recorded estimate
+                backfilled = True
             if latest is not None:
                 value += latest
                 priced += 1
@@ -79,6 +87,7 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
                 "priced_count": priced,
                 "cost": str(cost.quantize(CENTS)),
                 "value": str(value.quantize(CENTS)) if priced else None,
+                "backfilled": backfilled,
             }
         )
     return points

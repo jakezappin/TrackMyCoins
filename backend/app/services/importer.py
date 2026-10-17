@@ -118,6 +118,12 @@ def _money(v, errors: list[str], label: str) -> Decimal | None:
     except InvalidOperation:
         errors.append(f"{label} isn't a number: {s}")
         return None
+    if not d.is_finite() or d < 0:
+        errors.append(f"{label} must be a positive amount: {s}")
+        return None
+    if d >= Decimal("10000000000"):
+        errors.append(f"{label} is too large: {s}")
+        return None
     return d.quantize(Decimal("0.01"))
 
 
@@ -255,8 +261,9 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
             f = CoinFields(**f).model_dump(mode="json")
         except ValidationError as e:
             for err in e.errors():
-                where = ".".join(str(p) for p in err["loc"]) or "row"
-                errors.append(f"{where}: {err['msg']}")
+                where = ".".join(str(p) for p in err["loc"])
+                msg = err["msg"].removeprefix("Value error, ")
+                errors.append(f"{where}: {msg}" if where else msg)
     else:
         f = {k: (v.isoformat() if isinstance(v, date) else str(v) if isinstance(v, Decimal) else v) for k, v in f.items()}
     valuation = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in valuation.items() if v is not None}

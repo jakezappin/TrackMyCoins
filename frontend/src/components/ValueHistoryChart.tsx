@@ -66,7 +66,25 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
     const dateTicks = narrow
       ? [points[0], points[points.length - 1]]
       : points.filter((_, i) => i % step === 0 || i === points.length - 1);
-    return { xs, x, y, ticks, dateTicks, valuePath: path((p) => (p.value == null ? null : Number(p.value))), costPath: path((p) => Number(p.cost)) };
+    // Value as step lines, split into recorded (solid) and backfilled (dashed) pieces.
+    let solid = "";
+    let dashed = "";
+    points.forEach((p, i) => {
+      if (p.value == null) return;
+      const vy = y(Number(p.value));
+      const x0 = x(xs[i]);
+      const x1 = i + 1 < points.length ? x(xs[i + 1]) : x0;
+      const flat = `M${x0},${vy}H${x1}`;
+      if (p.backfilled) dashed += flat;
+      else solid += flat;
+      const next = points[i + 1];
+      if (next && next.value != null) {
+        const rise = `M${x1},${vy}V${y(Number(next.value))}`;
+        if (next.backfilled) dashed += rise;
+        else solid += rise;
+      }
+    });
+    return { xs, x, y, ticks, dateTicks, valueSolid: solid, valueDashed: dashed, costPath: path((p) => Number(p.cost)) };
   }, [points, W]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!points) return null;
@@ -81,6 +99,7 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
     setHover(best);
   };
   const hasValue = points.some((p) => p.value != null);
+  const anyBackfilled = points.some((p) => p.backfilled);
   const last = points[points.length - 1];
 
   return (
@@ -90,6 +109,7 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
         <div className="history-legend small">
           <span className="lg value">Estimated value</span>
           <span className="lg cost">Cost</span>
+          {anyBackfilled && <span className="lg value dashed">Before prices were recorded</span>}
         </div>
       </div>
       {!geo || points.length < 2 || !hasValue ? (
@@ -119,7 +139,8 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
               </text>
             ))}
             <path d={geo.costPath} className="line cost" />
-            <path d={geo.valuePath} className="line value" />
+            <path d={geo.valueDashed} className="line value backfilled" />
+            <path d={geo.valueSolid} className="line value" />
             {/* Direct labels at the right end */}
             {last.value != null && (
               <text className="end-label" x={W - PAD.right + 8} y={geo.y(Number(last.value))} dy="0.32em">
@@ -143,8 +164,12 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
               style={{ left: `${(geo.x(geo.xs[hover]) / W) * 100}%` }}
             >
               <strong>{shortDate(points[hover].date)}</strong>
-              <span>Estimated value {money(points[hover].value)}</span>
+              <span>
+                Estimated value {money(points[hover].value)}
+                {points[hover].backfilled ? " *" : ""}
+              </span>
               <span>Cost {money(points[hover].cost)}</span>
+              {points[hover].backfilled && <span className="muted">* using first recorded prices</span>}
               <span className="muted">
                 {points[hover].coin_count} coin{points[hover].coin_count === 1 ? "" : "s"}
                 {points[hover].priced_count < points[hover].coin_count ? `, ${points[hover].coin_count - points[hover].priced_count} without a value` : ""}

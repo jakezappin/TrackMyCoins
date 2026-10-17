@@ -2721,3 +2721,11 @@ table {
   gap: 2px;
   white-space: nowrap;
 }
+
+.history-plot .line.value.backfilled {
+  stroke-dasharray: 5 4;
+  opacity: 0.8;
+}
+.history-legend .lg.dashed::before {
+  border-top-style: dashed;
+}

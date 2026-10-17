@@ -2,13 +2,13 @@
 
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
 from ..models import Coin, Collection, CoinPhoto, User
-from ..schemas import CoinFields
+from ..schemas import CoinFields, ImportValuation
 from ..series import BY_SLUG
 from ..services import importer, lookups
 from ..services import photos as store
@@ -61,6 +61,16 @@ def _collection(db: Session, user: User, collection_id: int) -> Collection:
     return col
 
 
+def _messages(e: ValidationError) -> list[str]:
+    """Readable messages, e.g. 'purchase_date: Purchase date 0017-12-31 looks mistyped...'."""
+    out = []
+    for err in e.errors():
+        where = ".".join(str(p) for p in err["loc"])
+        msg = err["msg"].removeprefix("Value error, ")
+        out.append(f"{where}: {msg}" if where else msg)
+    return out
+
+
 def _describe(f: dict) -> str:
     date = f"{f.get('year') or '?'}" + (f"-{f['mint_mark']}" if f.get("mint_mark") not in (None, "P") else "")
     grade = f"{f.get('grade_prefix') or ''}{f.get('grade') or ''}{'+' if f.get('grade_plus') else ''}"
@@ -79,11 +89,12 @@ def _check(db: Session, user: User, col: Collection, rows: list[ImportRow]) -> l
             continue
         try:
             data = _validate(CoinFields(**r.fields), col, col.coin_type)
+            ImportValuation(**r.valuation)
         except HTTPException as e:
             r.errors.append(str(e.detail))
             continue
-        except Exception as e:  # pydantic validation of edited fields
-            r.errors.append(str(e))
+        except ValidationError as e:
+            r.errors.extend(_messages(e))
             continue
         on_hand = data["sale_price"] is None and data["sale_date"] is None
         key = (data["grading_service"], _cert_key(data["cert_number"]))
@@ -179,11 +190,11 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
         data = _validate(CoinFields(**r.fields), col, col.coin_type)
         coin = Coin(**data, user_id=user.id, coin_type_id=col.coin_type_id, collection_id=col.id,
                     inventory_number=next_inventory_number(db, user.id, col.coin_type), lookup_raw=r.lookup_raw)
-        v = r.valuation
-        if v.get("value_source") == "custom" and v.get("custom_value") is not None:
-            coin.value_source, coin.custom_value = "custom", v["custom_value"]
-        coin.toner_premium = v.get("toner_premium")
-        coin.holder_premium = v.get("holder_premium")
+        v = ImportValuation(**r.valuation)
+        if v.value_source == "custom" and v.custom_value is not None:
+            coin.value_source, coin.custom_value = "custom", v.custom_value
+        coin.toner_premium = v.toner_premium
+        coin.holder_premium = v.holder_premium
         db.add(coin)
         db.flush()
         created.append(coin)

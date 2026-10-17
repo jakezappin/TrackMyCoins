@@ -1,5 +1,8 @@
 import itertools
+from datetime import date
 from decimal import Decimal
+
+import pytest
 
 from conftest import signup
 
@@ -353,3 +356,40 @@ def test_estimated_value(authed, morgan_collection):
     # Back to plain CPG
     d = authed.put(f"/api/coins/{ia}/valuation", json={"source": "cpg"}).json()
     assert d["toner_premium"] is None and d["holder_premium"] is None and d["value_estimate"] == "200.00"
+
+
+def test_purchase_and_sale_dates_must_be_sensible(authed, morgan_collection):
+    r = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], purchase_date="0017-12-31"))
+    assert r.status_code == 422 and "mistyped" in str(r.json()["detail"]) and "2017" in str(r.json()["detail"])
+    r = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], sale_date="2107-01-01", sale_price="10"))
+    assert r.status_code == 422 and "future" in str(r.json()["detail"])
+    assert authed.post("/api/coins", json=coin_payload(morgan_collection["id"], purchase_date="1985-06-01")).status_code == 201
+
+
+@pytest.mark.parametrize("changes, message", [
+    ({"year": date.today().year + 2}, "in the future"),
+    ({"purchase_date": "2026-02-30"}, "date"),                       # not a real day
+    ({"purchase_date": "2025-06-01", "sale_date": "2025-05-01", "sale_price": "10"}, "before the purchase date"),
+    ({"price_paid": "abc"}, "valid decimal"),
+    ({"price_paid": "-5"}, "greater than or equal to 0"),
+    ({"price_paid": "12.345"}, "decimal places"),
+    ({"price_paid": "NaN"}, "finite"),
+    ({"grade": 71}, "less than or equal to 70"),
+    ({"grade_prefix": "ZZ"}, "Unknown grade"),
+    ({"cert_number": "12 34;5"}, "letters, digits and dashes"),
+    ({"pcgs_number": "71a"}, "digits only"),
+    ({"notes": "x" * 5001}, "at most 5000"),
+])
+def test_coin_fields_rejected(authed, morgan_collection, changes, message):
+    r = authed.post("/api/coins", json={**coin_payload(morgan_collection["id"]), **changes})
+    assert r.status_code == 422, r.text
+    assert message.lower() in r.text.lower(), r.text
+
+
+def test_coin_fields_normalized(authed, morgan_collection):
+    c = authed.post("/api/coins", json={**coin_payload(morgan_collection["id"]), "grade_prefix": "ef", "grade": 45}).json()
+    assert c["grade_prefix"] == "XF"
+    r = authed.put(f"/api/coins/{c['inventory_number']}/valuation", json={"source": "custom", "custom_value": "-1"})
+    assert r.status_code == 422
+    r = authed.post(f"/api/coins/{c['inventory_number']}/price-quotes", json={"source": "eBay", "value": "10"})
+    assert r.status_code == 422
