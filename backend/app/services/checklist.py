@@ -1,0 +1,221 @@
+"""Collection status: every date/mint in a series (for the collection's finish) and the coins owned for each.
+
+The list of date/mints comes from the cached Greysheet catalog. Most series are checked off by year and
+mint. Where one year has several designs or major varieties collected separately, they're checked off by
+issue instead: classic commemoratives (e.g. "1936 Boone"), Washington quarters from 1999 on (State,
+Territories, ATB, American Women) and the 1878 Philadelphia Morgan tail-feather varieties.
+"""
+
+import re
+from dataclasses import dataclass, field
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from ..models import CatalogEntry, Coin, Collection
+from ..series import FINISHES
+from . import catalog
+from .coins import on_hand
+
+
+# Overdate / over-mintmark parts the catalog puts first in a variety, e.g. "1935/34" or "O/S".
+_OVER = re.compile(r"^(\d{4}/\d{1,2}|[A-Z]{1,2}/[A-Z]{1,2})$")
+
+
+def _parts(variety: str) -> tuple[str, list[str]]:
+    parts = [p.strip() for p in variety.split(",") if p.strip()]
+    over = [p for p in parts if _OVER.match(p)]
+    rest = [p for p in parts if not _OVER.match(p)]
+    return (rest[0] if rest else parts[0]), over
+
+
+def _design(variety: str) -> str:
+    """Design name only: 'Delaware' from 'Delaware, Clad'; 'Boone' from '1935/34, Boone'."""
+    return _parts(variety)[0]
+
+
+def _variety_with_overdate(variety: str) -> str:
+    """The full variety, overdate last: 'Boone (1935/34)', 'Grant Memorial, with Star', 'Alabama, 2x2'."""
+    parts = [p.strip() for p in variety.split(",") if p.strip()]
+    over = [p for p in parts if _OVER.match(p)]
+    rest = [p for p in parts if not _OVER.match(p)] or parts
+    name = ", ".join(rest)
+    return f"{name} ({', '.join(over)})" if over else name
+
+
+def _full(variety: str) -> str:
+    return variety.strip()
+
+
+# Where to check off by issue instead of just year + mint: series -> [(applies(year, mint), issue name from variety)].
+ISSUE_RULES = {
+    "classic-commemoratives": [(lambda y, m: True, _variety_with_overdate)],
+    "washington-quarters": [(lambda y, m: y >= 1999, _design)],
+    # 8TF, 7TF Reverse of 1878, 7TF Reverse of 1879, 7/8TF Strong, 7/8TF Weak are collected as separate coins.
+    "morgan-dollars": [(lambda y, m: y == 1878 and m == "P", _full)],
+}
+
+# Series that also offer a type set: one line per design, any date or mint.
+TYPE_SET_SERIES = {"classic-commemoratives"}
+MODES = ("full", "type")
+
+
+def modes_for(series_slug: str) -> list[str]:
+    return list(MODES) if series_slug in TYPE_SET_SERIES else ["full"]
+
+
+@dataclass
+class Row:
+    key: tuple
+    year: int
+    mint_mark: str
+    variety: str | None
+    order: int = 0  # Greysheet's catalog order (release order for issues)
+    pcgs_numbers: set[str] = field(default_factory=set)
+    coins: list[Coin] = field(default_factory=list)
+    years: set[int] = field(default_factory=set)
+    type_row: bool = False  # a type-set line: one design, any date
+
+    @property
+    def label(self) -> str:
+        if self.type_row:
+            lo, hi = min(self.years), max(self.years)
+            return f"{self.variety} ({lo})" if lo == hi else f"{self.variety} ({lo}–{hi})"
+        date = f"{self.year}" if self.mint_mark == "P" else f"{self.year}-{self.mint_mark}"
+        return f"{date} {self.variety}" if self.variety else date
+
+
+@dataclass
+class Checklist:
+    rows: list[Row]
+    others: list[Coin]  # owned coins that don't match any catalog date/mint
+
+    @property
+    def filled(self) -> int:
+        return sum(1 for r in self.rows if r.coins)
+
+
+def _is_silver(v: str | None) -> bool:
+    return bool(v and re.search(r"\bsilver\b", v, re.I))
+
+
+def _issue(series_slug: str, year: int, mint: str, variety: str | None) -> str | None:
+    """The issue name when this series/date is checked off by issue, else None."""
+    if not variety:
+        return None
+    for applies, name in ISSUE_RULES.get(series_slug, []):
+        if applies(year, mint):
+            return name(variety)
+    return None
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[^0-9a-z/]", "", text.lower())
+
+
+def _words(text: str | None) -> set[str]:
+    return set(re.findall(r"[0-9a-z/]+", (text or "").lower()))
+
+
+def _best_variety_match(rows: list["Row"], coin_variety: str | None) -> "Row | None":
+    """The row whose variety words all appear in the coin's variety; the most specific one wins.
+
+    '1935/34 Boone' -> 'Boone (1935/34)' over 'Boone'; '7/8TF Strong' -> '7/8TF, Strong' (never '8TF').
+    """
+    words = _words(coin_variety)
+    if not words:
+        return None
+    hits = [r for r in rows if r.variety and _words(r.variety) <= words]
+    if not hits:
+        return None
+    hits.sort(key=lambda r: -len(_words(r.variety)))
+    if len(hits) > 1 and len(_words(hits[0].variety)) == len(_words(hits[1].variety)):
+        return None  # tie: ambiguous
+    return hits[0]
+
+
+def _catalog_entries(db: Session, col: Collection) -> list[CatalogEntry]:
+    strike = FINISHES[col.finish][2]
+    entries = db.scalars(
+        select(CatalogEntry).where(CatalogEntry.coin_type_id == col.coin_type_id, CatalogEntry.strike == strike)
+    ).all()
+    if col.finish == "SPR":
+        # Silver proofs: dates struck in both silver and clad (e.g. 1992-S onward); keep the silver ones.
+        dates_with_clad = {(e.year, e.mint_mark) for e in entries if not _is_silver(e.variety)}
+        entries = [e for e in entries if _is_silver(e.variety) and (e.year, e.mint_mark) in dates_with_clad]
+    elif col.finish == "PR" and "SPR" in (col.coin_type.finishes or []):
+        # Regular proofs: leave out the optional silver issues (they belong to the Silver Proof set).
+        dates_with_clad = {(e.year, e.mint_mark) for e in entries if not _is_silver(e.variety)}
+        entries = [e for e in entries if not (_is_silver(e.variety) and (e.year, e.mint_mark) in dates_with_clad)]
+    return entries
+
+
+def build(db: Session, col: Collection, mode: str = "full") -> Checklist:
+    catalog.ensure_synced(db, col.coin_type)
+    slug = col.coin_type.slug
+    type_set = mode == "type" and slug in TYPE_SET_SERIES
+
+    rows: dict[tuple, Row] = {}
+    for e in _catalog_entries(db, col):
+        if type_set:
+            if not e.variety:
+                continue
+            variety = _design(e.variety)
+            key = (variety.lower(),)
+        else:
+            variety = _issue(slug, e.year, e.mint_mark, e.variety)
+            key = (e.year, e.mint_mark, (variety or "").lower())
+        # Entries are stored in Greysheet's order, so the lowest id is the earliest-listed.
+        row = rows.setdefault(
+            key,
+            Row(key=key, year=e.year, mint_mark=e.mint_mark, variety=variety, order=e.id, type_row=type_set),
+        )
+        row.order = min(row.order, e.id)
+        row.year = min(row.year, e.year)
+        row.years.add(e.year)
+        if e.pcgs_number:
+            row.pcgs_numbers.add(e.pcgs_number)
+
+    coins = db.scalars(
+        on_hand(select(Coin).where(Coin.collection_id == col.id))
+        .options(selectinload(Coin.photos), selectinload(Coin.price_quotes))
+        .order_by(Coin.grade.desc(), Coin.inventory_number)
+    ).all()
+
+    others = []
+    for coin in coins:
+        row = None
+        # Best: the coin's PCGS number belongs to a row. Otherwise year + mint (+ issue).
+        if coin.pcgs_number:
+            row = next((r for r in rows.values() if coin.pcgs_number in r.pcgs_numbers), None)
+        if row is None and type_set:
+            # Any date or mint of the design counts; the coin's variety names the design.
+            row = _best_variety_match(list(rows.values()), coin.variety)
+        elif row is None:
+            candidates = [r for r in rows.values() if r.year == coin.year and r.mint_mark == coin.mint_mark]
+            if any(r.variety for r in candidates):
+                # Several issues that date: the coin's variety says which one (e.g. "Delaware", "8TF").
+                hit = _best_variety_match(candidates, coin.variety)
+                candidates = [hit] if hit else []
+            row = candidates[0] if len(candidates) == 1 else None
+        (row.coins if row else others).append(coin)
+
+    # Where each issue first appears in the catalog.
+    first_of_issue: dict[tuple, int] = {}
+    for r in rows.values():
+        if r.variety:
+            k = (r.year, r.variety.lower())
+            first_of_issue[k] = min(first_of_issue.get(k, r.order), r.order)
+
+    def sort_key(r: Row):
+        # Within a year, follow Greysheet's catalog order (P before branch mints, issues in release order),
+        # keeping all mints of one issue together.
+        position = first_of_issue.get((r.year, r.variety.lower()), r.order) if r.variety else r.order
+        return (r.year, position, MINT_ORDER.get(r.mint_mark, 9))
+
+    ordered = sorted(rows.values(), key=sort_key)
+    return Checklist(rows=ordered, others=others)
+
+
+# Conventional order within a year: Philadelphia first, then branch mints.
+MINT_ORDER = {"P": 0, "W": 1, "D": 2, "CC": 3, "O": 4, "S": 5}

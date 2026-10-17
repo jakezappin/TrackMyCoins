@@ -1,0 +1,52 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from sqlalchemy import select
+
+from .config import get_settings
+from .db import SessionLocal
+from .models import CoinType
+from .routers import auth, catalog, coins, collections, photos, pricing, reports
+from .series import SERIES
+
+
+def seed_coin_types() -> None:
+    """Create or update a coin_types row for every series in app/series.py."""
+    with SessionLocal() as db:
+        for sr in SERIES:
+            fields = {
+                "name": sr.name,
+                "plural": sr.plural,
+                "slug": sr.slug,
+                "inventory_prefix": sr.prefix,
+                "category": sr.category,
+                "mint_marks": list(sr.mint_marks),
+                "finishes": list(sr.finishes),
+            }
+            existing = db.scalar(
+                select(CoinType).where((CoinType.slug == sr.slug) | (CoinType.name == sr.name))
+            )
+            if existing is None:
+                db.add(CoinType(**fields))
+            else:
+                for k, v in fields.items():
+                    if getattr(existing, k) != v:
+                        setattr(existing, k, v)
+        db.commit()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    get_settings().photo_dir.mkdir(parents=True, exist_ok=True)
+    seed_coin_types()
+    yield
+
+
+app = FastAPI(title="Coin App", lifespan=lifespan)
+for r in (auth, catalog, collections, coins, photos, pricing, reports):
+    app.include_router(r.router)
+
+
+@app.get("/api/health")
+def health():
+    return {"ok": True}
