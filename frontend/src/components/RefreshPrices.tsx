@@ -76,7 +76,7 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
       {asking && (
         <div className="modal-backdrop" onClick={() => setAsking(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Refresh prices</h2>
+            <h2>Refresh Prices</h2>
             <p className="muted">
               Gets the latest CPG value for {collectionId == null ? "every coin you own" : "every coin in this collection"}{" "}
               ({coinCount} coin{coinCount === 1 ? "" : "s"}). Sold coins and coins without a numeric grade are skipped.

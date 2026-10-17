@@ -65,7 +65,7 @@ export default function NewCollectionDialog({ initialType, onClose, onCreated }:
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2>New collection</h2>
+        <h2>New Collection</h2>
         <label className="field">
           <span>Type of collection</span>
           <select value={typeSlug} onChange={(e) => chooseType(e.target.value)} required autoFocus={!initialType}>

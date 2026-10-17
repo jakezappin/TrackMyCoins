@@ -18,7 +18,7 @@ export default function DuplicateCertModal({ service, cert, duplicate, onClose, 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <h2>Already in your collection</h2>
+        <h2>Already In Your Collection</h2>
         <p>
           {service} cert <strong className="mono">{cert}</strong> is already{" "}
           <strong>{duplicate.inventory_number}</strong> ({duplicate.description}) in{" "}

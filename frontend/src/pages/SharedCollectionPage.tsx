@@ -34,7 +34,7 @@ export default function SharedCollectionPage() {
       <main className="shared-main">
         {error && (
           <div className="card empty-state">
-            <h2>Link not available</h2>
+            <h2>Link Not Available</h2>
             <p className="muted">{error}</p>
           </div>
         )}

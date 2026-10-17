@@ -4,10 +4,10 @@ import { api, type ExportColumn } from "../api";
 
 const GROUPS: [string, string[]][] = [
   ["Coin", ["Inventory #", "Date", "Year", "Mint", "Variety", "VAM", "PCGS #"]],
-  ["Grading & holder", ["Grading service", "Cert #", "Grade", "CAC", "CAC sticker", "Collector slab", "Packaging", "Toning"]],
+  ["Grading & Holder", ["Grading service", "Cert #", "Grade", "CAC", "CAC sticker", "Collector slab", "Packaging", "Toning"]],
   ["Purchase", ["Price paid", "Date purchased", "Purchased from"]],
   ["Value", ["CPG value", "CPG as of", "Toner premium", "Holder premium", "Value source", "Estimated value"]],
-  ["Sale (Sold sheet)", ["Sale price", "Sale date", "Sold to", "Profit / loss"]],
+  ["Sale (Sold Sheet)", ["Sale price", "Sale date", "Sold to", "Profit / loss"]],
 ];
 const STORE_KEY = "export-columns";
 
@@ -83,7 +83,7 @@ export default function ExportDialog({ collectionId, onClose }: { collectionId: 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal export-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Export to Excel">
-        <h2>Export to Excel</h2>
+        <h2>Export To Excel</h2>
         <p className="muted small">
           Choose the columns for the Coins and Sold sheets. The Summary and Checklist sheets are always included.
         </p>

@@ -492,7 +492,7 @@ export default function CoinFormPage() {
   if (!collections.length)
     return (
       <div className="page">
-        <h1>Add coin</h1>
+        <h1>Add Coin</h1>
         <div className="card empty-state">
           <p>Create a collection first, then add coins to it.</p>
           <Link className="btn btn-primary" to="/dashboard">
@@ -512,7 +512,7 @@ export default function CoinFormPage() {
   return (
     <form className="page coin-form" onSubmit={submit}>
       <div className="page-head">
-        <h1>{editInv ? `Edit ${inventoryNumber}` : "Add coin"}</h1>
+        <h1>{editInv ? `Edit ${inventoryNumber}` : "Add Coin"}</h1>
         <div className="row">
           <button type="button" className="btn" onClick={() => navigate(-1)}>
             Cancel
@@ -544,7 +544,7 @@ export default function CoinFormPage() {
       {/* ---- Lookup ---- */}
       <section className="card form-section lookup">
         <div className="section-head">
-          <h2>Grading service</h2>
+          <h2>Grading Service</h2>
           <label className="raw-toggle">
             <input type="checkbox" checked={isRaw} onChange={(e) => setRaw(e.target.checked)} /> Raw (ungraded)
           </label>
@@ -888,7 +888,7 @@ export default function CoinFormPage() {
           </div>
         </section>
         <section className="card form-section">
-          <h2>Collector slab</h2>
+          <h2>Collector Slab</h2>
           <div className={`checks col ${isRaw ? "not-applicable" : ""}`}>
             {(
               [

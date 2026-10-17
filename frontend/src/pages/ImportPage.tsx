@@ -92,7 +92,7 @@ export default function ImportPage() {
     <div className="page import-page">
       <div className="page-head">
         <div>
-          <h1>Import coins</h1>
+          <h1>Import Coins</h1>
           <p className="muted">Add many coins at once from a spreadsheet or a list of PCGS cert numbers.</p>
         </div>
       </div>
@@ -178,7 +178,7 @@ export default function ImportPage() {
       {preview && (
         <section className="card form-section">
           <div className="section-head">
-            <h2>Check before importing</h2>
+            <h2>Check Before Importing</h2>
             <span className="small muted">
               {preview.ok_count} ready{preview.error_count ? ` · ${preview.error_count} with problems (won't be imported)` : ""}
             </span>
@@ -245,7 +245,7 @@ export default function ImportPage() {
       {result && collection && (
         <section className="card form-section">
           <h2>
-            Imported {result.created.length} coin{result.created.length === 1 ? "" : "s"}
+            Imported {result.created.length} Coin{result.created.length === 1 ? "" : "s"}
           </h2>
           {result.created.length > 0 && (
             <p className="small muted">

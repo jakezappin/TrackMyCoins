@@ -102,7 +102,7 @@ export default function DashboardPage() {
       {/* Row 2: recently opened collections */}
       <section className="section">
         <div className="section-head">
-          <h2>Recent collections</h2>
+          <h2>Recent Collections</h2>
         </div>
         {data.recent_collections.length === 0 ? (
           <div className="card empty-state">
@@ -149,7 +149,7 @@ export default function DashboardPage() {
       {/* Row 3: recent sales */}
       <section className="section">
         <div className="section-head">
-          <h2>Recent sales</h2>
+          <h2>Recent Sales</h2>
         </div>
         {data.recent_sales.length === 0 ? (
           <div className="card empty-state">

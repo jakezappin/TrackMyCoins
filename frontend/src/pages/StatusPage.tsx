@@ -186,7 +186,7 @@ export default function StatusPage() {
 
       {status.others.length > 0 && (
         <div className="card">
-          <h2>Other coins in this collection</h2>
+          <h2>Other Coins In This Collection</h2>
           <p className="muted small">
             These don't match a date in the catalog for this series. Check the year and mint. For commemoratives
             and Washington quarters from 1999 on, set the Variety / issue (e.g. "Delaware") or the PCGS #.

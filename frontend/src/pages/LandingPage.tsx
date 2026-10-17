@@ -5,34 +5,34 @@ import Logo from "../components/Logo";
 
 const FEATURES = [
   {
-    title: "Cert lookup in one step",
+    title: "Cert Lookup In One Step",
     body: "Type a PCGS cert number and the year, mint, grade, designation, photos and CAC sticker fill in for you.",
     icon: (
       <path d="M4 7h16M4 12h10M4 17h7m9-2.5 2.5 2.5M16 14.5a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0Z" />
     ),
   },
   {
-    title: "Know what's missing",
+    title: "Know What's Missing",
     body: "Collection Status lists every date and mint in the series, earliest first, with your coins beside each. Type sets too, like the 23-coin Gold Type Set and classic commemoratives. One click shows only the holes.",
     icon: <path d="M5 6h3m-3 6h3m-3 6h3M11 6h9m-9 6h9m-9 6h9M4.5 12l1 1 2-2" />,
   },
   {
-    title: "Real values, not guesses",
+    title: "Real Values, Not Guesses",
     body: "Pull CPG retail from Greysheet and the PCGS Price Guide, keep a price history, and see totals and estimated wholesale for every collection.",
     icon: <path d="M4 19V5m0 14h16M8 15l3-4 3 2 5-6" />,
   },
   {
-    title: "Recent auction sales",
+    title: "Recent Auction Sales",
     body: "The last ten auction results for your coin and grade, charted against the price guides (buyer's premium included), with links to every lot.",
     icon: <path d="M5 17l4-5 4 3 6-8M5 7h.01M9 12h.01M13 15h.01M19 7h.01" />,
   },
   {
-    title: "Every major U.S. series",
+    title: "Every Major U.S. Series",
     body: "Half cents to Ike dollars, classic commemoratives, early and classic gold from Draped Bust to Saint-Gaudens, the $4 Stella, Silver and Gold Eagles and Gold Buffalos. Business strikes, proofs and silver proofs.",
     icon: <path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3v10m-3-7h6" />,
   },
   {
-    title: "Collector details that matter",
+    title: "Collector Details That Matter",
     body: "CAC green and gold beans, Rattlers, Fatties, OGH, Soapboxes, GSA holders, toning, VAMs, raw coins. Plus Excel export and a sold list with profit and loss.",
     icon: <path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h3" />,
   },
@@ -226,7 +226,7 @@ export default function LandingPage() {
       </section>
 
       <section className="lp-section">
-        <h2>Built the way collectors actually collect</h2>
+        <h2>Built The Way Collectors Actually Collect</h2>
         <div className="lp-features">
           {FEATURES.map((f) => (
             <article key={f.title} className="lp-feature">
@@ -242,7 +242,7 @@ export default function LandingPage() {
 
       <section className="lp-section lp-showcase">
         <div className="lp-showcase-copy">
-          <h2>See the holes. Watch the market.</h2>
+          <h2>See The Holes. Watch The Market.</h2>
           <p>
             Work through a set from the earliest date to the latest, with your best grade beside each one. Then check
             how the coins you own are actually selling at auction, next to the CPG and PCGS price guides.
@@ -256,7 +256,7 @@ export default function LandingPage() {
 
       <section className="lp-cta">
         <Logo size={40} tone="light" />
-        <h2>Start tracking your collection</h2>
+        <h2>Start Tracking Your Collection</h2>
         <p>Have an invite code? Create your account in under a minute.</p>
         <div className="lp-ctas">
           <Link to="/signup" className="btn lp-btn-gold lp-btn-lg">

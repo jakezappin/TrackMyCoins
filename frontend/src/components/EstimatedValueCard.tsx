@@ -74,7 +74,7 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
 
   return (
     <section className="card">
-      <h2>Estimated value</h2>
+      <h2>Estimated Value</h2>
       <div className="big-number">{money(coin.value_estimate)}</div>
       <p className="muted small">
         {coin.value_source === "custom"

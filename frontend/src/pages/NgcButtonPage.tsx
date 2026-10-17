@@ -27,7 +27,7 @@ export default function NgcButtonPage() {
 
   const desktop = (
     <section className="card form-section" key="desktop">
-      <h2>On a computer (Chrome, Edge, Safari, Firefox)</h2>
+      <h2>On A Computer (Chrome, Edge, Safari, Firefox)</h2>
       <ol className="steps">
         <li>
           Show your bookmarks bar: <strong>Cmd+Shift+B</strong> on a Mac or <strong>Ctrl+Shift+B</strong> on Windows (in
@@ -45,7 +45,7 @@ export default function NgcButtonPage() {
   );
   const ios = (
     <section className="card form-section" key="ios">
-      <h2>On iPhone or iPad (Safari)</h2>
+      <h2>On iPhone Or iPad (Safari)</h2>
       <ol className="steps">
         <li>
           <button type="button" className="btn btn-primary" onClick={copy}>
@@ -91,7 +91,7 @@ export default function NgcButtonPage() {
     <div className="page ngc-button-page">
       <div className="page-head">
         <div>
-          <h1>Add NGC coins in one tap</h1>
+          <h1>Add NGC Coins In One Tap</h1>
           <p className="muted">
             NGC doesn't let other sites look up its coins, so this bookmark works from NGC's own page in your browser.
             In the add-coin form, choose NGC, enter the cert and grade, and click <strong>Open on NGC</strong>. On NGC's

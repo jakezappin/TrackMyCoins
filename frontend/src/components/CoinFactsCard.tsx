@@ -22,7 +22,7 @@ export default function CoinFactsCard({
   if (!facts) {
     return (
       <section className={`card coin-facts${collapsed ? " collapsed" : ""}`}>
-        <CollapseHead title="Coin facts" collapsed={collapsed} onToggle={toggle} />
+        <CollapseHead title="Coin Facts" collapsed={collapsed} onToggle={toggle} />
         {!collapsed && (
         <>
         <p className="muted small">
@@ -61,14 +61,14 @@ export default function CoinFactsCard({
     ].filter(Boolean);
     return (
       <section className="card coin-facts collapsed">
-        <CollapseHead title="Coin facts" collapsed onToggle={toggle} />
+        <CollapseHead title="Coin Facts" collapsed onToggle={toggle} />
         {bits.length > 0 && <p className="muted small collapsed-summary">{bits.join(" · ")}</p>}
       </section>
     );
   }
   return (
     <section className="card coin-facts">
-      <CollapseHead title="Coin facts" collapsed={false} onToggle={toggle} />
+      <CollapseHead title="Coin Facts" collapsed={false} onToggle={toggle} />
       {hasPop && (
         <dl className="market-stats">
           <div>

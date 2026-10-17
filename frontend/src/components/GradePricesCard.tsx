@@ -48,7 +48,7 @@ export default function GradePricesCard({
 
   return (
     <section className={`card grade-prices${collapsed ? " collapsed" : ""}`}>
-      <CollapseHead title="Price by grade" collapsed={collapsed} onToggle={toggle}>
+      <CollapseHead title="Price By Grade" collapsed={collapsed} onToggle={toggle}>
         {rows && "has_cac" in data && data.has_cac && (
           <label className="checks small">
             <span>

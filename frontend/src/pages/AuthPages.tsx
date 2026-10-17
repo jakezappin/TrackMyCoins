@@ -41,7 +41,7 @@ export function LoginPage() {
   }
 
   return (
-    <AuthCard title="Log in">
+    <AuthCard title="Log In">
       <form onSubmit={submit} className="stack">
         <label className="field">
           <span>Email</span>
@@ -102,7 +102,7 @@ export function SignupPage() {
 
   if (mode === "closed")
     return (
-      <AuthCard title="Create your account">
+      <AuthCard title="Create Your Account">
         <p className="muted">New accounts aren't being accepted right now.</p>
         <p className="muted small">
           Already have an account? <Link to="/login">Log in</Link>
@@ -111,7 +111,7 @@ export function SignupPage() {
     );
 
   return (
-    <AuthCard title="Create your account">
+    <AuthCard title="Create Your Account">
       <form onSubmit={submit} className="stack">
         {mode === "invite" && (
           <label className="field">

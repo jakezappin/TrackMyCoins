@@ -309,7 +309,7 @@ export default function CoinDetailPage() {
 
           <section className="card">
             <div className="section-head">
-              <h2>CPG value</h2>
+              <h2>CPG Value</h2>
               <button className="btn btn-primary" onClick={getCpg} disabled={cpgBusy}>
                 {cpgBusy ? "Fetching…" : "Get CPG Price"}
               </button>

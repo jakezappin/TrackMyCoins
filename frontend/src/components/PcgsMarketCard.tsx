@@ -207,7 +207,7 @@ export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch 
           <span className="chev" aria-hidden="true">
             ▾
           </span>
-          <h2>PCGS market</h2>
+          <h2>PCGS Market</h2>
         </button>
         {!collapsed && (
           <button className="btn" onClick={onFetch} disabled={busy}>

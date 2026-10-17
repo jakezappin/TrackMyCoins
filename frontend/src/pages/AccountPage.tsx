@@ -120,7 +120,7 @@ export default function AccountPage() {
       </form>
 
       <form className="card form-section" onSubmit={savePassword}>
-        <h2>Change password</h2>
+        <h2>Change Password</h2>
         <label className="field">
           <span>Current password</span>
           <input

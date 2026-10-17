@@ -13,6 +13,11 @@ function niceMax(v: number) {
 }
 
 const day = (iso: string) => new Date(iso + "T00:00:00").getTime();
+/** Local YYYY-MM-DD for a timestamp (the inverse of `day`). */
+const isoDay = (t: number) => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 /** Estimated value and cost over time, as step lines (values change when a price is recorded). */
 export default function ValueHistoryChart({ collectionId, refreshKey }: { collectionId: number | null; refreshKey?: unknown }) {
@@ -61,11 +66,9 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
       return d;
     };
     const ticks = [0, 1, 2, 3, 4].map((i) => (top / 4) * i);
-    // About 4 date labels; on a phone just the first and last.
-    const step = Math.max(1, Math.ceil(points.length / 4));
-    const dateTicks = narrow
-      ? [points[0], points[points.length - 1]]
-      : points.filter((_, i) => i % step === 0 || i === points.length - 1);
+    // Date labels evenly spaced in time (not at data points, which can bunch up and overlap).
+    const nTicks = narrow ? 2 : Math.max(2, Math.min(5, Math.floor((W - PAD.left - PAD.right) / 150) + 1));
+    const dateTicks = Array.from({ length: nTicks }, (_, i) => x0 + ((x1 - x0) * i) / (nTicks - 1));
     // Value as step lines, split into recorded (solid) and backfilled (dashed) pieces.
     let solid = "";
     let dashed = "";
@@ -105,7 +108,7 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
   return (
     <section className="card history-card">
       <div className="section-head">
-        <h2>Value over time</h2>
+        <h2>Value Over Time</h2>
         <div className="history-legend small">
           <span className="lg value">Estimated value</span>
           <span className="lg cost">Cost</span>
@@ -133,9 +136,16 @@ export default function ValueHistoryChart({ collectionId, refreshKey }: { collec
                 </text>
               </g>
             ))}
-            {geo.dateTicks.map((p) => (
-              <text key={p.date} className="axis" x={geo.x(day(p.date))} y={H - 6} textAnchor="middle">
-                {shortDate(p.date)}
+            {geo.dateTicks.map((t, i) => (
+              <text
+                key={t}
+                className="axis"
+                x={geo.x(t)}
+                y={H - 6}
+                // Keep the first and last labels inside the plot instead of hanging off the ends.
+                textAnchor={i === 0 ? "start" : i === geo.dateTicks.length - 1 ? "end" : "middle"}
+              >
+                {shortDate(isoDay(t))}
               </text>
             ))}
             <path d={geo.costPath} className="line cost" />

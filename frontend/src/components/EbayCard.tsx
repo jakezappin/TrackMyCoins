@@ -72,7 +72,7 @@ function EbayListingsCard({ inv }: { inv: string }) {
           <span className="chev" aria-hidden="true">
             ▾
           </span>
-          <h2>For sale on eBay now</h2>
+          <h2>For Sale On eBay Now</h2>
         </button>
         {!collapsed && data?.search_url && (
           <a className="btn" href={data.search_url} target="_blank" rel="noreferrer">
