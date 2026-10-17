@@ -73,10 +73,11 @@ function AuctionChart({ sales, guide, cpg }: { sales: AuctionSale[]; guide: numb
   const xTicks: number[] = [];
   for (let m = xLo; m <= xHi; m += stepMonths) xTicks.push(m);
 
+  // PCGS Guide: dashed blue. CPG: solid red.
   const refLines = [
-    guide != null && { value: guide, label: "PCGS Guide", dash: "6 4" },
-    cpg != null && { value: cpg, label: "CPG", dash: "2 4" },
-  ].filter(Boolean) as { value: number; label: string; dash: string }[];
+    guide != null && { value: guide, label: "PCGS Guide", kind: "pcgs", dash: "6 4" },
+    cpg != null && { value: cpg, label: "CPG", kind: "cpg", dash: undefined },
+  ].filter(Boolean) as { value: number; label: string; kind: string; dash?: string }[];
   // Keep the two reference labels from overlapping.
   const labelY = refLines.map((r) => y(r.value));
   if (labelY.length === 2 && Math.abs(labelY[0] - labelY[1]) < 14) {
@@ -112,7 +113,7 @@ function AuctionChart({ sales, guide, cpg }: { sales: AuctionSale[]; guide: numb
         {/* Reference lines: PCGS Price Guide and CPG */}
         {refLines.map((r, i) => (
           <g key={r.label}>
-            <line className="ref" x1={PAD.left} x2={W - PAD.right} y1={y(r.value)} y2={y(r.value)} strokeDasharray={r.dash} />
+            <line className={`ref ${r.kind}`} x1={PAD.left} x2={W - PAD.right} y1={y(r.value)} y2={y(r.value)} strokeDasharray={r.dash} />
             <text className="ref-label" x={W - PAD.right + 8} y={labelY[i]} dy="0.32em">
               {r.label} {compact.format(r.value)}
             </text>
@@ -129,7 +130,7 @@ function AuctionChart({ sales, guide, cpg }: { sales: AuctionSale[]; guide: numb
               <circle cx={cx} cy={cy} r={14} className="hit" />
               {s.cac ? (
                 <rect
-                  className={`dot ${active ? "active" : ""}`}
+                  className={`dot cac ${active ? "active" : ""}`}
                   x={cx - 5.5}
                   y={cy - 5.5}
                   width={11}
@@ -137,7 +138,7 @@ function AuctionChart({ sales, guide, cpg }: { sales: AuctionSale[]; guide: numb
                   transform={`rotate(45 ${cx} ${cy})`}
                 />
               ) : (
-                <circle className={`dot ${active ? "active" : ""}`} cx={cx} cy={cy} r={5.5} />
+                <circle className={`dot sale ${active ? "active" : ""}`} cx={cx} cy={cy} r={5.5} />
               )}
             </g>
           );
@@ -159,18 +160,18 @@ function AuctionChart({ sales, guide, cpg }: { sales: AuctionSale[]; guide: numb
       <div className="apr-legend small muted">
         <span>
           <svg width="12" height="12" aria-hidden>
-            <circle cx="6" cy="6" r="4.5" className="dot" />
+            <circle cx="6" cy="6" r="4.5" className="dot sale" />
           </svg>{" "}
           Sale
         </span>
         <span>
           <svg width="12" height="12" aria-hidden>
-            <rect x="2" y="2" width="8" height="8" transform="rotate(45 6 6)" className="dot" />
+            <rect x="2" y="2" width="8" height="8" transform="rotate(45 6 6)" className="dot cac" />
           </svg>{" "}
           CAC sale
         </span>
-        {guide != null && <span className="legend-line dashed">PCGS Guide</span>}
-        {cpg != null && <span className="legend-line dotted">CPG</span>}
+        {guide != null && <span className="legend-line pcgs">PCGS Guide</span>}
+        {cpg != null && <span className="legend-line cpg">CPG</span>}
       </div>
     </div>
   );

@@ -1257,10 +1257,29 @@ table {
   fill: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* Auction chart colors (validated for color-blind separation, light and dark): sales and PCGS Guide blue,
+   CPG red, CAC sales green. Shapes and line styles carry the meaning too (dot / diamond, dashed / solid). */
+:root {
+  --apr-blue: #2f6fb5;
+  --apr-red: #a8241c;
+  --apr-green: #24a77a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --apr-blue: #3f7ccc;
+    --apr-red: #cc3f37;
+    --apr-green: #34ad80;
+  }
+}
 .apr-chart .ref {
-  stroke: var(--muted);
-  stroke-width: 1.5;
+  stroke-width: 2;
   fill: none;
+}
+.apr-chart .ref.pcgs {
+  stroke: var(--apr-blue);
+}
+.apr-chart .ref.cpg {
+  stroke: var(--apr-red);
 }
 .apr-chart .ref-label {
   font-size: 11px;
@@ -1269,9 +1288,13 @@ table {
 }
 .apr-chart .dot,
 .apr-legend .dot {
-  fill: var(--accent);
+  fill: var(--apr-blue);
   stroke: var(--surface);
   stroke-width: 2;
+}
+.apr-chart .dot.cac,
+.apr-legend .dot.cac {
+  fill: var(--apr-green);
 }
 .apr-chart .dot.active {
   stroke: var(--text);
@@ -1314,11 +1337,14 @@ table {
 .legend-line::before {
   content: "";
   width: 18px;
-  border-top: 2px dashed var(--muted);
+  border-top: 2px solid var(--muted);
   display: inline-block;
 }
-.legend-line.dotted::before {
-  border-top-style: dotted;
+.legend-line.pcgs::before {
+  border-top: 2px dashed var(--apr-blue);
+}
+.legend-line.cpg::before {
+  border-top: 2px solid var(--apr-red);
 }
 .apr-table .tag {
   margin-left: 6px;
