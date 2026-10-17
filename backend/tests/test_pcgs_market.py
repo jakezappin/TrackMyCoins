@@ -97,3 +97,21 @@ def test_coin_facts_from_cert_lookup(authed, morgan_collection):
     f = authed.get(f"/api/coins/{coin['inventory_number']}").json()["facts"]
     assert (f["mintage"], f["mint_location"], f["population"], f["pop_grade"], f["source"]) == (
         12760000, "San Francisco", 60698, "MS65", "cert_lookup")
+
+
+def test_melt_value_for_silver_only(authed, morgan_collection):
+    coin = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1878, grade=62, pcgs_number="7072")).json()
+    f = authed.post(f"/api/coins/{coin['inventory_number']}/pcgs").json()["facts"]
+    # 26.73 g x 90% silver = 0.7735 oz x $50 (test spot price)
+    assert f["melt"]["metals"] == [{"metal": "silver", "oz": 0.7735, "spot": 50.0}] and f["melt"]["value"] == 38.67
+
+
+def test_no_melt_for_base_metal():
+    from app.services.metals import fineness, melt
+
+    assert melt(5.0, "75% Copper, 25% Nickel") is None
+    assert melt(11.34, "Copper-Nickel Clad Copper") is None
+    assert fineness("Outer: 80% Silver, 20% Copper; Inner: 21% Silver, 79% Copper") == {}  # ambiguous: no guess
+    assert fineness(".999 Silver") == {"silver": 0.999}
+    g = fineness("91.67% Gold, 3% Silver, 5.33% Copper")
+    assert round(g["gold"], 4) == 0.9167 and g["silver"] == 0.03

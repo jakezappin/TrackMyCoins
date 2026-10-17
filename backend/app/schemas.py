@@ -320,6 +320,7 @@ class CoinFacts(CoinSpecs):
     as_of: datetime | None = None
     source: str  # "pcgs_market" | "cert_lookup"
     pcgs_number: str | None = None
+    melt: dict | None = None  # {"value", "metals": [{"metal", "oz", "spot"}], "as_of"}; silver/gold coins only
 
 
 class PcgsMarket(BaseModel):

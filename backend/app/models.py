@@ -83,6 +83,20 @@ class InventoryCounter(Base):
     next_seq: Mapped[int] = mapped_column(Integer, default=1)
 
 
+class GradePriceSheet(Base):
+    """CPG prices for every grade of one issue (one Greysheet call returns them all). Shared by every coin of
+    that issue, so the price-by-grade table costs no extra API calls."""
+
+    __tablename__ = "grade_price_sheets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(40), unique=True, index=True)  # "pcgs:7124" or "gsid:7434"
+    gsid: Mapped[int | None] = mapped_column(Integer)
+    name: Mapped[str | None] = mapped_column(String(255))
+    rows: Mapped[list] = mapped_column(JSON)  # [{"grade": 63, "label": "MS63", "cac": false, "cpg": "130.00"}, ...]
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class PriceRefreshRun(Base):
     """One use of "Refresh prices" (to cap how often a user can refresh in bulk, which spends API calls)."""
 

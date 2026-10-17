@@ -2729,3 +2729,58 @@ table {
 .history-legend .lg.dashed::before {
   border-top-style: dashed;
 }
+
+/* ---- Price by grade --------------------------------------------------------------- */
+.grade-prices,
+.coin-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.grade-table {
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.grade-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.grade-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.grade-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.grade-table tr:last-child td {
+  border-bottom: none;
+}
+.grade-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.grade-table tr.mine td {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.grade-table tr.mine .tag {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.market-stats .melt-detail dd {
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.35;
+}

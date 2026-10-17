@@ -87,7 +87,9 @@ def require_grade(coin: Coin) -> None:
 
 
 def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
-    """Return {'value', 'grade_used', 'description', 'raw', 'greysheet_value'} for the coin's current price.
+    """Return {'value', 'grade_used', 'description', 'raw', 'greysheet_value', 'sheet'} for the coin's current price.
+
+    `sheet` holds CPG for every grade of the issue (same single API call).
 
     `greysheet_value` (wholesale) is only filled on Greysheet's Advanced API tier; on Basic it's None.
 
@@ -98,12 +100,12 @@ def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
     require_grade(coin)
 
     with client() as c:
+        # No grade: Greysheet returns every grade in this one call, which also feeds the price-by-grade table.
         data = get(
             c,
             "/GetPricingRequest",
             PcgsNumber=None if gsid else coin.pcgs_number,
             Gsid=gsid,
-            Grade=coin.grade,
         )
     ident = f"Greysheet id {gsid}" if gsid else f"PCGS #{coin.pcgs_number}"
     if not data:
@@ -122,4 +124,14 @@ def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
         "description": entry.get("Name"),
         "raw": {"row": row, "gsid": entry.get("GsId"), "name": entry.get("Name")},
         "greysheet_value": _money(row.get("GreyVal")),
+        "sheet": {
+            "key": f"gsid:{gsid}" if gsid else f"pcgs:{coin.pcgs_number}",
+            "gsid": entry.get("GsId"),
+            "name": entry.get("Name"),
+            "rows": [
+                {"grade": r.get("Grade"), "label": str(r.get("GradeLabel") or r.get("Grade")), "cac": bool(r.get("IsCac")),
+                 "cpg": str(v) if (v := _money(r.get("CpgVal"))) is not None else None}
+                for r in entry.get("PricingData") or []
+            ],
+        },
     }

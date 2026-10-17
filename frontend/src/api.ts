@@ -276,7 +276,22 @@ export interface CoinFacts {
   as_of: string | null;
   source: "pcgs_market" | "cert_lookup";
   pcgs_number: string | null;
+  /** Silver/gold coins only: precious-metal content × live spot. */
+  melt: { value: number; metals: { metal: string; oz: number; spot: number }[]; as_of: string | null } | null;
 }
+
+export interface GradePriceRow {
+  grade: number;
+  label: string;
+  cpg?: string;
+  wholesale?: string;
+  cac_cpg?: string;
+  cac_wholesale?: string;
+}
+
+export type GradePrices =
+  | { rows: null }
+  | { rows: GradePriceRow[]; name: string | null; fetched_at: string; wholesale_discount: number; has_cac: boolean };
 
 export interface CoinDetail extends Coin {
   facts: CoinFacts | null;
@@ -561,6 +576,7 @@ export const api = {
     return request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos`, fd);
   },
   features: () => request<{ ebay: boolean }>("GET", "/api/features"),
+  gradePrices: (inv: string) => request<GradePrices>("GET", `/api/coins/${encodeURIComponent(inv)}/grade-prices`),
   ebayListings: (inv: string) => request<EbayListings>("GET", `/api/coins/${encodeURIComponent(inv)}/ebay`),
   ngcImages: (link: string) => request<NgcImages>("GET", `/api/ngc-images?link=${encodeURIComponent(link)}`),
   ngcPage: (d: { cert: string; grade: string | null; images: string[]; text: string }) =>

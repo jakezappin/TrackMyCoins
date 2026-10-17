@@ -10,6 +10,7 @@ from ..config import get_settings
 from ..models import Coin, CoinType, CollectionCounter, InventoryCounter, PriceQuote
 from ..series import collection_type_slug
 from ..schemas import CoinDetail, CoinFacts, CoinOut, CollectionSummary, PhotoOut, PriceQuoteOut
+from . import metals
 from .lookups.pcgs import coin_facts as pcgs_specs
 
 CPG = "CPG"
@@ -146,6 +147,13 @@ def coin_out(coin: Coin) -> CoinOut:
 
 def coin_facts(coin: Coin) -> CoinFacts | None:
     """Mintage, specs and population: from the PCGS market data if fetched, else from a PCGS cert lookup."""
+    facts = _facts(coin)
+    if facts is not None:
+        facts.melt = metals.melt(facts.weight_g, facts.metal)
+    return facts
+
+
+def _facts(coin: Coin) -> CoinFacts | None:
     m = coin.pcgs_market or {}
     if m.get("facts"):
         return CoinFacts(**m["facts"], population=m.get("population"), pop_higher=m.get("pop_higher"),

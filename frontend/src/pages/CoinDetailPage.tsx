@@ -9,6 +9,7 @@ import CoinPlaceholder from "../components/CoinPlaceholder";
 import EstimatedValueCard from "../components/EstimatedValueCard";
 import CoinFactsCard from "../components/CoinFactsCard";
 import EbayCard from "../components/EbayCard";
+import GradePricesCard from "../components/GradePricesCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
 import {
   coinPath,
@@ -247,6 +248,16 @@ export default function CoinDetailPage() {
           canFetch={Boolean(coin.grade && (coin.pcgs_number || coin.grading_service !== "RAW"))}
           busy={pcgsBusy}
           onFetch={getPcgs}
+        />
+        <GradePricesCard
+          inv={coin.inventory_number}
+          grade={coin.grade}
+          gradePlus={coin.grade_plus}
+          cac={coin.cac}
+          refreshKey={coin.latest_cpg?.id}
+          canFetch={Boolean(coin.grade)}
+          busy={cpgBusy}
+          onFetch={getCpg}
         />
         </div>
 

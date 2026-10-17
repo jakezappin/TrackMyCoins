@@ -106,8 +106,11 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"Data": [{
             "GsId": 3, "Name": f"item {ident}",
             "PricingData": [
+                {"Grade": 64, "GradeLabel": "MS64", "IsCac": False, "CpgVal": "$900", "GreyVal": ""},
                 {"Grade": 65, "GradeLabel": "65", "IsCac": False, "CpgVal": "$1,150", "GreyVal": ""},
                 {"Grade": 65, "GradeLabel": "65", "IsCac": True, "CpgVal": "$1,400", "GreyVal": GREY_VAL},
+                {"Grade": 66, "GradeLabel": "MS66", "IsCac": False, "CpgVal": "$2,000", "GreyVal": ""},
+                {"Grade": 67, "GradeLabel": "MS67", "IsCac": False, "CpgVal": "", "GreyVal": ""},
             ],
         }]})
     return httpx.Response(404)
@@ -302,3 +305,28 @@ def test_over_pattern_skips_fractions():
         assert _OVER_RE.search(text), text
     for text in ("3 1/2 Legs", "7/8TF, Strong", "Large/Small 47", "Buffalo"):
         assert not _OVER_RE.search(text), text
+
+
+def test_price_by_grade_comes_with_one_cpg_call(authed, morgan_collection):
+    coin = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1881, mint_mark="S", grade=65,
+                                                       pcgs_number="7130")).json()
+    inv = coin["inventory_number"]
+    assert authed.get(f"/api/coins/{inv}/grade-prices").json() == {"rows": None}  # not priced yet
+    n = len(calls)
+    d = authed.post(f"/api/coins/{inv}/cpg").json()
+    assert d["latest_cpg"]["value"] == "1150.00"  # still the coin's own grade
+    pricing = [c for c in calls[n:] if c.startswith("GetPricingRequest")]
+    assert len(pricing) == 1 and "Grade=" not in pricing[0]  # all grades, one call
+
+    t = authed.get(f"/api/coins/{inv}/grade-prices").json()
+    assert [(r["label"], r.get("cpg"), r.get("wholesale"), r.get("cac_cpg")) for r in t["rows"]] == [
+        ("MS64", "900.00", "810.00", None),
+        ("65", "1150.00", "1035.00", "1400.00"),
+        ("MS66", "2000.00", "1800.00", None),
+    ]  # unpriced MS67 left out; wholesale is CPG - 10%
+    assert t["has_cac"] and t["wholesale_discount"] == 0.1
+
+    # Another coin of the same issue reuses the sheet: no call needed
+    other = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1881, mint_mark="S", grade=64,
+                                                        pcgs_number="7130")).json()
+    assert len(authed.get(f"/api/coins/{other['inventory_number']}/grade-prices").json()["rows"]) == 3

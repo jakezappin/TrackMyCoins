@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..models import Coin, PriceQuote
-from . import catalog, greysheet
+from . import catalog, grade_prices, greysheet
 from .coins import CPG, GREYSHEET, PCGS_GUIDE, PREMIUM
 from .lookups import pcgs
 
@@ -23,6 +23,7 @@ def refresh_cpg(db: Session, coin: Coin) -> None:
         match = catalog.resolve_for_coin(db, coin)
         gsid = None if match.pcgs_number else match.gsid
     q = greysheet.fetch_cpg(coin, gsid=gsid)
+    grade_prices.save_sheet(db, q.pop("sheet"))
     grey = q.pop("greysheet_value")
     db.add(PriceQuote(coin_id=coin.id, source=CPG, **q))
     if grey is not None:

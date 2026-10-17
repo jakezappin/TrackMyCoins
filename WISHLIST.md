@@ -40,8 +40,6 @@ value-over-time chart from real history instead of the dashed backfill.
 
 ## Ideas
 
-- **Price by grade table** on the coin page: one Greysheet call already returns every grade (and CAC) for a coin,
-  so a ladder like "MS62 $115 · MS63 $130 · MS64 $165" costs no extra API calls.
 - **Single-use invite codes** with a list of who joined with which code (today one shared code works for everyone).
 - **Coin list as cards on phones** instead of a sideways-scrolling table.
 - **PCGS auction chart** text is small on phones (the value chart was fixed by drawing at screen width; same fix).

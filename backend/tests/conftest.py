@@ -48,3 +48,13 @@ def morgan_collection(authed):
     r = authed.post("/api/collections", json={"name": "Morgan Dollar Collection 1", "coin_type_id": ct["id"]})
     assert r.status_code == 201, r.text
     return r.json()
+
+
+@pytest.fixture(autouse=True)
+def fixed_spot_prices(monkeypatch):
+    """No network in tests: silver $50, gold $4,000 an ounce."""
+    from app.services import metals
+
+    prices = {"silver": 50.0, "gold": 4000.0, "platinum": 1600.0, "palladium": 1000.0}
+    monkeypatch.setattr(metals, "_fetch_spot", lambda metal: (prices[metal], "2026-10-17T12:00:00Z"))
+    metals._spot.clear()
