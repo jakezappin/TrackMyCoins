@@ -165,6 +165,14 @@ class Coin(Base):
     toning_dual: Mapped[bool] = mapped_column(Boolean, default=False)
     toning_rainbow: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Estimated value used in totals: "cpg" = latest CPG + premiums below, or "custom" = custom_value.
+    value_source: Mapped[str] = mapped_column(String(10), default="cpg", server_default="cpg")
+    custom_value: Mapped[Decimal | None] = mapped_column(Money)
+    # Extra value for attractive toning, added on top of CPG ("toner tax"). None = no premium.
+    toner_premium: Mapped[Decimal | None] = mapped_column(Money)
+    # Extra value for a desirable holder (Rattler, Fatty, OGH, GSA...) ("holder tax"). None = no premium.
+    holder_premium: Mapped[Decimal | None] = mapped_column(Money)
+
     # Purchase
     price_paid: Mapped[Decimal | None] = mapped_column(Money)
     purchase_date: Mapped[date | None] = mapped_column(Date)

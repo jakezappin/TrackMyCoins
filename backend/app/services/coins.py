@@ -12,6 +12,8 @@ from ..series import collection_type_slug
 from ..schemas import CoinDetail, CoinOut, CollectionSummary, PhotoOut, PriceQuoteOut
 
 CPG = "CPG"
+PREMIUM = "PREMIUM"  # CPG + toner and/or holder premium, recorded as an estimate
+CUSTOM = "CUSTOM"  # a value the owner entered themselves
 GREYSHEET = "GREYSHEET"  # wholesale; only on Greysheet's Advanced API tier
 PCGS_GUIDE = "PCGS"  # PCGS Price Guide value
 CENTS = Decimal("0.01")
@@ -76,8 +78,58 @@ def latest_quote(coin: Coin, source: str = CPG) -> PriceQuote | None:
     return next((q for q in coin.price_quotes if q.source == source), None)
 
 
+def latest_cpg_value(coin: Coin) -> Decimal | None:
+    q = latest_quote(coin)
+    return q.value if q else None
+
+
+def value_estimate(coin: Coin) -> Decimal | None:
+    """The coin's estimated value for totals: the owner's own value, or latest CPG plus any premiums."""
+    if coin.value_source == "custom":
+        return coin.custom_value
+    cpg = latest_cpg_value(coin)
+    if cpg is None:
+        return None
+    return cpg + (coin.toner_premium or Decimal(0)) + (coin.holder_premium or Decimal(0))
+
+
+def value_totals(coins) -> dict:
+    """Totals used by collection and dashboard cards."""
+    est = cpg = toner = holder = Decimal(0)
+    unpriced = toner_count = holder_count = custom_count = 0
+    for c in coins:
+        v = value_estimate(c)
+        if v is None:
+            unpriced += 1
+            continue
+        est += v
+        if c.value_source == "custom":
+            custom_count += 1
+        else:
+            cpg += latest_cpg_value(c) or 0
+            if c.toner_premium:
+                toner += c.toner_premium
+                toner_count += 1
+            if c.holder_premium:
+                holder += c.holder_premium
+                holder_count += 1
+    discount = Decimal(str(get_settings().wholesale_discount))
+    return dict(
+        total_estimated_value=est.quantize(CENTS),
+        total_cpg_value=cpg.quantize(CENTS),
+        est_wholesale_value=(est * (1 - discount)).quantize(CENTS),
+        unpriced_count=unpriced,
+        toner_count=toner_count,
+        toner_premium_total=toner.quantize(CENTS),
+        holder_count=holder_count,
+        holder_premium_total=holder.quantize(CENTS),
+        custom_count=custom_count,
+    )
+
+
 def coin_out(coin: Coin) -> CoinOut:
     out = CoinOut.model_validate(coin)
+    out.value_estimate = value_estimate(coin)
     q = latest_quote(coin)
     out.latest_cpg = PriceQuoteOut.model_validate(q) if q else None
     g = latest_quote(coin, GREYSHEET)
@@ -120,19 +172,4 @@ def collection_summary(db: Session, collection_id: int) -> CollectionSummary:
         )
     ).all()
     total_paid = sum((c.price_paid or Decimal(0) for c in coins), Decimal(0))
-    total_cpg = Decimal(0)
-    unpriced = 0
-    for c in coins:
-        q = latest_quote(c)
-        if q is None or q.value is None:
-            unpriced += 1
-        else:
-            total_cpg += q.value
-    discount = Decimal(str(get_settings().wholesale_discount))
-    return CollectionSummary(
-        coin_count=len(coins),
-        total_price_paid=total_paid.quantize(CENTS),
-        total_cpg_value=total_cpg.quantize(CENTS),
-        est_wholesale_value=(total_cpg * (1 - discount)).quantize(CENTS),
-        unpriced_count=unpriced,
-    )
+    return CollectionSummary(coin_count=len(coins), total_price_paid=total_paid.quantize(CENTS), **value_totals(coins))

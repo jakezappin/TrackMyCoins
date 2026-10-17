@@ -318,3 +318,38 @@ def test_ike_packaging(authed):
     assert c["ike_blue_pack"] is True
     both = coin_payload(col["id"], year=1972, mint_mark="S", ike_blue_pack=True, ike_brown_pack=True)
     assert authed.post("/api/coins", json=both).status_code == 422
+
+
+def test_estimated_value(authed, morgan_collection):
+    cid = morgan_collection["id"]
+    a = authed.post("/api/coins", json=coin_payload(cid, price_paid="100.00", toning_rainbow=True)).json()
+    b = authed.post("/api/coins", json=coin_payload(cid, price_paid="50.00")).json()
+    ia, ib = a["inventory_number"], b["inventory_number"]
+    # A toner premium needs a CPG price to add to
+    assert authed.put(f"/api/coins/{ia}/valuation", json={"source": "cpg", "toner_premium": "150"}).status_code == 400
+    authed.post(f"/api/coins/{ia}/price-quotes", json={"value": "200.00"})
+
+    # CPG + toner premium + holder premium (e.g. a toned coin in a Rattler)
+    d = authed.put(f"/api/coins/{ia}/valuation", json={"source": "cpg", "toner_premium": "150.00", "holder_premium": "40.00"}).json()
+    assert (d["value_source"], d["toner_premium"], d["holder_premium"], d["value_estimate"]) == ("cpg", "150.00", "40.00", "390.00")
+    est = next(q for q in d["price_quotes"] if q["source"] == "PREMIUM")
+    assert est["value"] == "390.00"
+    assert est["description"] == "Estimate: CPG $200.00 + toner premium $150.00 + holder premium $40.00"
+    assert d["latest_cpg"]["value"] == "200.00"  # CPG itself unchanged
+
+    # Your own value (no CPG needed)
+    d = authed.put(f"/api/coins/{ib}/valuation", json={"source": "custom", "custom_value": "75.00"}).json()
+    assert (d["value_source"], d["value_estimate"]) == ("custom", "75.00")
+    assert next(q for q in d["price_quotes"] if q["source"] == "CUSTOM")["value"] == "75.00"
+    assert authed.put(f"/api/coins/{ib}/valuation", json={"source": "custom"}).status_code == 422
+
+    s = authed.get(f"/api/collections/{cid}").json()["summary"]
+    assert s["total_estimated_value"] == "465.00" and s["total_cpg_value"] == "200.00"
+    assert (s["toner_count"], s["toner_premium_total"], s["holder_count"], s["holder_premium_total"]) == (1, "150.00", 1, "40.00")
+    assert (s["custom_count"], s["unpriced_count"]) == (1, 0)
+    assert s["est_wholesale_value"] == "418.50"  # 90% of estimated value
+    assert authed.get("/api/dashboard").json()["totals"]["total_estimated_value"] == "465.00"
+
+    # Back to plain CPG
+    d = authed.put(f"/api/coins/{ia}/valuation", json={"source": "cpg"}).json()
+    assert d["toner_premium"] is None and d["holder_premium"] is None and d["value_estimate"] == "200.00"

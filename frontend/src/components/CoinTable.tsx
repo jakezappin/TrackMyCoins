@@ -56,7 +56,7 @@ export default function CoinTable({ coins, mode }: Props) {
         case "paid":
           return Number(c.price_paid ?? -1);
         case "cpg":
-          return Number(c.latest_cpg?.value ?? -1);
+          return Number(c.value_estimate ?? -1);
         case "sold":
           return c.sale_date ?? "";
       }
@@ -110,7 +110,7 @@ export default function CoinTable({ coins, mode }: Props) {
                 <th>Service</th>
                 <th>Tags</th>
                 {th("paid", "Paid", "num")}
-                {mode === "collection" ? th("cpg", "CPG", "num") : null}
+                {mode === "collection" ? th("cpg", "Value", "num") : null}
                 {mode === "sold" ? (
                   <>
                     <th className="num">Sold for</th>
@@ -150,7 +150,26 @@ export default function CoinTable({ coins, mode }: Props) {
                       </div>
                     </td>
                     <td className="num">{money(c.price_paid)}</td>
-                    {mode === "collection" && <td className="num">{money(c.latest_cpg?.value)}</td>}
+                    {mode === "collection" && (
+                      <td className="num">
+                        {money(c.value_estimate)}
+                        {c.value_source === "custom" ? (
+                          <span className="value-tag" title="Your own value">own</span>
+                        ) : c.toner_premium || c.holder_premium ? (
+                          <span
+                            className="value-tag"
+                            title={[
+                              c.toner_premium && `toner premium ${money(c.toner_premium)}`,
+                              c.holder_premium && `holder premium ${money(c.holder_premium)}`,
+                            ]
+                              .filter(Boolean)
+                              .join(" + ")}
+                          >
+                            {[c.toner_premium && "+toner", c.holder_premium && "+holder"].filter(Boolean).join(" ")}
+                          </span>
+                        ) : null}
+                      </td>
+                    )}
                     {mode === "sold" && (
                       <>
                         <td className="num">{money(c.sale_price)}</td>

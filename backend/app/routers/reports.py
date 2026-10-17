@@ -21,7 +21,7 @@ from ..db import get_db
 from ..models import Coin, Collection, User
 from ..schemas import CoinOut
 from ..services import checklist
-from ..services.coins import CPG, coin_out, collection_summary, latest_quote, on_hand, sold
+from ..services.coins import CPG, coin_out, collection_summary, latest_quote, on_hand, sold, value_estimate
 from ..services.greysheet import PricingError
 from .collections import _type_label, get_owned_collection
 
@@ -132,6 +132,10 @@ COIN_COLUMNS = [
     ("Purchased from", 18, lambda c: c.purchased_from),
     ("CPG value", 12, lambda c: (q.value if (q := latest_quote(c, CPG)) else None)),
     ("CPG as of", 12, lambda c: (q.fetched_at.date() if (q := latest_quote(c, CPG)) else None)),
+    ("Toner premium", 12, lambda c: c.toner_premium),
+    ("Holder premium", 12, lambda c: c.holder_premium),
+    ("Value source", 10, lambda c: "Own value" if c.value_source == "custom" else "CPG"),
+    ("Estimated value", 14, lambda c: value_estimate(c)),
     ("Photos", 7, lambda c: len(c.photos)),
     ("Notes", 30, lambda c: c.notes),
 ]
@@ -149,7 +153,7 @@ def _sheet(ws, columns, coins):
     for coin in coins:
         ws.append([fn(coin) for _, _, fn in columns])
     _style(ws, [w for _, w, _ in columns], money_cols={n for n, _, _ in columns if n in (
-        "Price paid", "CPG value", "Sale price", "Profit / loss")}, header=[n for n, _, _ in columns])
+        "Price paid", "CPG value", "Sale price", "Profit / loss", "Toner premium", "Holder premium", "Estimated value")}, header=[n for n, _, _ in columns])
 
 
 def _style(ws, widths, money_cols=(), header=()):
@@ -189,13 +193,17 @@ def export_collection(collection_id: int, db: Session = Depends(get_db), user: U
         ("Exported", date.today()),
         ("Coins on hand", s.coin_count),
         ("Total price paid", s.total_price_paid),
-        ("Total CPG value", s.total_cpg_value),
-        (f"Est. wholesale (CPG − {discount}%)", s.est_wholesale_value),
-        ("Coins without a CPG price", s.unpriced_count),
+        ("Total estimated value", s.total_estimated_value),
+        ("  of which CPG", s.total_cpg_value),
+        (f"Est. wholesale (estimated value − {discount}%)", s.est_wholesale_value),
+        ("Coins valued at your own figure", s.custom_count),
+        ("Coins with a toner premium", s.toner_count),
+        ("Coins with a holder premium", s.holder_count),
+        ("Coins without a value yet", s.unpriced_count),
         ("Coins sold from this collection", len(gone)),
     ]:
         ws.append(row)
-    for r in (5, 6, 7):
+    for r in (5, 6, 7, 8):
         ws.cell(r, 2).number_format = MONEY
     ws.cell(3, 2).number_format = "yyyy-mm-dd"
     for r in range(1, ws.max_row + 1):

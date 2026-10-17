@@ -9,11 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..auth import current_user
-from ..config import get_settings
 from ..db import get_db
 from ..models import Coin, Collection, User
 from ..schemas import CoinOut, CollectionWithSummary
-from ..services.coins import CENTS, coin_out, latest_quote, on_hand, sold
+from ..services.coins import CENTS, coin_out, on_hand, sold, value_totals
 from .collections import _type_label, _with_summary
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -23,9 +22,15 @@ class Totals(BaseModel):
     coin_count: int
     collection_count: int
     total_price_paid: Decimal
+    total_estimated_value: Decimal
     total_cpg_value: Decimal
     est_wholesale_value: Decimal
     unpriced_count: int
+    toner_count: int = 0
+    toner_premium_total: Decimal = Decimal(0)
+    holder_count: int = 0
+    holder_premium_total: Decimal = Decimal(0)
+    custom_count: int = 0
 
 
 class SaleCard(BaseModel):
@@ -51,15 +56,7 @@ def _coins(user: User):
 def dashboard(db: Session = Depends(get_db), user: User = Depends(current_user)):
     held = db.scalars(on_hand(_coins(user))).all()
     paid = sum((c.price_paid or Decimal(0) for c in held), Decimal(0))
-    cpg = Decimal(0)
-    unpriced = 0
-    for c in held:
-        q = latest_quote(c)
-        if q is None or q.value is None:
-            unpriced += 1
-        else:
-            cpg += q.value
-    discount = Decimal(str(get_settings().wholesale_discount))
+    values = value_totals(held)
 
     cols = db.scalars(select(Collection).where(Collection.user_id == user.id)).all()
     # Most recently opened first; never-opened ones after, newest first.
@@ -74,9 +71,7 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(current_user))
             coin_count=len(held),
             collection_count=len(cols),
             total_price_paid=paid.quantize(CENTS),
-            total_cpg_value=cpg.quantize(CENTS),
-            est_wholesale_value=(cpg * (1 - discount)).quantize(CENTS),
-            unpriced_count=unpriced,
+            **values,
         ),
         recent_collections=[_with_summary(db, c) for c in cols[:20]],
         recent_sales=[

@@ -86,9 +86,15 @@ class CollectionRename(BaseModel):
 class CollectionSummary(BaseModel):
     coin_count: int
     total_price_paid: Decimal
-    total_cpg_value: Decimal
-    est_wholesale_value: Decimal
-    unpriced_count: int
+    total_estimated_value: Decimal  # what totals use: CPG (+ toner premiums) or the owner's own values
+    total_cpg_value: Decimal  # CPG part only (coins valued from CPG)
+    est_wholesale_value: Decimal  # estimated value - wholesale discount
+    unpriced_count: int  # coins with no estimated value yet
+    toner_count: int = 0  # coins whose value includes a toner premium
+    toner_premium_total: Decimal = Decimal(0)
+    holder_count: int = 0  # coins whose value includes a holder premium
+    holder_premium_total: Decimal = Decimal(0)
+    custom_count: int = 0  # coins valued at the owner's own figure
 
 
 class CollectionOut(ORM):
@@ -211,6 +217,11 @@ class CoinOut(CoinFields, ORM):
     created_at: datetime
     updated_at: datetime
     latest_cpg: PriceQuoteOut | None = None
+    value_source: str = "cpg"
+    custom_value: Decimal | None = None
+    toner_premium: Decimal | None = None
+    holder_premium: Decimal | None = None
+    value_estimate: Decimal | None = None  # what totals use for this coin
     latest_greysheet: PriceQuoteOut | None = None
     photo_count: int = 0
     thumbnail_url: str | None = None
@@ -248,6 +259,13 @@ class CoinDetail(CoinOut):
     photos: list[PhotoOut]
     price_quotes: list[PriceQuoteOut]
     collection_name: str
+
+
+class ValuationIn(BaseModel):
+    source: Literal["cpg", "custom"] = "cpg"
+    custom_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    toner_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)  # cpg only
+    holder_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)  # cpg only
 
 
 class ManualQuoteIn(BaseModel):

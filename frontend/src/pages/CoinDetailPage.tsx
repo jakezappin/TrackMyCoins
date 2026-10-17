@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type CoinDetail } from "../api";
 import { useApp } from "../App";
 import CoinPlaceholder from "../components/CoinPlaceholder";
+import EstimatedValueCard from "../components/EstimatedValueCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
 import {
   coinPath,
@@ -17,6 +18,14 @@ import {
   soldPath,
   toningLabel,
 } from "../format";
+
+const SOURCE_LABEL: Record<string, string> = {
+  CPG: "CPG",
+  PCGS: "PCGS Guide",
+  PREMIUM: "CPG + premiums",
+  CUSTOM: "Your value",
+  GREYSHEET: "Greysheet",
+};
 
 export default function CoinDetailPage() {
   const inv = useParams().inv ?? "";
@@ -247,6 +256,8 @@ export default function CoinDetailPage() {
             {coin.notes && <p className="notes">{coin.notes}</p>}
           </section>
 
+          <EstimatedValueCard coin={coin} onChange={update} />
+
           <section className="card">
             <div className="section-head">
               <h2>CPG value</h2>
@@ -288,7 +299,7 @@ export default function CoinDetailPage() {
                   {coin.price_quotes.map((q) => (
                     <tr key={q.id}>
                       <td>{shortDate(q.fetched_at)}</td>
-                      <td>{q.source}</td>
+                      <td title={q.description ?? undefined}>{SOURCE_LABEL[q.source] ?? q.source}</td>
                       <td>{q.grade_used ?? "—"}</td>
                       <td className="num">{money(q.value)}</td>
                       <td>

@@ -6,6 +6,8 @@ import CoinPlaceholder from "../components/CoinPlaceholder";
 import HScroll from "../components/HScroll";
 import NewCollectionDialog from "../components/NewCollectionDialog";
 import QuickSearch from "../components/QuickSearch";
+import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
+import { ValueNote } from "../components/SummaryCards";
 import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, metalFor, money, shortDate, soldPath } from "../format";
 
 function timeAgo(iso: string | null): string {
@@ -31,6 +33,7 @@ export default function DashboardPage() {
   useEffect(() => {
     api.dashboard().then(setData).catch((e) => setError(e.message));
   }, [collections]);
+  const { refresh } = useApp();
 
   if (error) return <div className="page error">{error}</div>;
   if (!data) return <div className="page muted">Loading…</div>;
@@ -48,11 +51,15 @@ export default function DashboardPage() {
             {t.collection_count === 1 ? "" : "s"}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setCreating(true)}>
-          + New collection
-        </button>
+        <div className="row">
+          <RefreshPrices collectionId={null} coinCount={t.coin_count} onDone={refresh} />
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            + New collection
+          </button>
+        </div>
       </div>
 
+      <RefreshSlot />
       <QuickSearch />
 
       {/* Row 1: totals across every collection */}
@@ -65,18 +72,14 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="card stat">
-          <div className="stat-label">Total Collection CPG Value</div>
-          <div className="stat-value">{money(t.total_cpg_value)}</div>
-          <div className={`stat-note ${t.unpriced_count ? "warn" : ""}`}>
-            {t.unpriced_count
-              ? `${t.unpriced_count} coin${t.unpriced_count === 1 ? "" : "s"} without a CPG price`
-              : "All coins priced"}
-          </div>
+          <div className="stat-label">Total Collection Estimated Value</div>
+          <div className="stat-value">{money(t.total_estimated_value)}</div>
+          <ValueNote summary={t} />
         </div>
         <div className="card stat">
           <div className="stat-label">Total Collection Wholesale Value</div>
           <div className="stat-value">{money(t.est_wholesale_value)}</div>
-          <div className="stat-note">CPG − 10%</div>
+          <div className="stat-note">Estimated value − 10%</div>
         </div>
       </div>
 
@@ -107,8 +110,8 @@ export default function DashboardPage() {
                     <dd>{money(c.summary.total_price_paid)}</dd>
                   </div>
                   <div>
-                    <dt>CPG</dt>
-                    <dd>{money(c.summary.total_cpg_value)}</dd>
+                    <dt>Value</dt>
+                    <dd>{money(c.summary.total_estimated_value)}</dd>
                   </div>
                   <div>
                     <dt>Wholesale</dt>

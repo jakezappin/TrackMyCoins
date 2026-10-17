@@ -2067,3 +2067,71 @@ table {
     display: none;
   }
 }
+
+/* ---- Refresh prices ---- */
+.refresh-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-basis: 100%;
+}
+.refresh-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.refresh-stats {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.refresh-log {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow-y: auto;
+  color: var(--muted);
+}
+.value-form {
+  margin-top: 10px;
+  gap: 10px;
+}
+.value-form .seg.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.tight-stack {
+  gap: 8px;
+}
+
+.value-tag {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.premium-boxes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.premium-box {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.premium-box.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+@media (max-width: 520px) {
+  .premium-boxes {
+    grid-template-columns: 1fr;
+  }
+}

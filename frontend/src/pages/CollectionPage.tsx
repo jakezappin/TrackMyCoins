@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type Coin, type Collection } from "../api";
 import { useApp } from "../App";
 import CoinTable from "../components/CoinTable";
+import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import SummaryCards from "../components/SummaryCards";
 import { collectionPath } from "../format";
 
@@ -16,11 +17,8 @@ export default function CollectionPage() {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
 
-  useEffect(() => {
-    setCollection(null);
-    setCoins(null);
-    setError(null);
-    api
+  const load = useCallback(() => {
+    return api
       .collectionByNumber(typeSlug, Number(number))
       .then(async (c) => {
         setCollection(c);
@@ -29,6 +27,19 @@ export default function CollectionPage() {
       })
       .catch((e) => setError(e.message));
   }, [typeSlug, number]);
+
+  useEffect(() => {
+    setCollection(null);
+    setCoins(null);
+    setError(null);
+    load();
+  }, [load]);
+
+  // After a price refresh: reload this page's totals and the sidebar/dashboard data.
+  const reload = useCallback(() => {
+    load();
+    refresh();
+  }, [load, refresh]);
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
@@ -82,6 +93,7 @@ export default function CollectionPage() {
               </button>
             </div>
           </details>
+          <RefreshPrices collectionId={collection.id} coinCount={collection.summary.coin_count} onDone={reload} />
           <Link className="btn" to={`${collectionPath(collection)}/status`}>
             Collection Status
           </Link>
@@ -94,6 +106,7 @@ export default function CollectionPage() {
         </div>
       </div>
 
+      <RefreshSlot />
       <SummaryCards summary={collection.summary} />
       <CoinTable coins={coins} mode="collection" />
     </div>

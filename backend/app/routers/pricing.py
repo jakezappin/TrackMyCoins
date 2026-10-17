@@ -1,6 +1,3 @@
-from datetime import datetime, timezone
-from decimal import Decimal
-
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -8,10 +5,9 @@ from sqlalchemy.orm import Session
 from ..auth import current_user
 from ..db import get_db
 from ..models import PriceQuote, User
-from ..schemas import CoinDetail, LookupResult, ManualQuoteIn
-from ..services import catalog, greysheet, lookups
-from ..services.lookups import pcgs
-from ..services.coins import CPG, GREYSHEET, PCGS_GUIDE, coin_detail, duplicate_info, find_duplicate_cert
+from ..schemas import CoinDetail, LookupResult, ManualQuoteIn, ValuationIn
+from ..services import greysheet, lookups, price_refresh
+from ..services.coins import CUSTOM, coin_detail, duplicate_info, find_duplicate_cert, latest_quote
 from .coins import get_owned_coin
 
 router = APIRouter(prefix="/api", tags=["pricing", "lookups"])
@@ -50,21 +46,11 @@ def get_cpg_price(inventory_number: str, db: Session = Depends(get_db), user: Us
     """Fetch the current CPG value from Greysheet and add it to the coin's price history."""
     coin = get_owned_coin(db, user, inventory_number)
     try:
-        greysheet.require_grade(coin)
-        gsid = None
-        if not coin.pcgs_number:
-            # Find the PCGS number from date/mint/designation via the Greysheet catalog.
-            match = catalog.resolve_for_coin(db, coin)
-            gsid = None if match.pcgs_number else match.gsid
-        q = greysheet.fetch_cpg(coin, gsid=gsid)
+        price_refresh.refresh_cpg(db, coin)
     except greysheet.PricingError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Greysheet error: {e}")
-    grey = q.pop("greysheet_value")
-    db.add(PriceQuote(coin_id=coin.id, source=CPG, **q))
-    if grey is not None:
-        db.add(PriceQuote(coin_id=coin.id, source=GREYSHEET, **{**q, "value": grey}))
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)
@@ -72,36 +58,42 @@ def get_cpg_price(inventory_number: str, db: Session = Depends(get_db), user: Us
 
 @router.post("/coins/{inventory_number}/pcgs", response_model=CoinDetail)
 def get_pcgs_market(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """PCGS Price Guide value, population and the last 10 auction sales for the coin's PCGS # and grade.
-
-    Uses 2 of the PCGS API's 1,000 daily calls.
-    """
+    """PCGS Price Guide value, population and the last 10 auction sales for the coin's PCGS # and grade."""
     coin = get_owned_coin(db, user, inventory_number)
     try:
-        greysheet.require_grade(coin)
-        if not coin.pcgs_number:
-            catalog.resolve_for_coin(db, coin)  # find it from date/mint/designation
-        if not coin.pcgs_number:
-            raise greysheet.PricingError("This coin needs a PCGS number. Use Find on the edit page.")
-        data = pcgs.market(coin.pcgs_number, coin.grade, coin.grade_plus)
+        price_refresh.refresh_pcgs(db, coin)
     except (greysheet.PricingError, lookups.LookupError) as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"PCGS error: {e}")
+    db.commit()
+    db.refresh(coin)
+    return coin_detail(coin)
 
-    now = datetime.now(timezone.utc)
-    coin.pcgs_market = {**data, "fetched_at": now.isoformat()}
-    if data["price_guide"] is not None:
-        db.add(
-            PriceQuote(
-                coin_id=coin.id,
-                source=PCGS_GUIDE,
-                value=Decimal(data["price_guide"]),
-                grade_used=data["grade"],
-                description=f"PCGS Price Guide #{data['pcgs_number']}",
-                raw={"population": data["population"], "pop_higher": data["pop_higher"]},
-            )
-        )
+
+@router.put("/coins/{inventory_number}/valuation", response_model=CoinDetail)
+def set_valuation(
+    inventory_number: str, body: ValuationIn, db: Session = Depends(get_db), user: User = Depends(current_user)
+):
+    """Choose how the coin's estimated value is set: from CPG (plus optional toner and holder premiums) or your own
+    value. Each change is recorded in the price history.
+    """
+    coin = get_owned_coin(db, user, inventory_number)
+    if body.source == "custom":
+        if body.custom_value is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter your estimated value")
+        coin.value_source, coin.custom_value = "custom", body.custom_value
+        db.add(PriceQuote(coin_id=coin.id, source=CUSTOM, value=body.custom_value,
+                          grade_used=f"{coin.grade_prefix or ''}{coin.grade or ''}", description="Your own estimate"))
+    else:
+        coin.value_source = "cpg"
+        coin.toner_premium = body.toner_premium or None
+        coin.holder_premium = body.holder_premium or None
+        if coin.toner_premium or coin.holder_premium:
+            cpg = latest_quote(coin)
+            if cpg is None or cpg.value is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Get a CPG price first; premiums are added on top of CPG.")
+            db.add(price_refresh.premium_quote(coin, cpg.value))
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)

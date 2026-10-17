@@ -34,9 +34,15 @@ export interface CoinType {
 export interface Summary {
   coin_count: number;
   total_price_paid: string;
-  total_cpg_value: string;
+  total_estimated_value: string; // CPG (+ toner premiums) or your own values
+  total_cpg_value: string; // CPG part only
   est_wholesale_value: string;
   unpriced_count: number;
+  toner_count: number;
+  toner_premium_total: string;
+  holder_count: number;
+  holder_premium_total: string;
+  custom_count: number;
 }
 
 export interface Collection {
@@ -114,6 +120,11 @@ export interface Coin extends CoinFields {
   created_at: string;
   updated_at: string;
   latest_cpg: PriceQuote | null;
+  value_source: "cpg" | "custom";
+  custom_value: string | null;
+  toner_premium: string | null;
+  holder_premium: string | null;
+  value_estimate: string | null;
   latest_greysheet: PriceQuote | null;
   photo_count: number;
   thumbnail_url: string | null;
@@ -219,14 +230,7 @@ export interface DuplicateCert {
 }
 
 export interface DashboardData {
-  totals: {
-    coin_count: number;
-    collection_count: number;
-    total_price_paid: string;
-    total_cpg_value: string;
-    est_wholesale_value: string;
-    unpriced_count: number;
-  };
+  totals: Summary & { collection_count: number };
   recent_collections: Collection[];
   recent_sales: { coin: Coin; collection_name: string; collection_type_label: string; profit: string | null }[];
 }
@@ -235,6 +239,24 @@ export interface SearchHit {
   coin: Coin;
   type_name: string;
   collection_name: string;
+}
+
+export interface RefreshJob {
+  id: string;
+  kind: string;
+  scope: string;
+  include_pcgs: boolean;
+  total: number;
+  done: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  status: "running" | "finished" | "failed";
+  current: string | null;
+  messages: string[];
+  pcgs_stopped: string | null;
+  started_at: string;
+  finished_at: string | null;
 }
 
 export class ApiError extends Error {
@@ -301,6 +323,10 @@ export const api = {
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
   dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
+  refreshPrices: (collection_id: number | null, include_pcgs: boolean) =>
+    request<RefreshJob>("POST", "/api/refresh-prices", { collection_id, include_pcgs }),
+  job: (id: string) => request<RefreshJob>("GET", `/api/jobs/${id}`),
+  currentJob: () => request<RefreshJob | null>("GET", "/api/jobs/current"),
   publicStats: () => request<{ series: number; collection_types: number; categories: number }>("GET", "/api/public/stats"),
   searchCoins: (q: string, limit = 8) =>
     request<SearchHit[]>("GET", `/api/search/coins?q=${encodeURIComponent(q)}&limit=${limit}`),
@@ -362,6 +388,11 @@ export const api = {
       `/api/coin-types/${coinTypeId}/catalog/sync`,
     ),
   getPcgs: (inv: string) => request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/pcgs`),
+  setValuation: (
+    inv: string,
+    b: { source: "cpg" | "custom"; custom_value?: string | null; toner_premium?: string | null; holder_premium?: string | null },
+  ) =>
+    request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/valuation`, b),
   getCpg: (inv: string) => request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/cpg`),
   addQuote: (inv: string, value: string, source = "CPG", description?: string) =>
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/price-quotes`, { value, source, description }),
