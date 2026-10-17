@@ -5,6 +5,7 @@ import { useApp } from "../App";
 import CoinTable from "../components/CoinTable";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import SummaryCards from "../components/SummaryCards";
+import ValueHistoryChart from "../components/ValueHistoryChart";
 import { collectionPath } from "../format";
 
 export default function CollectionPage() {
@@ -108,6 +109,7 @@ export default function CollectionPage() {
 
       <RefreshSlot />
       <SummaryCards summary={collection.summary} />
+      <ValueHistoryChart collectionId={collection.id} refreshKey={collection.summary} />
       <CoinTable coins={coins} mode="collection" />
     </div>
   );

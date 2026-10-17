@@ -259,6 +259,14 @@ export interface RefreshJob {
   finished_at: string | null;
 }
 
+export interface HistoryPoint {
+  date: string;
+  coin_count: number;
+  priced_count: number;
+  cost: string;
+  value: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -323,6 +331,8 @@ export const api = {
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
   dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
+  history: (collectionId: number | null) =>
+    request<HistoryPoint[]>("GET", `/api/history${collectionId == null ? "" : `?collection_id=${collectionId}`}`),
   refreshPrices: (collection_id: number | null, include_pcgs: boolean) =>
     request<RefreshJob>("POST", "/api/refresh-prices", { collection_id, include_pcgs }),
   job: (id: string) => request<RefreshJob>("GET", `/api/jobs/${id}`),

@@ -13,7 +13,8 @@ from ..db import get_db
 from ..models import Coin, Collection, User
 from ..schemas import CoinOut, CollectionWithSummary
 from ..services.coins import CENTS, coin_out, on_hand, sold, value_totals
-from .collections import _type_label, _with_summary
+from ..services.history import value_history
+from .collections import _type_label, _with_summary, get_owned_collection
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -84,6 +85,19 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(current_user))
             for c in gone[:20]
         ],
     )
+
+
+# ---- Value over time ----------------------------------------------------------------------
+
+
+@router.get("/history")
+def history(
+    collection_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)
+):
+    """Cost and estimated value over time, for one collection or everything."""
+    if collection_id is not None:
+        get_owned_collection(db, user, collection_id)
+    return value_history(db, user.id, collection_id)
 
 
 # ---- Quick search -------------------------------------------------------------------------

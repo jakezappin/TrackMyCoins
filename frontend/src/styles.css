@@ -2135,3 +2135,90 @@ table {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Value over time (validated pair: blue/gold, light and dark) ---- */
+:root {
+  --series-value: #2f6fb5;
+  --series-cost: #b8892b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --series-value: #3f7ccc;
+    --series-cost: #b58628;
+  }
+}
+.history-plot {
+  position: relative;
+}
+.history-plot svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.history-plot .grid {
+  stroke: var(--border);
+}
+.history-plot .axis {
+  font-size: 11px;
+  fill: var(--muted);
+}
+.history-plot .line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.history-plot .line.value {
+  stroke: var(--series-value);
+}
+.history-plot .line.cost {
+  stroke: var(--series-cost);
+}
+.history-plot .dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.history-plot .dot.value {
+  fill: var(--series-value);
+}
+.history-plot .dot.cost {
+  fill: var(--series-cost);
+}
+.history-plot .crosshair {
+  stroke: var(--muted);
+  stroke-dasharray: 3 3;
+}
+.history-plot .end-label {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--text);
+}
+.history-tip {
+  top: 6px;
+}
+.history-tip.right {
+  transform: translateX(12px);
+}
+.history-tip.left {
+  transform: translateX(calc(-100% - 12px));
+}
+.history-legend {
+  display: flex;
+  gap: 14px;
+  color: var(--muted);
+}
+.history-legend .lg::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  border-top: 2px solid;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.history-legend .lg.value::before {
+  border-color: var(--series-value);
+}
+.history-legend .lg.cost::before {
+  border-color: var(--series-cost);
+}

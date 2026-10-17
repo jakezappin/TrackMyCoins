@@ -6,6 +6,7 @@ import CoinPlaceholder from "../components/CoinPlaceholder";
 import HScroll from "../components/HScroll";
 import NewCollectionDialog from "../components/NewCollectionDialog";
 import QuickSearch from "../components/QuickSearch";
+import ValueHistoryChart from "../components/ValueHistoryChart";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import { ValueNote } from "../components/SummaryCards";
 import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, metalFor, money, shortDate, soldPath } from "../format";
@@ -82,6 +83,8 @@ export default function DashboardPage() {
           <div className="stat-note">Estimated value − 10%</div>
         </div>
       </div>
+
+      <ValueHistoryChart collectionId={null} refreshKey={data.totals} />
 
       {/* Row 2: recently opened collections */}
       <section className="section">
