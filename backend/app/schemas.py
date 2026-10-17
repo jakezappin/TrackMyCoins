@@ -22,6 +22,7 @@ class SignupIn(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=10, max_length=200)
+    invite_code: str | None = None
 
 
 class LoginIn(BaseModel):

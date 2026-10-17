@@ -1,17 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import hmac
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import clear_session, current_user, hash_password, set_session, verify_password
+from ..config import get_settings
 from ..db import get_db
 from ..models import User
 from ..schemas import LoginIn, PasswordChange, ProfileUpdate, SignupIn, UserOut
+from ..services.ratelimit import FailureLimiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+settings = get_settings()
+login_limiter = FailureLimiter(settings.login_max_failures, settings.login_window_seconds)
+
+
+def _client_ip(request: Request) -> str:
+    # Behind Fly's proxy, uvicorn --proxy-headers puts the real client address here.
+    return request.client.host if request.client else "unknown"
+
+
+@router.get("/config")
+def auth_config():
+    """What the sign-up page needs to know."""
+    return {"signup": settings.signup_mode}
 
 
 @router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def signup(body: SignupIn, response: Response, db: Session = Depends(get_db)):
+    if settings.signup_mode == "closed":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "New accounts aren't being accepted right now")
+    if settings.signup_mode == "invite":
+        given = (body.invite_code or "").strip()
+        if not settings.invite_code or not hmac.compare_digest(given, settings.invite_code):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "That invite code isn't valid")
     email = body.email.lower()
     if db.scalar(select(User).where(func.lower(User.email) == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with that email already exists")
@@ -28,10 +51,15 @@ def signup(body: SignupIn, response: Response, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=UserOut)
-def login(body: LoginIn, response: Response, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
+    keys = (f"email:{body.email.lower()}", f"ip:{_client_ip(request)}")
+    if login_limiter.blocked(*keys):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed attempts. Try again in 15 minutes.")
     user = db.scalar(select(User).where(func.lower(User.email) == body.email.lower()))
     if user is None or not verify_password(user.password_hash, body.password):
+        login_limiter.fail(*keys)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
+    login_limiter.reset(f"email:{body.email.lower()}")
     set_session(response, user)
     return user
 

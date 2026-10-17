@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../App";
@@ -71,7 +71,11 @@ export function LoginPage() {
 export function SignupPage() {
   const { setUser } = useApp();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: "", first_name: "", last_name: "", password: "", confirm: "" });
+  const [form, setForm] = useState({ email: "", first_name: "", last_name: "", password: "", confirm: "", invite_code: "" });
+  const [mode, setMode] = useState<"open" | "invite" | "closed">("open");
+  useEffect(() => {
+    api.authConfig().then((c) => setMode(c.signup)).catch(() => undefined);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -86,8 +90,8 @@ export function SignupPage() {
     setBusy(true);
     setError(null);
     try {
-      const { confirm: _confirm, ...body } = form;
-      setUser(await api.signup(body));
+      const { confirm: _confirm, invite_code, ...body } = form;
+      setUser(await api.signup(mode === "invite" ? { ...body, invite_code } : body));
       navigate("/", { replace: true });
     } catch (err) {
       setError((err as Error).message);
@@ -95,9 +99,25 @@ export function SignupPage() {
     }
   }
 
+  if (mode === "closed")
+    return (
+      <AuthCard title="Create your account">
+        <p className="muted">New accounts aren't being accepted right now.</p>
+        <p className="muted small">
+          Already have an account? <Link to="/login">Log in</Link>
+        </p>
+      </AuthCard>
+    );
+
   return (
     <AuthCard title="Create your account">
       <form onSubmit={submit} className="stack">
+        {mode === "invite" && (
+          <label className="field">
+            <span>Invite code</span>
+            <input value={form.invite_code} onChange={set("invite_code")} required autoComplete="off" />
+          </label>
+        )}
         <div className="grid-2">
           <label className="field">
             <span>First name</span>

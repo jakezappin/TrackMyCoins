@@ -1,0 +1,32 @@
+# Fly.io configuration. Deploy with: fly deploy
+app = "trackmycoins"
+primary_region = "iad"  # Ashburn, Virginia. List regions with: fly platform regions
+
+[build]
+
+[env]
+  SIGNUP_MODE = "invite"  # registering needs INVITE_CODE (set with: fly secrets set INVITE_CODE=...)
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Sleep when idle to save money; wakes on the next visit (a second or two).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+# SQLite database and photos. One machine only: SQLite lives on this single volume.
+[[mounts]]
+  source = "coin_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -262,7 +262,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   me: () => request<User>("GET", "/api/auth/me"),
   login: (email: string, password: string) => request<User>("POST", "/api/auth/login", { email, password }),
-  signup: (b: { email: string; first_name: string; last_name: string; password: string }) =>
+  authConfig: () => request<{ signup: "open" | "invite" | "closed" }>("GET", "/api/auth/config"),
+  signup: (b: { email: string; first_name: string; last_name: string; password: string; invite_code?: string }) =>
     request<User>("POST", "/api/auth/signup", b),
   logout: () => request<void>("POST", "/api/auth/logout"),
   updateProfile: (b: { email: string; first_name: string; last_name: string; current_password?: string }) =>

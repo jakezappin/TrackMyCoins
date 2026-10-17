@@ -8,6 +8,7 @@ _tmp = Path(tempfile.mkdtemp(prefix="coinapp-test-"))
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp / 'test.db'}"
 os.environ["PHOTO_DIR"] = str(_tmp / "photos")
 os.environ["SESSION_SECRET"] = "test-secret"
+os.environ["SIGNUP_MODE"] = "open"  # most tests sign up freely; test_deploy covers invite mode
 os.environ["PCGS_API_TOKEN"] = ""
 os.environ["GREYSHEET_API_KEY"] = ""
 os.environ["GREYSHEET_API_TOKEN"] = ""

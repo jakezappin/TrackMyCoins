@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from .config import get_settings
@@ -50,3 +52,19 @@ for r in (auth, catalog, collections, coins, photos, pricing, reports):
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+# In production the built React app is served from here too (one server, one origin).
+_dist = get_settings().frontend_dist
+if (_dist / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=_dist / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str):
+        if path.startswith("api/"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        file = (_dist / path).resolve()
+        if path and file.is_file() and file.is_relative_to(_dist.resolve()):
+            return FileResponse(file)
+        # Client-side routes (/coins/MOR-00005, /collections/...) all load the app.
+        return FileResponse(_dist / "index.html", headers={"Cache-Control": "no-cache"})
