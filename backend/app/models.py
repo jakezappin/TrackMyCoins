@@ -108,6 +108,8 @@ class Collection(Base):
     number: Mapped[int] = mapped_column(Integer)
     name: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # When the owner last opened it (orders "Recent collections" on the dashboard).
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     coin_type: Mapped[CoinType] = relationship()
     coins: Mapped[list["Coin"]] = relationship(back_populates="collection")

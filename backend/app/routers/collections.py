@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -44,6 +46,7 @@ def _with_summary(db: Session, col: Collection) -> CollectionWithSummary:
         collection_type_slug=collection_type_slug(col.coin_type.slug, col.finish),
         collection_type_label=_type_label(col.coin_type, col.finish),
         created_at=col.created_at,
+        last_viewed_at=col.last_viewed_at,
         summary=collection_summary(db, col.id),
     )
 
@@ -156,6 +159,8 @@ def get_collection_by_number(
     )
     if col is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Collection not found")
+    col.last_viewed_at = datetime.now(timezone.utc)
+    db.commit()
     return _with_summary(db, col)
 
 

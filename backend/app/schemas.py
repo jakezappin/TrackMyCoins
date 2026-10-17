@@ -98,6 +98,7 @@ class CollectionOut(ORM):
     collection_type_slug: str  # URL segment, e.g. "kennedy-half-dollars-proof"
     collection_type_label: str  # e.g. "Kennedy Half Dollars – Proof"
     created_at: datetime
+    last_viewed_at: datetime | None = None
 
 
 class CollectionWithSummary(CollectionOut):

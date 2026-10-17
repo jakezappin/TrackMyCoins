@@ -46,6 +46,7 @@ export interface Collection {
   collection_type_slug: string;
   collection_type_label: string;
   created_at: string;
+  last_viewed_at: string | null;
   summary: Summary;
 }
 
@@ -214,6 +215,25 @@ export interface DuplicateCert {
   collection_number: number;
 }
 
+export interface DashboardData {
+  totals: {
+    coin_count: number;
+    collection_count: number;
+    total_price_paid: string;
+    total_cpg_value: string;
+    est_wholesale_value: string;
+    unpriced_count: number;
+  };
+  recent_collections: Collection[];
+  recent_sales: { coin: Coin; collection_name: string; collection_type_label: string; profit: string | null }[];
+}
+
+export interface SearchHit {
+  coin: Coin;
+  type_name: string;
+  collection_name: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -277,6 +297,9 @@ export const api = {
   },
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
+  dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
+  searchCoins: (q: string, limit = 8) =>
+    request<SearchHit[]>("GET", `/api/search/coins?q=${encodeURIComponent(q)}&limit=${limit}`),
   soldCoins: (typeSlug: string) => request<Coin[]>("GET", `/api/coin-types/${encodeURIComponent(typeSlug)}/sold`),
 
   collections: () => request<Collection[]>("GET", "/api/collections"),
