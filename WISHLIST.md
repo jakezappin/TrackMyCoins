@@ -34,12 +34,12 @@ value-over-time chart from real history instead of the dashed backfill.
 - Plan: reset tokens (hashed, 1-hour expiry), email via Resend, rate-limited request endpoint.
 - Needs a Resend account and DNS records for trackmycoins.app on Cloudflare.
 
-### Off-site backups
+### Off-site backups (more important now that others use the site)
+- Today: Fly keeps 5 daily snapshots of the volume, but they live with Fly, not off-site.
 - Plan: nightly SQLite backup + photos to Cloudflare R2 (S3 API), run lazily since the Fly machine auto-stops.
 - Needs an R2 bucket and access keys. R2 is also a cheaper home for photos than the Fly volume.
 
 ## Ideas
 
 - **Single-use invite codes** with a list of who joined with which code (today one shared code works for everyone).
-- **Coin list as cards on phones** instead of a sideways-scrolling table.
 - **PCGS auction chart** text is small on phones (the value chart was fixed by drawing at screen width; same fix).

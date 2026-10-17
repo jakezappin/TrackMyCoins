@@ -22,6 +22,7 @@ import {
   shortDate,
   slabLabel,
   soldPath,
+  parseMoney,
   toningLabel,
 } from "../format";
 
@@ -43,6 +44,9 @@ export default function CoinDetailPage() {
   const [cpgBusy, setCpgBusy] = useState(false);
   const [cpgError, setCpgError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [pcgsBusy, setPcgsBusy] = useState(false);
   const [pcgsError, setPcgsError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -80,52 +84,82 @@ export default function CoinDetailPage() {
     }
   }
 
+  /** Run an action, showing its error instead of failing silently; one at a time (no double taps). */
+  async function act(label: string, fn: () => Promise<void>) {
+    // A ref, not state: two taps in the same instant both see state as "not busy" until the next render.
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusyAction(label);
+    setActionError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setActionError(`${label} failed: ${(err as Error).message}`);
+    } finally {
+      busyRef.current = false;
+      setBusyAction(null);
+    }
+  }
+
   async function addManual(e: React.FormEvent) {
     e.preventDefault();
-    if (!manual) return;
-    try {
-      update(await api.addQuote(inv, manual));
+    const r = parseMoney(manual);
+    if ("error" in r || r.value === null) {
+      setCpgError("error" in r ? `That value ${r.error}.` : "Enter a value.");
+      return;
+    }
+    setCpgError(null);
+    await act("Adding the price", async () => {
+      update(await api.addQuote(inv, r.value!));
       setManual("");
-    } catch (err) {
-      setCpgError((err as Error).message);
-    }
+    });
   }
 
-  async function removeQuote(qid: number) {
+  function removeQuote(qid: number) {
     if (!confirm("Remove this price from the history?")) return;
-    await api.deleteQuote(qid);
-    update(await api.coin(inv));
+    return act("Removing the price", async () => {
+      await api.deleteQuote(qid);
+      update(await api.coin(inv));
+    });
   }
 
-  async function upload(files: FileList | File[] | null) {
+  function upload(files: FileList | File[] | null) {
     if (!files?.length) return;
-    try {
-      update(await api.uploadPhotos(inv, Array.from(files)));
-    } catch (e) {
-      alert((e as Error).message);
-    }
-    if (fileRef.current) fileRef.current.value = "";
+    const list = Array.from(files);
+    return act(`Uploading ${list.length} photo${list.length === 1 ? "" : "s"}`, async () => {
+      try {
+        update(await api.uploadPhotos(inv, list));
+      } finally {
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    });
   }
 
-  async function removePhoto(pid: number) {
+  function removePhoto(pid: number) {
     if (!confirm("Delete this photo?")) return;
-    await api.deletePhoto(pid);
-    setActive(0);
-    update(await api.coin(inv));
+    return act("Deleting the photo", async () => {
+      await api.deletePhoto(pid);
+      setActive(0);
+      update(await api.coin(inv));
+    });
   }
 
-  async function makePrimary(pid: number) {
+  function makePrimary(pid: number) {
     if (!coin) return;
     const order = [pid, ...coin.photos.map((p) => p.id).filter((x) => x !== pid)];
-    update(await api.reorderPhotos(inv, order));
-    setActive(0);
+    return act("Making it the main photo", async () => {
+      update(await api.reorderPhotos(inv, order));
+      setActive(0);
+    });
   }
 
-  async function removeCoin() {
+  function removeCoin() {
     if (!coin || !confirm(`Delete ${coin.inventory_number} (${dateMint(coin)} ${gradeLabel(coin)})? This can't be undone.`)) return;
-    await api.deleteCoin(inv);
-    await refresh();
-    navigate(collectionPath({ collection_type_slug: coin.collection_type_slug, number: coin.collection_number }));
+    return act("Deleting the coin", async () => {
+      await api.deleteCoin(inv);
+      await refresh();
+      navigate(collectionPath({ collection_type_slug: coin.collection_type_slug, number: coin.collection_number }));
+    });
   }
 
   if (error) return <div className="page error">{error}</div>;
@@ -150,6 +184,16 @@ export default function CoinDetailPage() {
           ← Back to {coin.is_sold ? "Sold" : coin.collection_name}
         </Link>
       </div>
+      {(actionError || busyAction) && (
+        <p className={actionError ? "error banner" : "muted banner"} role={actionError ? "alert" : "status"}>
+          {actionError ?? `${busyAction}…`}
+          {actionError && (
+            <button type="button" className="link-btn" onClick={() => setActionError(null)}>
+              Dismiss
+            </button>
+          )}
+        </p>
+      )}
       <div className="page-head">
         <div>
           <h1>
@@ -163,7 +207,7 @@ export default function CoinDetailPage() {
           </p>
         </div>
         <div className="row">
-          <button className="btn danger-outline" onClick={removeCoin}>
+          <button className="btn danger-outline" onClick={removeCoin} disabled={busyAction !== null}>
             Delete
           </button>
           <Link className="btn btn-primary" to={`${coinPath(inv)}/edit`}>
@@ -181,11 +225,11 @@ export default function CoinDetailPage() {
               <img src={photo.url} alt="" />
               <div className="photo-actions">
                 {active !== 0 && (
-                  <button className="btn small" onClick={() => makePrimary(photo.id)}>
+                  <button className="btn small" onClick={() => makePrimary(photo.id)} disabled={busyAction !== null}>
                     Make primary
                   </button>
                 )}
-                <button className="btn small danger-outline" onClick={() => removePhoto(photo.id)}>
+                <button className="btn small danger-outline" onClick={() => removePhoto(photo.id)} disabled={busyAction !== null}>
                   Delete
                 </button>
               </div>
@@ -198,7 +242,7 @@ export default function CoinDetailPage() {
                 date={dateMint(coin)}
                 typeName={coinTypes.find((t) => t.id === coin.coin_type_id)?.name}
               />
-              <button className="btn btn-primary ph-add" onClick={() => fileRef.current?.click()}>
+              <button className="btn btn-primary ph-add" onClick={() => fileRef.current?.click()} disabled={busyAction !== null}>
                 + Add photos
               </button>
             </div>
@@ -210,7 +254,7 @@ export default function CoinDetailPage() {
               </button>
             ))}
             {coin.photos.length > 0 && coin.photos.length < 10 && (
-              <button className="thumb-btn add" onClick={() => fileRef.current?.click()} title="Add photos">
+              <button className="thumb-btn add" onClick={() => fileRef.current?.click()} title="Add photos" aria-label="Add photos" disabled={busyAction !== null}>
                 +
               </button>
             )}
@@ -219,7 +263,12 @@ export default function CoinDetailPage() {
           <div className="photo-foot">
             <span className="muted small">{coin.photos.length} / 10 photos</span>
             {coin.photos.length < 10 && (
-              <PhotoButtons takeLabel="Take photo" chooseLabel="Add photos" onFiles={(fs) => upload(fs)} />
+              <PhotoButtons
+                takeLabel={busyAction?.startsWith("Uploading") ? "Uploading…" : "Take photo"}
+                chooseLabel="Add photos"
+                disabled={busyAction !== null}
+                onFiles={(fs) => upload(fs)}
+              />
             )}
           </div>
           {coin.grading_service === "NGC" && coin.photos.length <= 8 && (
@@ -327,9 +376,16 @@ export default function CoinDetailPage() {
             )}
             {cpgError && <p className="error small">{cpgError}</p>}
             <form className="row tight manual-quote" onSubmit={addManual}>
-              <input type="number" step="0.01" min={0} placeholder="Enter CPG value by hand" value={manual} onChange={(e) => setManual(e.target.value)} />
-              <button className="btn" disabled={!manual}>
-                Add
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="Enter CPG value by hand"
+                aria-label="CPG value entered by hand"
+                value={manual}
+                onChange={(e) => setManual(e.target.value)}
+              />
+              <button className="btn" disabled={!manual || busyAction !== null}>
+                {busyAction === "Adding the price" ? "Adding…" : "Add"}
               </button>
             </form>
 
@@ -352,7 +408,12 @@ export default function CoinDetailPage() {
                       <td>{q.grade_used ?? "—"}</td>
                       <td className="num">{money(q.value)}</td>
                       <td>
-                        <button className="link-btn small" onClick={() => removeQuote(q.id)} aria-label="Remove">
+                        <button
+                          className="link-btn small icon-x"
+                          onClick={() => removeQuote(q.id)}
+                          aria-label={`Remove the ${SOURCE_LABEL[q.source] ?? q.source} price of ${money(q.value)}`}
+                          disabled={busyAction !== null}
+                        >
                           ✕
                         </button>
                       </td>

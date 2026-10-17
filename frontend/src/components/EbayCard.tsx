@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type EbayListings } from "../api";
-import { money } from "../format";
+import { money, safeUrl } from "../format";
 
 const COLLAPSE_KEY = "ebay-card-collapsed";
 
@@ -75,7 +75,7 @@ function EbayListingsCard({ inv }: { inv: string }) {
           <h2>For Sale On eBay Now</h2>
         </button>
         {!collapsed && data?.search_url && (
-          <a className="btn" href={data.search_url} target="_blank" rel="noreferrer">
+          <a className="btn" href={safeUrl(data.search_url)} target="_blank" rel="noreferrer">
             See on eBay ↗
           </a>
         )}
@@ -131,8 +131,8 @@ function EbayListingsCard({ inv }: { inv: string }) {
                   <ul className="ebay-list">
                     {data.items.map((it) => (
                       <li key={it.url ?? it.title}>
-                        <a href={it.url ?? data.search_url} target="_blank" rel="noreferrer" className="ebay-item">
-                          {it.image ? <img src={it.image} alt="" loading="lazy" /> : <span className="ebay-noimg" />}
+                        <a href={safeUrl(it.url) ?? safeUrl(data.search_url)} target="_blank" rel="noreferrer" className="ebay-item">
+                          {safeUrl(it.image) ? <img src={safeUrl(it.image)} alt="" loading="lazy" /> : <span className="ebay-noimg" />}
                           <span className="ebay-title">{it.title}</span>
                           <span className="ebay-price">
                             <strong>{money(it.price)}</strong>

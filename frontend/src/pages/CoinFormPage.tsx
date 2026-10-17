@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useBlocker, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -15,9 +15,7 @@ import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
-import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
-
-const TODAY = new Date().toISOString().slice(0, 10);
+import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money, parseMoney, todayISO } from "../format";
 
 const EMPTY: CoinFields = {
   year: null,
@@ -123,6 +121,30 @@ export default function CoinFormPage() {
   const [cacNote, setCacNote] = useState<string | null>(null);
   const [showPaste, setShowPaste] = useState(false);
   const [labelBusy, setLabelBusy] = useState(false);
+  // Unsaved-changes guard: compare with the form as loaded (or empty, for a new coin).
+  const [baseline, setBaseline] = useState<string | null>(editInv ? null : JSON.stringify(EMPTY));
+  const leaving = useRef(false);
+  const submitting = useRef(false);
+  const dirty = baseline !== null && (JSON.stringify(form) !== baseline || files.length > 0 || importUrls.length > 0);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty && !leaving.current && currentLocation.pathname !== nextLocation.pathname,
+  );
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    if (window.confirm("You have unsaved changes to this coin. Leave without saving?")) blocker.proceed();
+    else blocker.reset();
+  }, [blocker]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      if (leaving.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelReading | null>(null);
   const [dup, setDup] = useState<{ service: string; cert: string; duplicate: DuplicateCert } | null>(null);
@@ -134,6 +156,7 @@ export default function CoinFormPage() {
       .then((c) => {
         const fields = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, c[k as keyof CoinFields]])) as unknown as CoinFields;
         setForm(fields);
+        setBaseline(JSON.stringify(fields));
         setCollectionId(c.collection_id);
         setMemberTypeId(c.coin_type_id);
         setInventoryNumber(c.inventory_number);
@@ -233,6 +256,16 @@ export default function CoinFormPage() {
     value: (form[key] as string | number | null) ?? "",
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       set(key, (e.target.value === "" ? null : e.target.value) as never),
+  });
+  /** A money field: shows what was typed, and tidies "1,250" to "1250.00" on leaving the field. */
+  const money_ = (key: "price_paid" | "sale_price") => ({
+    value: (form[key] as string | null) ?? "",
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(key, (e.target.value === "" ? null : e.target.value) as never),
+    onBlur: () => {
+      const r = parseMoney(form[key]);
+      if ("value" in r) set(key, r.value as never);
+    },
+    "aria-invalid": "error" in parseMoney(form[key]),
   });
   const check = (key: keyof CoinFields) => ({
     checked: Boolean(form[key]),
@@ -375,6 +408,7 @@ export default function CoinFormPage() {
     try {
       await api.deleteCoin(editInv);
       await refresh();
+      leaving.current = true;
       navigate(collection ? collectionPath(collection) : "/dashboard");
     } catch (e) {
       setError((e as Error).message);
@@ -385,6 +419,7 @@ export default function CoinFormPage() {
   function openNgc() {
     if (files.length && !confirm("Photos you've attached here can't come along to NGC and back. Continue and re-add them later?")) return;
     if (!editInv) saveCoinDraft({ form, collectionId, memberTypeId });
+    leaving.current = true; // the draft comes back with us
     window.location.href = ngcCertUrl(form.cert_number, form.grade);
   }
 
@@ -446,17 +481,33 @@ export default function CoinFormPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting.current) return; // a double tap must not create the coin twice
+    setError(null);
     if (!collectionId) {
       setError("Choose a collection (create one from the sidebar first).");
       return;
     }
-    setSaving(true);
-    setError(null);
     if (isTypeSet && !memberTypeId) {
       setError("Choose which series this coin is from.");
       return;
     }
-    const body = { ...form, collection_id: collectionId, coin_type_id: isTypeSet ? memberTypeId : undefined, year: form.year ? Number(form.year) : null, grade: form.grade ? Number(form.grade) : null };
+    const paid = parseMoney(form.price_paid);
+    const sold = parseMoney(form.sale_price);
+    if ("error" in paid || "error" in sold) {
+      setError(["error" in paid && `Price paid ${paid.error}.`, "error" in sold && `Sale price ${sold.error}.`].filter(Boolean).join(" "));
+      return;
+    }
+    submitting.current = true;
+    setSaving(true);
+    const body = {
+      ...form,
+      price_paid: paid.value,
+      sale_price: sold.value,
+      collection_id: collectionId,
+      coin_type_id: isTypeSet ? memberTypeId : undefined,
+      year: form.year ? Number(form.year) : null,
+      grade: form.grade ? Number(form.grade) : null,
+    };
     try {
       let coin = editInv
         ? await api.updateCoin(editInv, body)
@@ -477,6 +528,7 @@ export default function CoinFormPage() {
         }
       }
       await refresh();
+      leaving.current = true;
       navigate(coinPath(coin.inventory_number));
     } catch (err) {
       if (err instanceof ApiError && err.duplicate) {
@@ -484,6 +536,7 @@ export default function CoinFormPage() {
       } else {
         setError((err as Error).message);
       }
+      submitting.current = false;
       setSaving(false);
     }
   }
@@ -950,11 +1003,11 @@ export default function CoinFormPage() {
           <div className="grid-2">
             <label className="field">
               <span>Amount paid</span>
-              <input type="number" step="0.01" min={0} {...text("price_paid")} placeholder="0.00" />
+              <input type="text" inputMode="decimal" {...money_("price_paid")} placeholder="0.00" />
             </label>
             <label className="field">
               <span>Date purchased</span>
-              <input type="date" min="1900-01-01" max={TODAY} {...text("purchase_date")} />
+              <input type="date" min="1900-01-01" max={todayISO()} {...text("purchase_date")} />
             </label>
           </div>
           <label className="field">
@@ -967,11 +1020,11 @@ export default function CoinFormPage() {
           <div className="grid-2">
             <label className="field">
               <span>Sale price</span>
-              <input type="number" step="0.01" min={0} {...text("sale_price")} placeholder="0.00" />
+              <input type="text" inputMode="decimal" {...money_("sale_price")} placeholder="0.00" />
             </label>
             <label className="field">
               <span>Sale date</span>
-              <input type="date" min={form.purchase_date || "1900-01-01"} max={TODAY} {...text("sale_date")} />
+              <input type="date" min={form.purchase_date || "1900-01-01"} max={todayISO()} {...text("sale_date")} />
             </label>
           </div>
           <label className="field">

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { AuctionSale, PcgsMarket } from "../api";
-import { money, shortDate } from "../format";
+import { money, safeUrl, shortDate } from "../format";
 
 interface Props {
   market: PcgsMarket | null;
@@ -236,10 +236,10 @@ export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch 
         <>
           <p className="muted small">
             PCGS #{market.pcgs_number} · {market.grade} · as of {shortDate(market.fetched_at)}
-            {market.coinfacts_url && (
+            {safeUrl(market.coinfacts_url) && (
               <>
                 {" · "}
-                <a href={market.coinfacts_url} target="_blank" rel="noreferrer">
+                <a href={safeUrl(market.coinfacts_url)} target="_blank" rel="noreferrer">
                   CoinFacts ↗
                 </a>
               </>
@@ -284,8 +284,8 @@ export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch 
                       <td>{monthLabel(s.date)}</td>
                       <td className="num">{money(s.price)}</td>
                       <td>
-                        {s.url ? (
-                          <a href={s.url} target="_blank" rel="noreferrer" title={s.sale_name ?? undefined}>
+                        {safeUrl(s.url) ? (
+                          <a href={safeUrl(s.url)} target="_blank" rel="noreferrer" title={s.sale_name ?? undefined}>
                             {s.auctioneer ?? "Lot"}
                             {s.lot ? ` #${s.lot}` : ""} ↗
                           </a>

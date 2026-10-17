@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type ImportPreview, type ImportRow } from "../api";
 import { useApp } from "../App";
@@ -34,6 +34,7 @@ export default function ImportPage() {
   const typeSets = useMemo(() => new Set(coinTypes.filter((t) => t.is_type_set).map((t) => t.id)), [coinTypes]);
   const targets = collections.filter((c) => !typeSets.has(c.coin_type_id));
 
+  const fileInput = useRef<HTMLInputElement>(null);
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
   const [mode, setMode] = useState<Mode>("file");
   const [certs, setCerts] = useState("");
@@ -134,20 +135,26 @@ export default function ImportPage() {
               purchased, Purchased from and Notes.
             </p>
             <div className="row">
-              <label className="btn btn-primary">
+              {/* A real button (a hidden input inside a label can't be reached by keyboard) */}
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy || !collectionId}
+                onClick={() => fileInput.current?.click()}
+              >
                 {busy ? "Reading…" : "Choose file"}
-                <input
-                  type="file"
-                  accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  hidden
-                  disabled={busy || !collectionId}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f && collectionId) run(() => api.importPreview(collectionId, f));
-                  }}
-                />
-              </label>
+              </button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f && collectionId) run(() => api.importPreview(collectionId, f));
+                }}
+              />
               <button type="button" className="btn" onClick={downloadTemplate}>
                 Download template
               </button>

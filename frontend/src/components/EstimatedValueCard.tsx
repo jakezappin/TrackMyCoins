@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type CoinDetail } from "../api";
-import { money } from "../format";
+import { money, parseMoney } from "../format";
 
 type PremiumKey = "toner" | "holder";
 const PREMIUMS: { key: PremiumKey; label: string; hint: string }[] = [
@@ -16,6 +16,7 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
   const [amount, setAmount] = useState(saved);
   const [custom, setCustom] = useState(coin.custom_value ?? "");
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,11 +28,15 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
 
   const cpg = coin.latest_cpg?.value ?? null;
   const premium = (k: PremiumKey) => (on[k] && amount[k] ? amount[k] : "");
+  const amt = (t: string) => {
+    const r = parseMoney(t);
+    return "value" in r && r.value !== null ? Number(r.value) : null;
+  };
   const preview =
     source === "custom"
-      ? custom || null
+      ? amt(custom)
       : cpg != null
-        ? String(Number(cpg) + Number(premium("toner") || 0) + Number(premium("holder") || 0))
+        ? Number(cpg) + (amt(premium("toner")) ?? 0) + (amt(premium("holder")) ?? 0)
         : null;
   const dirty =
     source !== coin.value_source ||
@@ -48,20 +53,35 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (saving.current) return; // ignore a second tap while saving
+    // "1,250" and "$1250" are fine; anything unreadable is reported instead of being dropped.
+    const fields: [string, string][] =
+      source === "custom" ? [["Your estimated value", custom]] : [["Toner premium", premium("toner")], ["Holder premium", premium("holder")]];
+    const parsed: Record<string, string | null> = {};
+    for (const [label, text] of fields) {
+      const r = parseMoney(text);
+      if ("error" in r) {
+        setError(`${label} ${r.error}.`);
+        return;
+      }
+      parsed[label] = r.value;
+    }
+    saving.current = true;
     setBusy(true);
     setError(null);
     try {
       onChange(
         await api.setValuation(coin.inventory_number, {
           source,
-          custom_value: source === "custom" ? custom : null,
-          toner_premium: source === "cpg" ? premium("toner") || null : null,
-          holder_premium: source === "cpg" ? premium("holder") || null : null,
+          custom_value: source === "custom" ? parsed["Your estimated value"] : null,
+          toner_premium: source === "cpg" ? parsed["Toner premium"] : null,
+          holder_premium: source === "cpg" ? parsed["Holder premium"] : null,
         }),
       );
     } catch (err) {
       setError((err as Error).message);
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -120,9 +140,8 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
                 </label>
                 {on[key] && (
                   <input
-                    type="number"
-                    step="0.01"
-                    min={0}
+                    type="text"
+                    inputMode="decimal"
                     value={amount[key]}
                     onChange={(e) => setAmount({ ...amount, [key]: e.target.value })}
                     placeholder="0.00"
@@ -136,7 +155,7 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
         ) : (
           <label className="field">
             <span>Your estimated value</span>
-            <input type="number" step="0.01" min={0} value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="0.00" required />
+            <input type="text" inputMode="decimal" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="0.00" required />
           </label>
         )}
 

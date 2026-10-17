@@ -11,4 +11,8 @@ def absolute_url(url: str | None) -> str | None:
         return None
     if url.startswith("//"):
         return "https:" + url
-    return url if re.match(r"^https?://", url, re.I) else "https://" + url.lstrip("/")
+    if re.match(r"^https?://", url, re.I):
+        return url
+    if re.match(r"^[a-z][a-z0-9+.-]*:", url, re.I) and not re.match(r"^[\w.-]+\.[a-z]{2,}(:\d+)?(/|$)", url, re.I):
+        return None  # another scheme (javascript:, data:, ...): never a link
+    return "https://" + url.lstrip("/")

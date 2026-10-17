@@ -133,6 +133,8 @@ def test_pcgs_links_made_absolute():
     assert absolute_url("www.pcgs.com/coinfacts/coin/detail/7130/65") == "https://www.pcgs.com/coinfacts/coin/detail/7130/65"
     assert absolute_url("https://x.test/a") == "https://x.test/a" and absolute_url("//x.test/a") == "https://x.test/a"
     assert absolute_url("") is None
+    assert absolute_url("javascript:alert(1)") is None and absolute_url("data:text/html,x") is None
+    assert absolute_url("www.pcgs.com:443/x") == "https://www.pcgs.com:443/x"
     m = PcgsMarket(fetched_at="2026-10-17T00:00:00Z", pcgs_number="7130", grade="MS65",
                    coinfacts_url="www.pcgs.com/coinfacts/coin/detail/7130/65",
                    auctions=[{"date": "2026-08", "price": "170.8", "url": "www.stacksbowers.com/lot/1"}])

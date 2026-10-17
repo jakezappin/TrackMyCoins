@@ -90,3 +90,34 @@ export function profit(c: Coin): number | null {
   if (c.sale_price == null || c.price_paid == null) return null;
   return Number(c.sale_price) - Number(c.price_paid);
 }
+
+/** Today's date (YYYY-MM-DD) in the user's own time zone, not UTC. */
+export function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * A money amount as typed: "1,250", "$1250.5", " 1 250.00 " -> "1250.50". Empty -> null.
+ * Anything else ("12.345", "abc", "-5") is an error, so a value is never silently dropped.
+ */
+export function parseMoney(text: string | number | null | undefined): { value: string | null } | { error: string } {
+  const raw = String(text ?? "").trim();
+  if (!raw) return { value: null };
+  const cleaned = raw.replace(/[$,\s]/g, "");
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) {
+    return { error: /^-/.test(cleaned) ? "can't be negative" : "isn't a dollar amount (e.g. 1,250 or 1250.50)" };
+  }
+  return { value: Number(cleaned).toFixed(2) };
+}
+
+/** Only http(s) links from outside data (auction houses, eBay) are rendered; anything else (e.g. javascript:) isn't. */
+export function safeUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url, window.location.origin);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
+}

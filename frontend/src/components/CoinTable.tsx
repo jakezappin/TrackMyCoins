@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { Coin } from "../api";
 import CoinPlaceholder from "./CoinPlaceholder";
 import { useApp } from "../App";
@@ -71,12 +71,25 @@ export default function CoinTable({ coins, mode }: Props) {
   const th = (key: SortKey, label: string, className = "") => (
     <th
       className={`sortable ${className}`}
-      onClick={() => setSort((s) => ({ key, dir: s.key === key ? ((-s.dir) as 1 | -1) : 1 }))}
+      aria-sort={sort.key === key ? (sort.dir === 1 ? "ascending" : "descending") : "none"}
     >
-      {label}
-      {sort.key === key ? (sort.dir === 1 ? " ▲" : " ▼") : ""}
+      <button
+        type="button"
+        className="sort-btn"
+        onClick={() => setSort((s) => ({ key, dir: s.key === key ? ((-s.dir) as 1 | -1) : 1 }))}
+      >
+        {label}
+        {sort.key === key ? (sort.dir === 1 ? " ▲" : " ▼") : ""}
+      </button>
     </th>
   );
+  const sortOptions: [SortKey, string][] = [
+    ["date", "Date"],
+    ["inventory", "Inventory #"],
+    ["grade", "Grade"],
+    ["paid", "Price paid"],
+    ...(mode === "collection" ? ([["cpg", "Value"]] as [SortKey, string][]) : ([["sold", "Sold on"]] as [SortKey, string][])),
+  ];
 
   return (
     <div className="card table-card">
@@ -87,6 +100,21 @@ export default function CoinTable({ coins, mode }: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <label className="mobile-sort">
+          <span className="small muted">Sort by</span>
+          <select
+            value={`${sort.key}:${sort.dir}`}
+            onChange={(e) => {
+              const [key, dir] = e.target.value.split(":");
+              setSort({ key: key as SortKey, dir: Number(dir) as 1 | -1 });
+            }}
+          >
+            {sortOptions.flatMap(([k, label]) => [
+              <option key={`${k}:1`} value={`${k}:1`}>{label} ▲</option>,
+              <option key={`${k}:-1`} value={`${k}:-1`}>{label} ▼</option>,
+            ])}
+          </select>
+        </label>
         <div className="chips">
           {(["all", "toned", "cac", "slab"] as const).map((f) => (
             <button key={f} className={`chip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
@@ -100,7 +128,7 @@ export default function CoinTable({ coins, mode }: Props) {
         <p className="muted empty">{coins.length === 0 ? "No coins yet." : "No coins match."}</p>
       ) : (
         <div className="table-scroll">
-          <table className="coin-table">
+          <table className={`coin-table ${mode}`}>
             <thead>
               <tr>
                 <th className="thumb-col" />
@@ -125,20 +153,25 @@ export default function CoinTable({ coins, mode }: Props) {
                 const pl = profit(c);
                 return (
                   <tr key={c.id} onClick={() => navigate(coinPath(c.inventory_number))}>
-                    <td className="thumb-col">
+                    <td className="thumb-col c-thumb">
                       {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="thumb" loading="lazy" /> : <CoinPlaceholder className="thumb ph" metal={metalFor(coinTypes, c.coin_type_id)} />}
                     </td>
-                    <td className="mono">{c.inventory_number}</td>
-                    <td className="strong">
+                    <td className="mono c-inv">
+                      {/* A real link, so rows can be reached and opened from the keyboard */}
+                      <Link to={coinPath(c.inventory_number)} className="row-link" onClick={(e) => e.stopPropagation()}>
+                        {c.inventory_number}
+                      </Link>
+                    </td>
+                    <td className="strong c-date">
                       {dateMint(c)}
                       {c.vam && <span className="sub"> {c.vam}</span>}
                     </td>
-                    <td>{gradeLabel(c)}</td>
-                    <td>
+                    <td className="c-grade">{gradeLabel(c)}</td>
+                    <td className="c-svc">
                       {serviceLabel(c.grading_service)}
                       {c.cert_number && <span className="sub mono"> {c.cert_number}</span>}
                     </td>
-                    <td>
+                    <td className="c-tags">
                       <div className="tags">
                         {c.cac && <span className={`tag cac-${c.cac_sticker ?? "green"}`}>CAC</span>}
                         {toningLabel(c).length > 0 && <span className="tag toned">Toned</span>}
@@ -149,9 +182,9 @@ export default function CoinTable({ coins, mode }: Props) {
                         ))}
                       </div>
                     </td>
-                    <td className="num">{money(c.price_paid)}</td>
+                    <td className="num c-paid" data-label="Paid">{money(c.price_paid)}</td>
                     {mode === "collection" && (
-                      <td className="num">
+                      <td className="num c-value" data-label="Value">
                         {money(c.value_estimate)}
                         {c.value_source === "custom" ? (
                           <span className="value-tag" title="Your own value">own</span>
@@ -172,9 +205,11 @@ export default function CoinTable({ coins, mode }: Props) {
                     )}
                     {mode === "sold" && (
                       <>
-                        <td className="num">{money(c.sale_price)}</td>
-                        <td>{shortDate(c.sale_date)}</td>
-                        <td className={`num ${pl == null ? "" : pl >= 0 ? "pos" : "neg"}`}>{pl == null ? "—" : money(pl)}</td>
+                        <td className="num c-soldfor" data-label="Sold for">{money(c.sale_price)}</td>
+                        <td className="c-soldon" data-label="Sold">{shortDate(c.sale_date)}</td>
+                        <td className={`num c-pl ${pl == null ? "" : pl >= 0 ? "pos" : "neg"}`} data-label="P/L">
+                          {pl == null ? "—" : money(pl)}
+                        </td>
                       </>
                     )}
                   </tr>
