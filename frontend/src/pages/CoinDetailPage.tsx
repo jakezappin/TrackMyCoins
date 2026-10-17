@@ -6,8 +6,10 @@ import NgcPhotoLink from "../components/NgcPhotoLink";
 import { ngcCertUrl } from "../ngcButton";
 import PhotoButtons from "../components/PhotoButtons";
 import CoinPlaceholder from "../components/CoinPlaceholder";
+import AttachmentsCard from "../components/AttachmentsCard";
 import EstimatedValueCard from "../components/EstimatedValueCard";
 import CoinFactsCard from "../components/CoinFactsCard";
+import MoveCoin from "../components/MoveCoin";
 import EbayCard from "../components/EbayCard";
 import GradePricesCard from "../components/GradePricesCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
@@ -210,6 +212,13 @@ export default function CoinDetailPage() {
           <button className="btn danger-outline" onClick={removeCoin} disabled={busyAction !== null}>
             Delete
           </button>
+          <MoveCoin
+            coin={coin}
+            onMoved={(c) => {
+              update(c);
+              refresh();
+            }}
+          />
           <Link className="btn btn-primary" to={`${coinPath(inv)}/edit`}>
             Edit
           </Link>
@@ -353,6 +362,8 @@ export default function CoinDetailPage() {
             </dl>
             {coin.notes && <p className="notes">{coin.notes}</p>}
           </section>
+
+          <AttachmentsCard inventoryNumber={coin.inventory_number} />
 
           <EstimatedValueCard coin={coin} onChange={update} />
 

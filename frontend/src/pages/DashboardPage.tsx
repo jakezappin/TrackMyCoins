@@ -8,6 +8,7 @@ import NewCollectionDialog from "../components/NewCollectionDialog";
 import QuickSearch from "../components/QuickSearch";
 import ValueHistoryChart from "../components/ValueHistoryChart";
 import MoreMenu from "../components/MoreMenu";
+import MoversCard from "../components/MoversCard";
 import { NGC_BOOKMARK_ENABLED } from "../ngcButton";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import { ValueNote } from "../components/SummaryCards";
@@ -98,6 +99,7 @@ export default function DashboardPage() {
       </div>
 
       <ValueHistoryChart collectionId={null} refreshKey={data.totals} />
+      <MoversCard gainers={data.gainers} decliners={data.decliners} />
 
       {/* Row 2: recently opened collections */}
       <section className="section">

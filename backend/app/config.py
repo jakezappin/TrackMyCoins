@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     # e.g. GREYSHEET_NODE_OVERRIDES='{"morgan-dollars": [1234]}'
     greysheet_node_overrides: dict[str, list[int]] = {}
 
+    max_attachments_per_coin: int = 10
+    max_attachment_bytes: int = 10 * 1024 * 1024
     max_photos_per_coin: int = 10
     max_photo_bytes: int = 15 * 1024 * 1024
     wholesale_discount: float = 0.10

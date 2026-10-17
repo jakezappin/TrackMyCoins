@@ -22,4 +22,4 @@ ENV DATABASE_URL=sqlite:////data/coin-app.db \
     PHOTO_DIR=/data/photos \
     COOKIE_SECURE=true
 EXPOSE 8080
-CMD ["sh", "-c", "mkdir -p /data/photos && alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --no-proxy-headers"]
+CMD ["sh", "-c", "mkdir -p /data/photos /data/attachments && alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --no-proxy-headers"]

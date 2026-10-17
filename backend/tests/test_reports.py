@@ -242,3 +242,17 @@ def test_status_overdates_fill_the_date(authed):
     assert rows["1880-CC"] == [od["inventory_number"]] and rows["1900-O"] == [om["inventory_number"]]
     assert not any("/" in label and not label.startswith("1878") for label in rows)
     assert s["others"] == []
+
+
+def test_upgrade_finder(authed):
+    col = _collection(authed, "morgan-dollars", name="My Morgans")
+    coin = authed.post("/api/coins", json=coin_payload(col["id"], year=1881, mint_mark="S", grade=64, pcgs_number="7130")).json()
+    authed.post("/api/coins", json=coin_payload(col["id"], year=1888, mint_mark="O", grade=63))  # never priced
+    d = authed.get(f"/api/collections/{col['id']}/upgrades").json()
+    assert d["unpriced"] == ["1881-S", "1888-O"] and d["items"] == []  # nothing priced yet
+    authed.post(f"/api/coins/{coin['inventory_number']}/cpg")
+    d = authed.get(f"/api/collections/{col['id']}/upgrades").json()
+    assert d["unpriced"] == ["1888-O"]
+    [item] = d["items"]
+    assert (item["label"], item["current_value"], item["next_label"], item["next_cpg"], item["cost"], item["pct"]) == (
+        "1881-S", "900.00", "65", "1150.00", "250.00", 28)

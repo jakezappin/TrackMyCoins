@@ -134,16 +134,30 @@ def fetch_cpg(coin: Coin, gsid: int | None = None, cached: dict | None = None) -
         "description": entry.get("Name"),
         "raw": {"row": row, "gsid": entry.get("GsId"), "name": entry.get("Name")},
         "greysheet_value": _money(row.get("GreyVal")),
-        "sheet": {
-            "key": sheet_key(coin, gsid),
-            "gsid": entry.get("GsId"),
-            "name": entry.get("Name"),
-            "designation": designation,
-            "rows": [
-                {"grade": r.get("Grade"), "label": str(r.get("GradeLabel") or r.get("Grade")), "cac": bool(r.get("IsCac")),
-                 "cpg": str(v) if (v := _money(r.get("CpgVal"))) is not None else None,
-                 "grey": str(g) if (g := _money(r.get("GreyVal"))) is not None else None}
-                for r in entry.get("PricingData") or []
-            ],
-        },
+        "sheet": sheet_from_entry(sheet_key(coin, gsid), entry),
     }
+
+
+def sheet_from_entry(key: str, entry: dict) -> dict:
+    """Every grade's CPG (and CAC CPG) from one Greysheet pricing response, for saving as a price sheet."""
+    return {
+        "key": key,
+        "gsid": entry.get("GsId"),
+        "name": entry.get("Name"),
+        "designation": from_greysheet_name(entry.get("Name")),
+        "rows": [
+            {"grade": r.get("Grade"), "label": str(r.get("GradeLabel") or r.get("Grade")), "cac": bool(r.get("IsCac")),
+             "cpg": str(v) if (v := _money(r.get("CpgVal"))) is not None else None,
+             "grey": str(g) if (g := _money(r.get("GreyVal"))) is not None else None}
+            for r in entry.get("PricingData") or []
+        ],
+    }
+
+
+def fetch_sheet(pcgs_number: str | None = None, gsid: int | None = None) -> dict:
+    """All grades for one issue (one API call), without needing a coin."""
+    with client() as c:
+        data = get(c, "/GetPricingRequest", PcgsNumber=None if gsid else pcgs_number, Gsid=gsid)
+    if not data:
+        raise PricingError(f"Greysheet has no pricing for {'Greysheet id ' + str(gsid) if gsid else 'PCGS #' + str(pcgs_number)}")
+    return sheet_from_entry(f"gsid:{gsid}" if gsid else f"pcgs:{pcgs_number}", data[0])

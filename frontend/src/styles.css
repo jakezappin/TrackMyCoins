@@ -894,6 +894,7 @@ table {
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
+    align-content: start; /* short pages: don't stretch the top bar */
   }
   .topbar {
     display: flex;
@@ -2928,3 +2929,175 @@ table {
   top: -10px;
   right: -10px;
 }
+
+/* ---- Biggest movers -------------------------------------------------------------- */
+.movers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.movers-col h3 {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.movers-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.movers-col li + li {
+  border-top: 1px solid var(--border);
+}
+.mover {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  color: inherit;
+  text-decoration: none;
+}
+.mover:hover {
+  background: var(--surface-2);
+}
+.mover-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mover-change {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 600;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .movers {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Want list -------------------------------------------------------------------- */
+.want-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.want-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px 18px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.want-row:last-child {
+  border-bottom: none;
+}
+.want-row.got {
+  background: var(--green-soft);
+}
+.want-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.want-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+.want-actions {
+  display: flex;
+  gap: 6px;
+}
+.want-modal {
+  max-width: 520px;
+}
+.want-done {
+  white-space: nowrap;
+}
+.status-coins .btn.small {
+  margin-left: 8px;
+}
+@media (max-width: 640px) {
+  .want-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .want-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---- Upgrade finder --------------------------------------------------------------- */
+.upgrade-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.upgrade-table th,
+.upgrade-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.upgrade-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+.upgrade-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .upgrade-table thead {
+    display: none;
+  }
+  .upgrade-table,
+  .upgrade-table tbody {
+    display: block;
+  }
+  .upgrade-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "label cost"
+      "coin now"
+      "next cpg"
+      "want want";
+    gap: 2px 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .upgrade-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .upgrade-table .c-label { grid-area: label; font-size: 1.02rem; }
+  .upgrade-table .c-coin { grid-area: coin; }
+  .upgrade-table .c-now { grid-area: now; }
+  .upgrade-table .c-next { grid-area: next; color: var(--muted); }
+  .upgrade-table .c-cpg { grid-area: cpg; }
+  .upgrade-table .c-cost { grid-area: cost; }
+  .upgrade-table .c-want { grid-area: want; margin-top: 6px; }
+  .upgrade-table td[data-label]::before {
+    content: attr(data-label) " ";
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 400;
+  }
+}
+
+/* Receipts & documents */
+.attach-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.attach-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.attach-list li:last-child { border-bottom: 0; }
+.attach-name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.attachments .section-head { flex-wrap: wrap; gap: 8px; }

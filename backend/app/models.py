@@ -97,6 +97,43 @@ class GradePriceSheet(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class CoinAttachment(Base):
+    """A receipt, invoice or other document kept with a coin (PDF or image). Private: never on shared pages."""
+
+    __tablename__ = "coin_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    coin_id: Mapped[int] = mapped_column(ForeignKey("coins.id", ondelete="CASCADE"), index=True)
+    file_name: Mapped[str] = mapped_column(String(80))  # stored name
+    original_name: Mapped[str] = mapped_column(String(200))  # as uploaded, for display and download
+    content_type: Mapped[str] = mapped_column(String(60))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WantItem(Base):
+    """A coin the user is looking for: date, mint, variety, target grade and the most they'd pay."""
+
+    __tablename__ = "want_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    collection_id: Mapped[int | None] = mapped_column(ForeignKey("collections.id", ondelete="SET NULL"))
+    coin_type_id: Mapped[int] = mapped_column(ForeignKey("coin_types.id"))
+    finish: Mapped[str] = mapped_column(String(5), default="MS", server_default="MS")
+    year: Mapped[int] = mapped_column(Integer)
+    mint_mark: Mapped[str] = mapped_column(String(5))
+    variety: Mapped[str | None] = mapped_column(String(150))
+    grade_prefix: Mapped[str | None] = mapped_column(String(5))
+    grade: Mapped[int | None] = mapped_column(Integer)
+    max_price: Mapped[Decimal | None] = mapped_column(Money)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    coin_type: Mapped[CoinType] = relationship()
+    collection: Mapped["Collection | None"] = relationship()
+
+
 class ApiUsage(Base):
     """Calls made to paid / rate-limited services, per day: per user, and site-wide (user_id 0)."""
 

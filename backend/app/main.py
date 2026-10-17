@@ -9,7 +9,7 @@ from .config import check_production, get_settings
 from .db import SessionLocal
 from .models import CoinType
 from .services import ebay, quota
-from .routers import auth, catalog, coins, collections, dashboard, importer, jobs, label, photos, pricing, reports, shared
+from .routers import attachments, auth, catalog, coins, collections, dashboard, importer, jobs, label, photos, pricing, reports, shared, wants
 from .series import SERIES
 
 
@@ -47,7 +47,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Coin App", lifespan=lifespan)
-for r in (auth, catalog, collections, coins, dashboard, importer, jobs, label, photos, pricing, reports, shared):
+for r in (attachments, auth, catalog, collections, coins, dashboard, importer, jobs, label, photos, pricing, reports, shared, wants):
     app.include_router(r.router)
 app.include_router(reports.insurance_router)
 

@@ -1,6 +1,7 @@
 """Dashboard: totals across all collections, recent collections and sales, and quick coin search."""
 
 import re
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
@@ -12,7 +13,7 @@ from ..auth import current_user
 from ..db import get_db
 from ..models import Coin, Collection, User
 from ..schemas import CoinOut, CollectionWithSummary
-from ..services.coins import CENTS, coin_out, on_hand, sold, value_totals
+from ..services.coins import CENTS, CPG, coin_out, on_hand, sold, value_totals
 from ..services.history import value_history
 from .collections import _type_label, _with_summary, get_owned_collection
 
@@ -41,10 +42,43 @@ class SaleCard(BaseModel):
     profit: Decimal | None
 
 
+class Mover(BaseModel):
+    coin: CoinOut
+    old: Decimal
+    new: Decimal
+    change: Decimal
+    pct: float
+    changed_on: datetime
+
+
 class DashboardOut(BaseModel):
     totals: Totals
     recent_collections: list[CollectionWithSummary]
     recent_sales: list[SaleCard]
+    gainers: list[Mover] = []
+    decliners: list[Mover] = []
+
+
+MOVERS = 5
+
+
+def _movers(coins) -> tuple[list[Mover], list[Mover]]:
+    """Coins whose CPG changed most at their latest price change (from saved history: no API calls)."""
+    moves = []
+    for c in coins:
+        cpg = [q for q in c.price_quotes if q.source == CPG and q.value is not None]  # newest first
+        if not cpg:
+            continue
+        latest = cpg[0]
+        prev = next((q for q in cpg[1:] if q.value != latest.value), None)
+        if prev is None or not prev.value:
+            continue
+        change = latest.value - prev.value
+        moves.append(Mover(coin=coin_out(c), old=prev.value, new=latest.value, change=change,
+                           pct=round(float(change / prev.value) * 100, 1), changed_on=latest.fetched_at))
+    up = sorted((m for m in moves if m.change > 0), key=lambda m: -m.change)[:MOVERS]
+    down = sorted((m for m in moves if m.change < 0), key=lambda m: m.change)[:MOVERS]
+    return up, down
 
 
 def _coins(user: User):
@@ -66,6 +100,7 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(current_user))
     # Newest sale first (by sale date; coins without one by when they were last edited).
     gone = db.scalars(sold(_coins(user))).all()
     gone = sorted(gone, key=lambda c: (c.sale_date or c.updated_at.date(), c.updated_at), reverse=True)
+    up, down = _movers(held)
 
     return DashboardOut(
         totals=Totals(
@@ -75,6 +110,8 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(current_user))
             **values,
         ),
         recent_collections=[_with_summary(db, c) for c in cols[:20]],
+        gainers=up,
+        decliners=down,
         recent_sales=[
             SaleCard(
                 coin=coin_out(c),

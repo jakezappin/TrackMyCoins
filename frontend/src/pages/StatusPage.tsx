@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type Coin, type Collection, type CollectionStatus, type StatusMode } from "../api";
+import AddWant from "../components/AddWant";
+import { useApp } from "../App";
 import { coinPath, collectionPath, dateMint, serviceLabel, gradeLabel, money, toningLabel } from "../format";
 
 type Filter = "all" | "missing" | "owned";
@@ -33,6 +35,7 @@ export default function StatusPage() {
   const [status, setStatus] = useState<CollectionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const { coinTypes } = useApp();
   const [mode, setMode] = useState<StatusMode | null>(null);
 
   useEffect(() => {
@@ -79,6 +82,9 @@ export default function StatusPage() {
     return status.rows;
   }, [status, filter]);
 
+  const canWant =
+    !!collection && mode === "full" && !coinTypes.find((t) => t.id === collection.coin_type_id)?.is_type_set;
+
   if (error) return <div className="page error">{error}</div>;
   if (!collection || !status)
     return <div className="page muted">Loading the checklist… (the first time for a series can take a few seconds)</div>;
@@ -104,9 +110,14 @@ export default function StatusPage() {
             {collection.name} · {collection.collection_type_label}
           </p>
         </div>
-        <a className="btn" href={api.exportUrl(collection.id)} download>
-          Export
-        </a>
+        <div className="row">
+          <Link className="btn" to={`${collectionPath(collection)}/upgrades`}>
+            Upgrade Finder
+          </Link>
+          <a className="btn" href={api.exportUrl(collection.id)} download>
+            Export
+          </a>
+        </div>
       </div>
 
       {status.modes.length > 1 && (
@@ -175,7 +186,19 @@ export default function StatusPage() {
                   {r.coins.length ? (
                     r.coins.map((c) => <CoinChip key={c.id} coin={c} />)
                   ) : (
-                    <span className="tag missing-tag">Missing</span>
+                    <>
+                      <span className="tag missing-tag">Missing</span>
+                      {canWant && (
+                        <AddWant
+                          collectionId={collection.id}
+                          year={r.year}
+                          mintMark={r.mint_mark}
+                          variety={r.variety}
+                          gradePrefix={collection.finish === "MS" ? "MS" : "PR"}
+                          label={`${r.label} ${collection.collection_type_label}`}
+                        />
+                      )}
+                    </>
                   )}
                 </span>
               </li>

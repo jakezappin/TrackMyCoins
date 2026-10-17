@@ -381,10 +381,91 @@ export interface DuplicateCert {
   collection_number: number;
 }
 
+export interface WantItem {
+  id: number;
+  label: string;
+  collection_id: number | null;
+  collection_name: string | null;
+  coin_type_id: number;
+  finish: Finish;
+  year: number;
+  mint_mark: string;
+  variety: string | null;
+  grade_prefix: string | null;
+  grade: number | null;
+  target_label: string | null;
+  max_price: string | null;
+  notes: string | null;
+  cpg: string | null;
+  priceable: boolean;
+  owned: {
+    inventory_number: string;
+    grade: number | null;
+    grade_prefix: string | null;
+    grade_plus: boolean;
+    grade_star: boolean;
+    strike_designation: string | null;
+    grading_service: GradingService;
+    meets_target: boolean;
+  } | null;
+}
+
+export interface WantIn {
+  collection_id?: number | null;
+  coin_type_id?: number | null;
+  finish?: Finish;
+  year: number;
+  mint_mark: string;
+  variety?: string | null;
+  grade_prefix?: string | null;
+  grade?: number | null;
+  max_price?: string | null;
+  notes?: string | null;
+}
+
+export interface UpgradeItem {
+  label: string;
+  year: number;
+  mint_mark: string;
+  variety: string | null;
+  coin: {
+    inventory_number: string;
+    grade: number | null;
+    grade_prefix: string | null;
+    grade_plus: boolean;
+    grade_star: boolean;
+    strike_designation: string | null;
+    cac: boolean;
+  };
+  current_value: string | null;
+  next_grade: number;
+  next_label: string;
+  next_cpg: string;
+  cost: string | null;
+  pct: number | null;
+}
+
+export interface Upgrades {
+  items: UpgradeItem[];
+  unpriced: string[];
+  at_top: string[];
+}
+
+export interface Mover {
+  coin: Coin;
+  old: string;
+  new: string;
+  change: string;
+  pct: number;
+  changed_on: string;
+}
+
 export interface DashboardData {
   totals: Summary & { collection_count: number };
   recent_collections: Collection[];
   recent_sales: { coin: Coin; collection_name: string; collection_type_label: string; profit: string | null }[];
+  gainers: Mover[];
+  decliners: Mover[];
 }
 
 export interface SearchHit {
@@ -491,6 +572,15 @@ function errorMessage(body: unknown, fallback: string): string {
   return fallback;
 }
 
+export interface Attachment {
+  id: number;
+  name: string;
+  content_type: string;
+  size: number;
+  created_at: string;
+  url: string;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: "same-origin", headers: {} };
   if (body instanceof FormData) {
@@ -590,6 +680,16 @@ export const api = {
   },
   features: () => request<{ ebay: boolean }>("GET", "/api/features"),
   gradePrices: (inv: string) => request<GradePrices>("GET", `/api/coins/${encodeURIComponent(inv)}/grade-prices`),
+  wants: () => request<WantItem[]>("GET", "/api/wants"),
+  addWant: (w: WantIn) => request<WantItem>("POST", "/api/wants", w),
+  updateWant: (id: number, w: WantIn) => request<WantItem>("PUT", `/api/wants/${id}`, w),
+  deleteWant: (id: number) => request<void>("DELETE", `/api/wants/${id}`),
+  priceWant: (id: number) => request<WantItem>("POST", `/api/wants/${id}/price`),
+  upgrades: (collectionId: number) => request<Upgrades>("GET", `/api/collections/${collectionId}/upgrades`),
+  moveTargets: (inv: string) =>
+    request<{ id: number; name: string; finish: string }[]>("GET", `/api/coins/${encodeURIComponent(inv)}/move-targets`),
+  moveCoin: (inv: string, collectionId: number) =>
+    request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/move`, { collection_id: collectionId }),
   ebayListings: (inv: string) => request<EbayListings>("GET", `/api/coins/${encodeURIComponent(inv)}/ebay`),
   ngcImages: (link: string) => request<NgcImages>("GET", `/api/ngc-images?link=${encodeURIComponent(link)}`),
   ngcPage: (d: { cert: string; grade: string | null; images: string[]; text: string }) =>
@@ -598,6 +698,13 @@ export const api = {
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos/import`, { urls }),
   reorderPhotos: (inv: string, photo_ids: number[]) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/photos/order`, { photo_ids }),
+  attachments: (inv: string) => request<Attachment[]>("GET", `/api/coins/${encodeURIComponent(inv)}/attachments`),
+  uploadAttachments: (inv: string, files: File[]) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f));
+    return request<Attachment[]>("POST", `/api/coins/${encodeURIComponent(inv)}/attachments`, fd);
+  },
+  deleteAttachment: (id: number) => request<void>("DELETE", `/api/attachments/${id}`),
   deletePhoto: (photoId: number) => request<void>("DELETE", `/api/photos/${photoId}`),
 
   lookup: (service: GradingService, cert: string) =>

@@ -430,3 +430,56 @@ def test_production_needs_a_real_session_secret(monkeypatch):
     with _pytest.raises(RuntimeError):
         check_production(Settings(session_secret=DEV_SECRET))
     check_production(Settings(session_secret="x" * 64))  # fine
+
+
+def test_move_between_collections(authed):
+    from test_reports import _collection
+
+    a = _collection(authed, "morgan-dollars", name="Morgans A")
+    b = _collection(authed, "morgan-dollars", name="Morgans B")
+    peace = _collection(authed, "peace-dollars", name="Peace")
+    proofs = _collection(authed, "morgan-dollars", finish="PR", name="Morgan Proofs")
+    coin = authed.post("/api/coins", json=coin_payload(a["id"], year=1881, mint_mark="S")).json()
+    inv = coin["inventory_number"]
+
+    targets = authed.get(f"/api/coins/{inv}/move-targets").json()
+    assert {t["name"] for t in targets} == {"Morgans B", "Morgan Proofs"}  # same series only; not Peace
+    d = authed.post(f"/api/coins/{inv}/move", json={"collection_id": b["id"]}).json()
+    assert d["collection_id"] == b["id"] and d["inventory_number"] == inv  # same inventory number
+    assert authed.post(f"/api/coins/{inv}/move", json={"collection_id": peace["id"]}).status_code == 400
+    r = authed.post(f"/api/coins/{inv}/move", json={"collection_id": proofs["id"]})  # an MS coin isn't a proof
+    assert r.status_code == 422 and "proof" in r.text
+
+
+def test_attachments_upload_view_delete(authed, morgan_collection, client):
+    from app.services import attachments as store
+
+    coin = authed.post("/api/coins", json=coin_payload(morgan_collection["id"])).json()
+    inv = coin["inventory_number"]
+    pdf = b"%PDF-1.4\n% receipt\n%%EOF\n"
+    files = [("files", ("../Heritage invoice.pdf", pdf, "application/pdf")), ("files", ("receipt.png", PNG, "image/png"))]
+    got = authed.post(f"/api/coins/{inv}/attachments", files=files).json()
+    assert [a["name"] for a in got] == ["Heritage invoice.pdf", "receipt.jpg"]  # photo stored compressed
+    r = authed.get(got[0]["url"])
+    assert r.status_code == 200 and r.content == pdf and r.headers["content-type"] == "application/pdf"
+    assert "Heritage%20invoice.pdf" in r.headers["content-disposition"]
+    # Not a PDF, not an image, or too many files: refused
+    bad = authed.post(f"/api/coins/{inv}/attachments", files=[("files", ("x.pdf", b"hello", "application/pdf"))])
+    assert bad.status_code == 400
+    bad = authed.post(f"/api/coins/{inv}/attachments", files=[("files", ("x.txt", b"hi", "text/plain"))])
+    assert bad.status_code == 400
+    many = [("files", (f"r{i}.pdf", pdf, "application/pdf")) for i in range(9)]
+    assert authed.post(f"/api/coins/{inv}/attachments", files=many).status_code == 400
+    # Another user can't see them
+    authed.post("/api/auth/logout")
+    signup(client, "other@example.com")
+    assert client.get(got[0]["url"]).status_code == 404
+    assert client.delete(got[0]["url"]).status_code == 404
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"email": "me@example.com", "password": "correct horse battery"})
+    assert authed.delete(got[1]["url"]).status_code == 204
+    assert len(authed.get(f"/api/coins/{inv}/attachments").json()) == 1
+    # Deleting the coin removes its files
+    assert store.coin_dir(coin["id"]).exists()
+    authed.delete(f"/api/coins/{inv}")
+    assert not store.coin_dir(coin["id"]).exists()

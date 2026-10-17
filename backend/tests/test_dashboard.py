@@ -75,3 +75,24 @@ def test_search_is_per_user(client):
     signup(client, "b@example.com")
     assert client.get("/api/search/coins", params={"q": "99887766"}).json() == []
     assert client.get("/api/search/coins", params={"q": coin["inventory_number"]}).json() == []
+
+
+def test_biggest_movers(authed, morgan_collection):
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal
+    from app.models import PriceQuote
+    from test_api import coin_payload
+
+    ids = []
+    for year in (1880, 1881, 1882):
+        ids.append(authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=year)).json()["id"])
+    t0 = datetime.now(timezone.utc) - timedelta(days=10)
+    with SessionLocal() as db:
+        for cid, values in zip(ids, [(100, 100, 150), (200, 160), (300,)]):  # +50, -40, never changed
+            for i, v in enumerate(values):
+                db.add(PriceQuote(coin_id=cid, source="CPG", value=v, fetched_at=t0 + timedelta(days=i)))
+        db.commit()
+    d = authed.get("/api/dashboard").json()
+    assert [(m["coin"]["year"], m["old"], m["new"], m["change"], m["pct"]) for m in d["gainers"]] == [(1880, "100.00", "150.00", "50.00", 50.0)]
+    assert [(m["coin"]["year"], m["change"], m["pct"]) for m in d["decliners"]] == [(1881, "-40.00", -20.0)]

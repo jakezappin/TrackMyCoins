@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,7 @@ from ..models import Coin, CoinType, Collection, User
 from ..series import BY_SLUG, type_set_members
 from ..schemas import CoinDetail, CoinFields, CoinIn, CoinUpdate
 from ..services.coins import coin_detail, duplicate_info, find_duplicate_cert, next_inventory_number
+from ..services import attachments
 from ..services.photos import delete_coin_photo_files
 from .collections import get_owned_collection
 
@@ -144,3 +146,43 @@ def delete_coin(inventory_number: str, db: Session = Depends(get_db), user: User
     db.delete(coin)
     db.commit()
     delete_coin_photo_files(coin_id)
+    attachments.delete_coin_files(coin_id)
+
+
+def _move_targets(db: Session, user: User, coin: Coin) -> list[Collection]:
+    """The user's other collections this coin can live in: same series, or a type set that includes its series."""
+    out = []
+    for col in db.scalars(select(Collection).where(Collection.user_id == user.id, Collection.id != coin.collection_id)):
+        if col.coin_type_id == coin.coin_type_id:
+            out.append(col)
+            continue
+        series = BY_SLUG.get(col.coin_type.slug)
+        if series and series.is_type_set and coin.coin_type.slug in {m.slug for m in type_set_members(series)}:
+            out.append(col)
+    return sorted(out, key=lambda c: c.name.lower())
+
+
+@router.get("/{inventory_number}/move-targets")
+def move_targets(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    coin = get_owned_coin(db, user, inventory_number)
+    return [{"id": c.id, "name": c.name, "finish": c.finish} for c in _move_targets(db, user, coin)]
+
+
+class MoveIn(BaseModel):
+    collection_id: int
+
+
+@router.post("/{inventory_number}/move", response_model=CoinDetail)
+def move_coin(inventory_number: str, body: MoveIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Move a coin to another collection of the same series (or a type set that includes it). Its inventory number,
+    photos, prices and history come along."""
+    coin = get_owned_coin(db, user, inventory_number)
+    target = get_owned_collection(db, user, body.collection_id)
+    if target.id not in {c.id for c in _move_targets(db, user, coin)}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"A {coin.coin_type.name} can't go in {target.name}.")
+    # Same rules as saving the coin there (e.g. proofs only in proof collections).
+    _validate(CoinFields.model_validate(coin, from_attributes=True), target, coin.coin_type)
+    coin.collection_id = target.id
+    db.commit()
+    db.refresh(coin)
+    return coin_detail(coin)

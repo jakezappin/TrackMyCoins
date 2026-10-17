@@ -97,6 +97,7 @@ export default function CollectionPage() {
           </Link>
           <span className="act-more">
             <MoreMenu>
+              <Link to={`${collectionPath(collection)}/upgrades`}>Upgrade Finder</Link>
               <Link to={`/import?collection=${collection.id}`}>Import coins</Link>
               <button type="button" onClick={() => setExporting(true)}>
                 Export to Excel…

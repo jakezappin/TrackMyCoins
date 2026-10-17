@@ -20,7 +20,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import Coin, CoinType, Collection, User
 from ..schemas import CoinOut
-from ..services import checklist, insurance
+from ..services import checklist, insurance, upgrades
 from ..services.coins import CPG, coin_out, collection_summary, latest_quote, on_hand, sold, value_estimate
 from ..services.greysheet import PricingError
 from .collections import _type_label, get_owned_collection
@@ -77,6 +77,18 @@ def collection_status(
         ],
         others=[coin_out(c) for c in cl.others],
     )
+
+
+@router.get("/{collection_id}/upgrades")
+def collection_upgrades(
+    collection_id: int,
+    mode: Literal["full", "type"] = "full",
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """Next grade up for each coin in the set and what it would cost (saved prices only, no API calls)."""
+    col = get_owned_collection(db, user, collection_id)
+    return upgrades.find(db, col, mode if mode in checklist.modes_for(col.coin_type.slug) else "full")
 
 
 # ---- Excel export ----------------------------------------------------------------------------

@@ -2,6 +2,13 @@
 
 Features we've talked about and put on hold, with what we learned so they're quick to pick up again.
 
+## Up next (agreed order)
+
+1. Install on phone (installable web app: icon, full screen).
+2. Rapid batch add (scan slab after slab into a queue, review, save all).
+3. **Bullion collection** (bars, rounds, etc.): works differently from numismatic coins (weight, purity, melt-based
+   value, quantities). Design to be discussed before building.
+
 ## On hold
 
 ### Estimated value at purchase (Greysheet price history)
@@ -38,6 +45,18 @@ value-over-time chart from real history instead of the dashed backfill.
 - Today: Fly keeps 5 daily snapshots of the volume, but they live with Fly, not off-site.
 - Plan: nightly SQLite backup + photos to Cloudflare R2 (S3 API), run lazily since the Fly machine auto-stops.
 - Needs an R2 bucket and access keys. R2 is also a cheaper home for photos than the Fly volume.
+
+### Weekly email digest
+- Portfolio change, price movers, want-list matches. Needs the same email setup as "Forgot password" (Resend +
+  DNS on Cloudflare), so build the two together.
+
+### QR code stickers
+- Printable QR stickers (e.g. for flips or slab sleeves) that open the coin's page. Only the owner (logged in) would
+  see the coin; consider what a stranger scanning one should see.
+
+### Storage location (back burner)
+- Where each coin is kept (home safe, bank box). Probably unpopular: many collectors don't want to record where their
+  stack is; the Notes field covers anyone who does.
 
 ## Ideas
 
