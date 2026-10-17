@@ -14,7 +14,7 @@ from ..designations import from_greysheet_name, with_designation
 from ..models import Coin, CoinType, GradePriceSheet, User, WantItem
 from ..schemas import GRADE_PREFIXES
 from ..series import BY_SLUG, type_set_members
-from ..services import catalog, grade_prices, greysheet, quota
+from ..services import catalog, grade_prices, greysheet, quota, series_match
 from ..services.coins import CENTS, on_hand
 from .collections import get_owned_collection
 
@@ -60,7 +60,15 @@ def _owned_want(db: Session, user: User, want_id: int) -> WantItem:
 
 
 def _resolve(db: Session, user: User, body: WantIn) -> tuple[int | None, int, str]:
-    """(collection_id, coin_type_id, finish) for a want."""
+    """(collection_id, coin_type_id, finish) for a want, after checking the year exists for the series."""
+    collection_id, type_id, finish = _place(db, user, body)
+    series = BY_SLUG.get(db.get(CoinType, type_id).slug)
+    if series and (problem := series_match.year_problem(series, body.year)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, problem)
+    return collection_id, type_id, finish
+
+
+def _place(db: Session, user: User, body: WantIn) -> tuple[int | None, int, str]:
     if body.collection_id is not None:
         col = get_owned_collection(db, user, body.collection_id)
         series = BY_SLUG.get(col.coin_type.slug)

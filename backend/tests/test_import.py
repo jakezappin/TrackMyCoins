@@ -194,3 +194,22 @@ def test_paste_certs_sorted_by_pcgs_series(authed, monkeypatch):
     rows = {x["row"]: x for x in d["rows"]}
     assert rows[1]["target"] == "Morgan Dollar Collection 1" and rows[2]["target"] == "Peace Dollar Collection 1"
     assert "doesn't track yet" in rows[3]["errors"][0]
+
+
+def test_year_gaps_are_invalid(authed):
+    """Exact years, not spans: no 1922 Mercury Dime, 1930 Peace Dollar, 1975 Kennedy or future-dated coin."""
+    from app.series import BY_SLUG
+    from app.services.series_match import year_problem
+
+    for slug, year in [("mercury-dimes", 1922), ("peace-dollars", 1930), ("kennedy-half-dollars", 1975),
+                       ("morgan-dollars", 2022), ("indian-eagles", 1925), ("buffalo-nickels", 1932), ("large-cents", 1815)]:
+        assert year_problem(BY_SLUG[slug], year), (slug, year)
+    for slug, year in [("mercury-dimes", 1921), ("peace-dollars", 1934), ("morgan-dollars", 2023),
+                       ("early-quarter-eagles", 1802), ("liberty-double-eagles", 1849)]:
+        assert year_problem(BY_SLUG[slug], year) is None, (slug, year)
+    assert "future" in year_problem(BY_SLUG["lincoln-cents"], 2999)
+
+
+def test_invalid_year_blocked_when_adding_by_hand(authed, morgan_collection):
+    r = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1910, mint_mark="S"))
+    assert r.status_code == 422 and "1910 isn't a Morgan Dollar date" in r.json()["detail"]

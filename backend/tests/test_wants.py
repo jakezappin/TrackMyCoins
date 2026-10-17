@@ -43,3 +43,9 @@ def test_want_validation_and_delete(authed):
     w = authed.post("/api/wants", json={"collection_id": col["id"], "year": 1880, "mint_mark": "CC"}).json()
     assert authed.delete(f"/api/wants/{w['id']}").status_code == 204
     assert authed.get("/api/wants").json() == []
+
+
+def test_want_with_invalid_year_refused(authed):
+    ct = next(t for t in authed.get("/api/coin-types").json() if t["slug"] == "peace-dollars")
+    r = authed.post("/api/wants", json={"coin_type_id": ct["id"], "finish": "MS", "year": 1930, "mint_mark": "P"})
+    assert r.status_code == 422 and "1930 isn't a Peace Dollar date" in r.json()["detail"]

@@ -6,13 +6,16 @@ collection being imported into (a 1921 Peace Dollar in a Morgan collection, say)
 
 import re
 from dataclasses import dataclass
+from datetime import date
 
 from ..series import BY_SLUG, SERIES, Series
 
-# Years each series was struck (business strikes and proofs). Open-ended ranges are still being made.
+# Checked against Greysheet's full catalog (2026-10-17); its one omission, the 1802/"1" $2.50, is real and kept.
+# Years each series was struck (any mint, business strikes or proofs), gaps included: no Buffalo Nickels or
+# Mercury Dimes were made in 1922, no Peace Dollars 1929-1933, and so on. Open-ended ranges are still being made.
 YEARS: dict[str, tuple[tuple[int, int | None], ...]] = {
-    "half-cents": ((1793, 1857),),
-    "large-cents": ((1793, 1857),),
+    "half-cents": ((1793, 1797), (1800, 1800), (1802, 1811), (1825, 1826), (1828, 1829), (1831, 1836), (1840, 1857)),
+    "large-cents": ((1793, 1814), (1816, 1857)),
     "flying-eagle-cents": ((1856, 1858),),
     "indian-head-cents": ((1859, 1909),),
     "lincoln-cents": ((1909, None),),
@@ -20,48 +23,50 @@ YEARS: dict[str, tuple[tuple[int, int | None], ...]] = {
     "three-cent-nickels": ((1865, 1889),),
     "shield-nickels": ((1866, 1883),),
     "liberty-head-nickels": ((1883, 1913),),
-    "buffalo-nickels": ((1913, 1938),),
+    "buffalo-nickels": ((1913, 1921), (1923, 1931), (1934, 1938)),
     "jefferson-nickels": ((1938, None),),
     "seated-liberty-half-dimes": ((1837, 1873),),
     "seated-liberty-dimes": ((1837, 1891),),
     "barber-dimes": ((1892, 1916),),
-    "mercury-dimes": ((1916, 1945), (2016, 2016)),
+    "mercury-dimes": ((1916, 1921), (1923, 1931), (1934, 1945), (2016, 2016)),
     "roosevelt-dimes": ((1946, None),),
     "barber-quarters": ((1892, 1916),),
-    "standing-liberty-quarters": ((1916, 1930), (2016, 2016)),
-    "washington-quarters": ((1932, None),),
+    "standing-liberty-quarters": ((1916, 1921), (1923, 1930), (2016, 2016)),
+    "washington-quarters": ((1932, 1932), (1934, 1974), (1976, None)),  # none dated 1933 or 1975
     "seated-liberty-half-dollars": ((1839, 1891),),
     "barber-half-dollars": ((1892, 1915),),
-    "kennedy-half-dollars": ((1964, None),),
+    "kennedy-half-dollars": ((1964, 1974), (1976, None)),  # 1975: all dated 1776-1976
     "seated-liberty-dollars": ((1840, 1873),),
     "trade-dollars": ((1873, 1885),),
-    "morgan-dollars": ((1878, 1904), (1921, 1921), (2021, None)),
-    "peace-dollars": ((1921, 1935), (2021, None)),
-    "ike-dollars": ((1971, 1978),),
+    "morgan-dollars": ((1878, 1904), (1921, 1921), (2021, 2021), (2023, None)),
+    "peace-dollars": ((1921, 1928), (1934, 1935), (2021, 2021), (2023, None)),
+    "ike-dollars": ((1971, 1974), (1976, 1978)),
     "sacagawea-dollars": ((2000, None),),
-    "early-quarter-eagles": ((1796, 1834),),
+    "early-quarter-eagles": ((1796, 1798), (1802, 1802), (1804, 1808), (1821, 1821), (1824, 1827), (1829, 1834)),
     "classic-head-quarter-eagles": ((1834, 1839),),
-    "early-half-eagles": ((1795, 1834),),
+    "early-half-eagles": ((1795, 1800), (1802, 1815), (1818, 1834)),
     "classic-head-half-eagles": ((1834, 1838),),
-    "early-eagles": ((1795, 1804),),
+    "early-eagles": ((1795, 1801), (1803, 1804)),
     "gold-dollars": ((1849, 1889),),
     "liberty-quarter-eagles": ((1840, 1907),),
     "four-dollar-stella": ((1879, 1880),),
-    "indian-quarter-eagles": ((1908, 1929),),
+    "indian-quarter-eagles": ((1908, 1915), (1925, 1929)),
     "three-dollar-gold": ((1854, 1889),),
     "liberty-half-eagles": ((1839, 1908),),
-    "indian-half-eagles": ((1908, 1929),),
+    "indian-half-eagles": ((1908, 1916), (1929, 1929)),
     "liberty-eagles": ((1838, 1907),),
-    "indian-eagles": ((1907, 1933),),
+    "indian-eagles": ((1907, 1916), (1920, 1920), (1926, 1926), (1930, 1930), (1932, 1933)),
     "liberty-double-eagles": ((1849, 1907),),
-    "saint-gaudens-double-eagles": ((1907, 1933), (2009, 2009)),
+    "saint-gaudens-double-eagles": ((1907, 1916), (1920, 1933), (2009, 2009)),
     "american-silver-eagles": ((1986, None),),
     "gold-eagles-5": ((1986, None),),
     "gold-eagles-10": ((1986, None),),
     "gold-eagles-25": ((1986, None),),
     "gold-eagles-50": ((1986, None),),
     "gold-buffalos": ((2006, None),),
-    "classic-commemoratives": ((1892, 1954),),
+    # Silver commemoratives (the gold-only years 1903-1905 and 1916-1917 aren't part of this series).
+    "classic-commemoratives": ((1892, 1893), (1900, 1900), (1915, 1915), (1918, 1918), (1920, 1928), (1933, 1939),
+                               (1946, 1954)),
 }
 
 # Face value in cents (what "$1", "25C" or "quarter" in a description means).
@@ -189,16 +194,30 @@ _FACE_PATTERNS: list[tuple[re.Pattern, int]] = [
 BY_PREFIX: dict[str, Series] = {s.prefix: s for s in SERIES}
 
 
+def _this_year() -> int:
+    return date.today().year
+
+
 def year_ok(slug: str, year: int | None) -> bool:
-    """Was this series struck in that year? Unknown series or years aren't flagged."""
+    """Was this series struck in that year? (Series without a list, or no year, aren't flagged.)"""
     ranges = YEARS.get(slug)
     if not ranges or year is None:
         return True
-    return any(lo <= year <= (hi or 9999) for lo, hi in ranges)
+    return any(lo <= year <= (hi or _this_year()) for lo, hi in ranges)
 
 
 def years_label(slug: str) -> str:
+    """'1878–1904, 1921, 2021, 2023 on'."""
     return ", ".join(f"{lo}–{hi}" if hi and hi != lo else (str(lo) if hi else f"{lo} on") for lo, hi in YEARS.get(slug, ()))
+
+
+def year_problem(series: Series, year: int | None) -> str | None:
+    """Why a year can't be right for a series, or None."""
+    if year_ok(series.slug, year):
+        return None
+    if year is not None and year > _this_year():
+        return f"{year} is in the future."
+    return f"{year} isn't a {series.name} date ({series.plural} were struck {years_label(series.slug)})."
 
 
 def _norm(text: str) -> str:
@@ -274,7 +293,7 @@ def from_text(text: str | None, year: int | None) -> Match:
 
 
 def _wrong_year(s: Series, year: int | None) -> str:
-    return f"{year} isn't a {s.name} date ({s.plural} were struck {years_label(s.slug)})."
+    return year_problem(s, year) or ""
 
 
 def from_inventory_number(inv: str | None) -> Series | None:

@@ -145,13 +145,13 @@ class _Router:
             mine = BY_SLUG.get(self.fixed.coin_type.slug)
             if series and mine and series.slug != mine.slug:
                 return f"This looks like a {series.name}, not a {mine.name}."
-            if mine and not series_match.year_ok(mine.slug, year):
-                return f"{year} isn't a {mine.name} date ({mine.plural} were struck {series_match.years_label(mine.slug)})."
+            if mine and (problem := series_match.year_problem(mine, year)):
+                return problem
             return self.fixed, self.fixed.coin_type
         if series is None:
             return why or NO_SERIES
-        if not series_match.year_ok(series.slug, year):
-            return f"{year} isn't a {series.name} date ({series.plural} were struck {series_match.years_label(series.slug)})."
+        if problem := series_match.year_problem(series, year):
+            return problem
         ct = self.types.get(series.slug)
         if ct is None:
             return NO_SERIES
