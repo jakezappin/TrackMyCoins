@@ -11,6 +11,16 @@ LINK = ("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/1ba8ddce-270b
         "NGC6521048-002_REV@500x722.jpg")
 
 
+def test_parse_keeps_lowercase_names_and_any_preview_size():
+    link = ("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/d414aff8-0d7b-4a44-abb7-bfdddd6678e8/"
+            "NGC6573699-002_obv@500x715.jpg")
+    info = ngc_images.parse(link)
+    base = "https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/d414aff8-0d7b-4a44-abb7-bfdddd6678e8/NGC6573699-002"
+    assert info["cert_number"] == "6573699-002"
+    assert info["urls"] == [f"{base}_obv.jpg", f"{base}_rev.jpg"]
+    assert info["previews"] == [link, f"{base}_rev.jpg"]
+
+
 def test_parse_any_side_or_size():
     info = ngc_images.parse(LINK)
     base = "https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/1ba8ddce-270b-4b4a-b00e-0561b256781a/NGC6521048-002"

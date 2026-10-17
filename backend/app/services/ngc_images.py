@@ -13,8 +13,12 @@ import httpx
 
 HOST = "ccg-imaging-ngc-coins-production.s3.amazonaws.com"
 LINK = re.compile(
-    r"^https?://" + re.escape(HOST) + r"/(?P<folder>[0-9a-fA-F-]{36})/NGC(?P<cert>\d{5,10}-\d{3})_(?:OBV|REV)(?:@\d+x\d+)?\.jpe?g(?:\?.*)?$"
+    r"^https?://" + re.escape(HOST) + r"/(?P<folder>[0-9a-fA-F-]{36})/(?P<prefix>NGC)(?P<cert>\d{5,10}-\d{3})_"
+    r"(?P<side>obv|rev)(?:@\d+x\d+)?\.(?P<ext>jpe?g)(?:\?.*)?$",
+    re.IGNORECASE,
 )
+# NGC's file names vary in case between coins (_OBV / _obv), and S3 names are case-sensitive, so we keep the
+# spelling of the pasted link. Preview sizes vary too (@500x722, @500x715, ...), so only full-size names are built.
 
 
 class NgcImageError(Exception):
@@ -22,18 +26,21 @@ class NgcImageError(Exception):
 
 
 def parse(link: str) -> dict:
-    m = LINK.match((link or "").strip())
+    link = (link or "").strip()
+    m = LINK.match(link)
     if not m:
         raise NgcImageError(
             "That isn't an NGC photo link. On NGC's cert page, right-click (or long-press) the coin photo, "
             "choose Copy Image Address, and paste it here."
         )
-    base = f"https://{HOST}/{m['folder'].lower()}/NGC{m['cert']}"
-    return {
-        "cert_number": m["cert"],
-        "urls": [f"{base}_OBV.jpg", f"{base}_REV.jpg"],
-        "previews": [f"{base}_OBV@500x722.jpg", f"{base}_REV@500x722.jpg"],
-    }
+    side = m["side"]
+    obv, rev = ("OBV", "REV") if side.isupper() else ("obv", "rev")
+    base = f"https://{HOST}/{m['folder']}/{m['prefix']}{m['cert']}_"
+    full = [f"{base}{obv}.{m['ext']}", f"{base}{rev}.{m['ext']}"]
+    pasted = link.split("?", 1)[0]
+    # Show the pasted (small) image for its side; the other side's preview size isn't known, so use full size.
+    previews = [pasted, full[1]] if side.lower() == "obv" else [full[0], pasted]
+    return {"cert_number": m["cert"], "urls": full, "previews": previews}
 
 
 def resolve(link: str) -> dict:
