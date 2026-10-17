@@ -46,7 +46,7 @@ export default function CollectionPage() {
     try {
       await api.deleteCollection(collection!.id);
       await refresh();
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       alert((err as Error).message);
     }

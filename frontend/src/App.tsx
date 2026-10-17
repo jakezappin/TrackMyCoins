@@ -7,6 +7,7 @@ import CoinFormPage from "./pages/CoinFormPage";
 import CollectionPage from "./pages/CollectionPage";
 import AccountPage from "./pages/AccountPage";
 import DashboardPage from "./pages/DashboardPage";
+import LandingPage from "./pages/LandingPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
 import SoldPage from "./pages/SoldPage";
 import StatusPage from "./pages/StatusPage";
@@ -63,10 +64,11 @@ export default function App() {
   return (
     <AppContext.Provider value={{ user, setUser, coinTypes, collections, refresh }}>
       <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
-        <Route path="/signup" element={user ? <Navigate to="/" /> : <SignupPage />} />
+        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+        <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+        <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <SignupPage />} />
         <Route element={<RequireAuth />}>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/collections/:typeSlug/sold" element={<SoldPage />} />
           <Route path="/collections/:typeSlug/:number" element={<CollectionPage />} />

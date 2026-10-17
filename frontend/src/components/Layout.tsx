@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import { api } from "../api";
 import { useApp } from "../App";
 import { collectionPath, collectionsBySeries, FINISH_LABEL, soldPath } from "../format";
+import Logo from "./Logo";
 import NewCollectionDialog from "./NewCollectionDialog";
 
 export default function Layout() {
@@ -31,18 +32,18 @@ export default function Layout() {
         <button className="icon-btn" aria-label="Menu" onClick={() => setMenuOpen((o) => !o)}>
           ☰
         </button>
-        <Link to="/" className="brand">
-          <span className="brand-mark">◉</span> Coin Collection
+        <Link to="/dashboard" className="brand">
+          <Logo size={26} tone="light" />
         </Link>
       </header>
 
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <Link to="/" className="brand desktop-only">
-          <span className="brand-mark">◉</span> Coin Collection
+        <Link to="/dashboard" className="brand desktop-only">
+          <Logo size={28} tone="light" />
         </Link>
 
         <nav>
-          <NavLink to="/" end className="nav-item">
+          <NavLink to="/dashboard" end className="nav-item">
             Dashboard
           </NavLink>
 

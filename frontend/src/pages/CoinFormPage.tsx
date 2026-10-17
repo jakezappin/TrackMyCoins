@@ -342,7 +342,7 @@ export default function CoinFormPage() {
         <h1>Add coin</h1>
         <div className="card empty-state">
           <p>Create a collection first, then add coins to it.</p>
-          <Link className="btn btn-primary" to="/">
+          <Link className="btn btn-primary" to="/dashboard">
             Go to dashboard
           </Link>
         </div>

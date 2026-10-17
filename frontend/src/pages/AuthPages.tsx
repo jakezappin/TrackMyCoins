@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import Logo from "../components/Logo";
 import { useApp } from "../App";
 
 function AuthCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="center-screen">
       <div className="auth-card">
-        <div className="brand auth-brand">
-          <span className="brand-mark">◉</span> Coin Collection
-        </div>
+        <Link to="/" className="auth-brand" aria-label="TrackMyCoins home">
+          <Logo size={32} />
+        </Link>
         <h1>{title}</h1>
         {children}
       </div>
@@ -20,7 +21,7 @@ function AuthCard({ title, children }: { title: string; children: React.ReactNod
 export function LoginPage() {
   const { setUser } = useApp();
   const navigate = useNavigate();
-  const from = (useLocation().state as { from?: string } | null)?.from ?? "/";
+  const from = (useLocation().state as { from?: string } | null)?.from ?? "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +93,7 @@ export function SignupPage() {
     try {
       const { confirm: _confirm, invite_code, ...body } = form;
       setUser(await api.signup(mode === "invite" ? { ...body, invite_code } : body));
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);

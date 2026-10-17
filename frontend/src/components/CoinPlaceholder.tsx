@@ -5,6 +5,8 @@ interface Props {
   date?: string;
   /** e.g. "Morgan Dollar" */
   typeName?: string;
+  /** Small caption at the bottom; empty to hide. */
+  note?: string;
   className?: string;
 }
 
@@ -12,7 +14,7 @@ interface Props {
  * Stand-in artwork for a coin with no photos: a generic silver dollar with the coin's date.
  * Purely illustrative; not a depiction of any real coin design.
  */
-export default function CoinPlaceholder({ date, typeName, className }: Props) {
+export default function CoinPlaceholder({ date, typeName, className, note = "NO PHOTO YET" }: Props) {
   const id = useId().replace(/:/g, "");
   const detailed = Boolean(date);
   const stars = Array.from({ length: 13 }, (_, i) => {
@@ -63,9 +65,11 @@ export default function CoinPlaceholder({ date, typeName, className }: Props) {
               {typeName.toUpperCase()}
             </text>
           )}
-          <text x="100" y="158" textAnchor="middle" className="ph-note">
-            NO PHOTO YET
-          </text>
+          {note && (
+            <text x="100" y="158" textAnchor="middle" className="ph-note">
+              {note}
+            </text>
+          )}
         </>
       ) : (
         <text x="100" y="118" textAnchor="middle" className="ph-dollar">
