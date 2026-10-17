@@ -115,3 +115,12 @@ def test_no_melt_for_base_metal():
     assert fineness(".999 Silver") == {"silver": 0.999}
     g = fineness("91.67% Gold, 3% Silver, 5.33% Copper")
     assert round(g["gold"], 4) == 0.9167 and g["silver"] == 0.03
+
+
+def test_pcgs_market_fetched_once_a_day_per_issue_and_grade(authed, morgan_collection):
+    a = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1878, grade=62, pcgs_number="7072")).json()
+    b = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1878, grade=62, pcgs_number="7072")).json()
+    authed.post(f"/api/coins/{a['inventory_number']}/pcgs")
+    n = len(requests)
+    d = authed.post(f"/api/coins/{b['inventory_number']}/pcgs").json()
+    assert len(requests) == n and d["pcgs_market"]["population"] == 1204  # same issue + grade: no PCGS calls

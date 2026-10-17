@@ -59,7 +59,8 @@ def test_refresh_updates_premium_estimate(authed, morgan_collection):
     authed.put(f"/api/coins/{inv}/valuation", json={"source": "cpg", "toner_premium": "500", "holder_premium": "100"})
     wait(authed, authed.post("/api/refresh-prices", json={"collection_id": cid}).json()["id"])
     quotes = authed.get(f"/api/coins/{inv}").json()["price_quotes"]
-    assert [q["value"] for q in quotes if q["source"] == "PREMIUM"] == ["2000.00", "2000.00"]  # recorded again on refresh
+    premium = [q for q in quotes if q["source"] == "PREMIUM"]
+    assert [q["value"] for q in premium] == ["2000.00"] and premium[0]["confirmed_at"]  # unchanged: re-confirmed
 
 
 def test_refresh_limited_per_week(authed, morgan_collection):

@@ -241,6 +241,7 @@ def test_greysheet_value_saved_when_present(authed, morgan_collection, monkeypat
     assert d["latest_greysheet"] is None and len(d["price_quotes"]) == 1  # Basic tier: CPG only
 
     monkeypatch.setattr(__import__(__name__), "GREY_VAL", "$1,050.00")
+    _age_sheets(days=2)  # a day later the saved all-grades result is stale, so Greysheet is asked again
     d = authed.post(f"/api/coins/{coin['inventory_number']}/cpg").json()
     assert d["latest_greysheet"]["value"] == "1050.00" and d["latest_cpg"]["value"] == "1400.00"
 
@@ -339,3 +340,29 @@ def test_designation_shown_with_grade(authed, morgan_collection):
     assert d["latest_cpg"]["grade_used"] == "65 PL"
     t = authed.get(f"/api/coins/{coin['inventory_number']}/grade-prices").json()
     assert t["designation"] == "PL" and [r["label"] for r in t["rows"]] == ["MS64 PL", "65 PL", "MS66 PL"]
+
+
+def _age_sheets(days: int) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal
+    from app.models import GradePriceSheet
+
+    with SessionLocal() as db:
+        for sh in db.query(GradePriceSheet).all():
+            sh.fetched_at = datetime.now(timezone.utc) - timedelta(days=days)
+        db.commit()
+
+
+def test_cpg_reuses_recent_sheet_and_records_changes_only(authed, morgan_collection):
+    a = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1881, mint_mark="S", grade=65, pcgs_number="7130")).json()
+    b = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1881, mint_mark="S", grade=64, pcgs_number="7130")).json()
+    n = len(calls)
+    authed.post(f"/api/coins/{a['inventory_number']}/cpg")
+    d = authed.post(f"/api/coins/{b['inventory_number']}/cpg").json()  # same issue, other grade
+    assert d["latest_cpg"]["value"] == "900.00"
+    assert len([c for c in calls[n:] if c.startswith("GetPricingRequest")]) == 1  # second coin: no call
+
+    again = authed.post(f"/api/coins/{a['inventory_number']}/cpg").json()  # unchanged price
+    cpg = [q for q in again["price_quotes"] if q["source"] == "CPG"]
+    assert len(cpg) == 1 and cpg[0]["confirmed_at"]  # re-confirmed, not duplicated

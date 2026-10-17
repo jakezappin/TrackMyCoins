@@ -1,13 +1,15 @@
 """PCGS Public API. Docs: https://www.pcgs.com/publicapi/documentation (1,000 calls/day)."""
 
 import re
+import time
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 import httpx
 
 from ...config import get_settings
-from ...schemas import LookupResult
 from ...designations import from_pcgs, with_designation
+from ...schemas import LookupResult
 from .base import LookupError, normalize_mint_mark, over_variety, parse_grade, set_designation, year_of
 
 BASE_URL = "https://api.pcgs.com/publicapi"
@@ -146,3 +148,20 @@ def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10)
         "coinfacts_url": facts.get("CoinFactsLink") or None,
         "auctions": sales[:auctions],
     }
+
+
+# PCGS allows 1,000 calls a day and each market lookup costs 2, so one issue + grade is fetched at most once a day
+# (several coins of the same issue and grade, refreshes, repeat clicks). In memory: the server restarts often.
+MARKET_TTL = 24 * 60 * 60
+_market_cache: dict[tuple, tuple[float, dict]] = {}
+
+
+def market_cached(pcgs_number: str, grade: int, plus: bool = False) -> tuple[dict, bool]:
+    """(market data, whether PCGS was called)."""
+    key = (str(pcgs_number), int(grade), bool(plus))
+    hit = _market_cache.get(key)
+    if hit and time.time() - hit[0] < MARKET_TTL:
+        return hit[1], False
+    data = {**market(pcgs_number, grade, plus), "fetched_at": datetime.now(timezone.utc).isoformat()}
+    _market_cache[key] = (time.time(), data)
+    return data, True

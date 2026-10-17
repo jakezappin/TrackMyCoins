@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -91,12 +93,18 @@ def reorder_photos(
 
 
 @router.get("/photos/{photo_id}")
-def get_photo(photo_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def get_photo(
+    photo_id: int,
+    size: Literal["full", "thumb"] = "full",
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     photo = _get_owned_photo(db, user, photo_id)
-    path = store.photo_path(photo.coin_id, photo.file_name)
-    if not path.exists():
+    found = store.file_for(photo, size)
+    if found is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo file missing")
-    return FileResponse(path, media_type=photo.content_type, headers={"Cache-Control": "private, max-age=86400"})
+    # A photo id's file never changes (edits make new photos), so browsers can keep it.
+    return FileResponse(found[0], media_type=found[1], headers={"Cache-Control": "private, max-age=2592000, immutable"})
 
 
 @router.delete("/photos/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)

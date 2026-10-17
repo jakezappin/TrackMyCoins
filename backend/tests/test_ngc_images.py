@@ -47,13 +47,23 @@ def test_endpoint(authed, monkeypatch):
     assert authed.get("/api/ngc-images", params={"link": "nope"}).status_code == 400
 
 
-def test_big_photos_are_shrunk(tmp_path, monkeypatch):
+def test_photos_compressed_with_thumbnail_and_no_gps(tmp_path, monkeypatch):
     monkeypatch.setattr(photos.settings, "photo_dir", tmp_path)
+    exif = Image.Exif()
+    exif[0x8825] = {2: (40.0, 26.0, 46.0), 1: "N"}  # GPS info, as phones add
     big, small = io.BytesIO(), io.BytesIO()
-    Image.new("RGB", (4000, 3000), (120, 130, 140)).save(big, "PNG")
-    Image.new("RGB", (800, 600), (120, 130, 140)).save(small, "PNG")
-    name, ctype = photos.save_bytes(1, big.getvalue(), "image/png")
-    assert ctype == "image/jpeg" and name.endswith(".jpg")
-    assert max(Image.open(photos.photo_path(1, name)).size) == photos.MAX_SIDE
-    name, ctype = photos.save_bytes(1, small.getvalue(), "image/png")
-    assert ctype == "image/png"  # small photos are kept as they are
+    Image.new("RGB", (4000, 3000), (120, 130, 140)).save(big, "JPEG", quality=98, exif=exif)
+    Image.new("RGBA", (800, 600), (120, 130, 140, 128)).save(small, "PNG")
+
+    name, ctype = photos.save_bytes(1, big.getvalue(), "image/jpeg")
+    stored = Image.open(photos.photo_path(1, name))
+    assert ctype == "image/jpeg" and max(stored.size) == photos.MAX_SIDE
+    assert 0x8825 not in stored.getexif()  # location stripped
+    assert photos.photo_path(1, name).stat().st_size < len(big.getvalue())
+    assert max(Image.open(photos.thumb_path(1, name)).size) == photos.THUMB_SIDE
+
+    name, ctype = photos.save_bytes(1, small.getvalue(), "image/png")  # transparent PNG -> JPEG on white
+    assert ctype == "image/jpeg" and name.endswith(".jpg") and Image.open(photos.photo_path(1, name)).size == (800, 600)
+
+    photos.delete_photo_file(1, name)
+    assert not photos.thumb_path(1, name).exists()

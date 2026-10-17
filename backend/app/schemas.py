@@ -254,6 +254,7 @@ class PhotoOut(ORM):
     sort_order: int
     source: str
     url: str
+    thumb_url: str
 
 
 class PriceQuoteOut(ORM):
@@ -263,6 +264,7 @@ class PriceQuoteOut(ORM):
     grade_used: str | None
     description: str | None
     fetched_at: datetime
+    confirmed_at: datetime | None = None
 
 
 class CoinOut(CoinFields, ORM):
@@ -439,6 +441,7 @@ class SharedCoin(BaseModel):
     toning_rainbow: bool
     value_estimate: Decimal | None = None  # only when the owner chose to show values
     photo_urls: list[str]
+    thumb_url: str | None = None
 
 
 class SharedCollection(BaseModel):

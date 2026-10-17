@@ -29,8 +29,8 @@ IMPORT_HOST_SUFFIXES = (
     "caccoin.com",
     "cacgrading.com",
     "collectors.com",
-    "cloudfront.net",
-    "amazonaws.com",
+    "cloudfront.net",  # PCGS image CDN
+    "ccg-imaging-ngc-coins-production.s3.amazonaws.com",  # NGC's photos (only this bucket)
 )
 
 
@@ -42,51 +42,90 @@ def coin_dir(coin_id: int) -> Path:
     return settings.photo_dir / str(coin_id)
 
 
-MAX_SIDE = 2000  # keeps phone and NGC full-size photos (~2-5 MB) to a few hundred KB
+MAX_SIDE = 2000  # plenty for a coin; phone and NGC full-size photos (2-5 MB) come out at a few hundred KB
+THUMB_SIDE = 360  # list and grid thumbnails (sharp at 2x on the 40-190px spots they're shown)
+JPEG_QUALITY = 84
+THUMB_QUALITY = 76
 
 
-def _shrink(data: bytes, content_type: str) -> tuple[bytes, str] | None:
-    """Re-encode HEIC or oversized photos as a JPEG at most MAX_SIDE px; None to keep the original."""
+def _open(data: bytes):
     import pillow_heif
-    from PIL import Image, ImageOps
+    from PIL import Image
 
     pillow_heif.register_heif_opener()
+    return Image.open(io.BytesIO(data))
+
+
+def _to_jpeg(im, side: int, quality: int) -> bytes:
+    """Upright, at most `side` px, flattened onto white if transparent, saved without metadata (no GPS)."""
+    from PIL import Image, ImageOps
+
+    im = ImageOps.exif_transpose(im)
+    if im.mode in ("RGBA", "LA", "P"):
+        im = im.convert("RGBA")
+        bg = Image.new("RGB", im.size, (255, 255, 255))
+        bg.paste(im, mask=im.getchannel("A"))
+        im = bg
+    else:
+        im = im.convert("RGB")
+    im.thumbnail((side, side))
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=quality, optimize=True, progressive=True)
+    return out.getvalue()
+
+
+def _compress(data: bytes, content_type: str) -> tuple[bytes, str]:
+    """Every photo is stored as an optimized JPEG (animated GIFs are kept as they are)."""
     try:
-        with Image.open(io.BytesIO(data)) as im:
-            if content_type != "image/heic" and max(im.size) <= MAX_SIDE:
-                return None
+        with _open(data) as im:
             if content_type == "image/gif" and getattr(im, "is_animated", False):
-                return None
-            im = ImageOps.exif_transpose(im).convert("RGB")
-            im.thumbnail((MAX_SIDE, MAX_SIDE))
-            out = io.BytesIO()
-            im.save(out, "JPEG", quality=88)
+                return data, content_type
+            return _to_jpeg(im, MAX_SIDE, JPEG_QUALITY), "image/jpeg"
     except Exception as e:
-        if content_type == "image/heic":
-            raise PhotoError("Couldn't read that HEIC photo") from e
-        return None  # store as-is; the browser may still show it
-    return out.getvalue(), "image/jpeg"
+        raise PhotoError("That file isn't a photo we can read. Try a JPEG, PNG or HEIC.") from e
 
 
 def save_bytes(coin_id: int, data: bytes, content_type: str) -> tuple[str, str]:
-    """Store a photo; returns (file name, content type actually stored)."""
+    """Store a photo (compressed) and its thumbnail; returns (file name, content type actually stored)."""
     content_type = content_type.split(";")[0].strip().lower()
     if content_type == "image/heif":
         content_type = "image/heic"
-    ext = ALLOWED_TYPES.get(content_type)
-    if ext is None:
+    if content_type not in ALLOWED_TYPES:
         raise PhotoError(f"Unsupported image type: {content_type or 'unknown'}")
     if len(data) > settings.max_photo_bytes:
         raise PhotoError("Image is too large")
-    shrunk = _shrink(data, content_type)
-    if shrunk:
-        data, content_type = shrunk
-        ext = ".jpg"
+    data, content_type = _compress(data, content_type)
     d = coin_dir(coin_id)
     d.mkdir(parents=True, exist_ok=True)
-    name = f"{uuid.uuid4().hex}{ext}"
+    name = f"{uuid.uuid4().hex}{ALLOWED_TYPES[content_type]}"
     (d / name).write_bytes(data)
+    make_thumb(coin_id, name)
     return name, content_type
+
+
+def file_for(photo, size: str) -> tuple[Path, str] | None:
+    """(path, content type) of a stored photo or its thumbnail (made on first request for older photos)."""
+    if size == "thumb":
+        t = thumb_path(photo.coin_id, photo.file_name)
+        if t.exists() or make_thumb(photo.coin_id, photo.file_name):
+            return t, "image/jpeg"
+    path = photo_path(photo.coin_id, photo.file_name)
+    return (path, photo.content_type) if path.exists() else None
+
+
+def thumb_path(coin_id: int, file_name: str) -> Path:
+    return coin_dir(coin_id) / f"{Path(file_name).stem}.thumb.jpg"
+
+
+def make_thumb(coin_id: int, file_name: str) -> Path | None:
+    """Create (or recreate) the thumbnail; None if the photo can't be read."""
+    src, dst = photo_path(coin_id, file_name), thumb_path(coin_id, file_name)
+    try:
+        with _open(src.read_bytes()) as im:
+            dst.write_bytes(_to_jpeg(im, THUMB_SIDE, THUMB_QUALITY))
+    except Exception:
+        return None
+    return dst
 
 
 def photo_path(coin_id: int, file_name: str) -> Path:
@@ -95,6 +134,7 @@ def photo_path(coin_id: int, file_name: str) -> Path:
 
 def delete_photo_file(coin_id: int, file_name: str) -> None:
     photo_path(coin_id, file_name).unlink(missing_ok=True)
+    thumb_path(coin_id, file_name).unlink(missing_ok=True)
 
 
 def delete_coin_photo_files(coin_id: int) -> None:

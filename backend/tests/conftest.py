@@ -58,3 +58,10 @@ def fixed_spot_prices(monkeypatch):
     prices = {"silver": 50.0, "gold": 4000.0, "platinum": 1600.0, "palladium": 1000.0}
     monkeypatch.setattr(metals, "_fetch_spot", lambda metal: (prices[metal], "2026-10-17T12:00:00Z"))
     metals._spot.clear()
+
+
+@pytest.fixture(autouse=True)
+def fresh_pcgs_cache():
+    from app.services.lookups import pcgs
+
+    pcgs._market_cache.clear()

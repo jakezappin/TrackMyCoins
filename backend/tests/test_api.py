@@ -6,10 +6,17 @@ import pytest
 
 from conftest import signup
 
-PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
-    b"\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+def _png() -> bytes:
+    import io
+
+    from PIL import Image
+
+    b = io.BytesIO()
+    Image.new("RGBA", (40, 30), (180, 180, 190, 255)).save(b, "PNG")
+    return b.getvalue()
+
+
+PNG = _png()
 
 
 _certs = itertools.count(10000001)
@@ -125,7 +132,10 @@ def test_photo_upload_limit_and_delete(authed, morgan_collection):
     r = authed.post(f"/api/coins/{coin['inventory_number']}/photos", files=[("files", ("x.png", PNG, "image/png"))])
     assert r.status_code == 400
     img = authed.get(d["photos"][0]["url"])
-    assert img.status_code == 200 and img.content == PNG
+    assert img.status_code == 200 and img.headers["content-type"] == "image/jpeg"  # stored compressed
+    thumb = authed.get(d["photos"][0]["thumb_url"])
+    assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg"
+    assert d["thumbnail_url"].endswith("?size=thumb")  # lists use the thumbnail
     assert authed.delete(d["photos"][0]["url"]).status_code == 204
     assert len(authed.get(f"/api/coins/{coin['inventory_number']}").json()["photos"]) == 9
     bad = authed.post(f"/api/coins/{coin['inventory_number']}/photos", files=[("files", ("x.txt", b"hi", "text/plain"))])

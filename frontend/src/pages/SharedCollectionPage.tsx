@@ -64,7 +64,7 @@ export default function SharedCollectionPage() {
                 {data.coins.map((c) => (
                   <button key={c.id} className="card shared-coin" onClick={() => setOpen(c)}>
                     {c.photo_urls[0] ? (
-                      <img src={c.photo_urls[0]} alt={`${dateMint(c)} ${data.coin_type_name}`} loading="lazy" />
+                      <img src={c.thumb_url ?? c.photo_urls[0]} alt={`${dateMint(c)} ${data.coin_type_name}`} loading="lazy" />
                     ) : (
                       <CoinPlaceholder date={dateMint(c)} typeName={data.coin_type_name} metal={data.metal} note="" />
                     )}

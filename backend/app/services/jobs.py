@@ -92,9 +92,9 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                 job.messages.append(f"{job.current}: skipped, no numeric grade")
                 job.done += 1
                 continue
-            changed = False
+            changed = called = False
             try:
-                price_refresh.refresh_cpg(db, coin)
+                called |= price_refresh.refresh_cpg(db, coin)
                 changed = True
             except (greysheet.PricingError, lookups.LookupError) as e:
                 job.messages.append(f"{job.current}: CPG: {e}")
@@ -102,7 +102,7 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                 job.messages.append(f"{job.current}: CPG: Greysheet error ({e.__class__.__name__})")
             if pcgs_ok:
                 try:
-                    price_refresh.refresh_pcgs(db, coin)
+                    called |= price_refresh.refresh_pcgs(db, coin)
                     changed = True
                 except (greysheet.PricingError, lookups.LookupError) as e:
                     if "limit" in str(e).lower():
@@ -119,7 +119,8 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                 db.rollback()
                 job.failed += 1
             job.done += 1
-            time.sleep(PAUSE_SECONDS)
+            if called:  # be gentle with the price APIs; no pause when priced from a saved result
+                time.sleep(PAUSE_SECONDS)
         job.status = "finished"
     except Exception as e:  # keep the job record honest even on an unexpected error
         job.status = "failed"

@@ -126,7 +126,7 @@ export default function CoinTable({ coins, mode }: Props) {
                 return (
                   <tr key={c.id} onClick={() => navigate(coinPath(c.inventory_number))}>
                     <td className="thumb-col">
-                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="thumb" /> : <CoinPlaceholder className="thumb ph" metal={metalFor(coinTypes, c.coin_type_id)} />}
+                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="thumb" loading="lazy" /> : <CoinPlaceholder className="thumb ph" metal={metalFor(coinTypes, c.coin_type_id)} />}
                     </td>
                     <td className="mono">{c.inventory_number}</td>
                     <td className="strong">

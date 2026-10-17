@@ -149,6 +149,7 @@ export type SharedCoin = Omit<
   id: number;
   value_estimate: string | null;
   photo_urls: string[];
+  thumb_url: string | null;
 };
 
 export interface SharedCollection {
@@ -205,7 +206,10 @@ export interface PriceQuote {
   value: string | null;
   grade_used: string | null;
   description: string | null;
+  /** When this price began. */
   fetched_at: string;
+  /** Last time the same price was seen again. */
+  confirmed_at: string | null;
 }
 
 export interface Photo {
@@ -213,6 +217,8 @@ export interface Photo {
   sort_order: number;
   source: string;
   url: string;
+  /** Small version for strips and lists. */
+  thumb_url: string;
 }
 
 export interface Coin extends CoinFields {

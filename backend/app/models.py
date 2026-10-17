@@ -257,7 +257,9 @@ class PriceQuote(Base):
     value: Mapped[Decimal | None] = mapped_column(Money)
     grade_used: Mapped[str | None] = mapped_column(String(30))
     description: Mapped[str | None] = mapped_column(String(255))
-    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)  # when this price began
+    # Last time the same price was seen again (a check that found no change doesn't add a row).
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     raw: Mapped[dict | None] = mapped_column(JSON)
 
     coin: Mapped[Coin] = relationship(back_populates="price_quotes")

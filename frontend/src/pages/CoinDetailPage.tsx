@@ -206,7 +206,7 @@ export default function CoinDetailPage() {
           <div className="thumb-row">
             {coin.photos.map((p, i) => (
               <button key={p.id} className={`thumb-btn ${i === active ? "active" : ""}`} onClick={() => setActive(i)}>
-                <img src={p.url} alt="" />
+                <img src={p.thumb_url} alt="" loading="lazy" />
               </button>
             ))}
             {coin.photos.length > 0 && coin.photos.length < 10 && (
@@ -317,7 +317,7 @@ export default function CoinDetailPage() {
             <div className="big-number">{money(coin.latest_cpg?.value)}</div>
             {coin.latest_cpg && (
               <p className="muted small">
-                {coin.latest_cpg.grade_used && `Grade ${coin.latest_cpg.grade_used} · `}as of {shortDate(coin.latest_cpg.fetched_at)}
+                {coin.latest_cpg.grade_used && `Grade ${coin.latest_cpg.grade_used} · `}as of {shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}
               </p>
             )}
             {coin.latest_greysheet && (

@@ -1,6 +1,6 @@
 """Price by grade: CPG for every grade of a coin's issue, saved whenever the coin is priced (no extra calls)."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -19,6 +19,28 @@ def save_sheet(db: Session, sheet: dict) -> None:
         db.add(row)
     row.gsid, row.name, row.rows = sheet.get("gsid"), sheet.get("name"), sheet["rows"]
     row.fetched_at = datetime.now(timezone.utc)
+
+
+REUSE_FOR = timedelta(hours=24)  # Greysheet updates CPG weekly at most; a day-old sheet is current
+
+
+def recent_entry(db: Session, key: str) -> dict | None:
+    """A saved all-grades response for this issue from the last 24 hours, shaped like Greysheet's, or None."""
+    sheet = db.scalar(select(GradePriceSheet).where(GradePriceSheet.key == key))
+    if sheet is None:
+        return None
+    fetched = sheet.fetched_at if sheet.fetched_at.tzinfo else sheet.fetched_at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) - fetched > REUSE_FOR:
+        return None
+    return {
+        "GsId": sheet.gsid,
+        "Name": sheet.name,
+        "PricingData": [
+            {"Grade": r["grade"], "GradeLabel": r["label"], "IsCac": r["cac"], "CpgVal": r.get("cpg") or "",
+             "GreyVal": r.get("grey") or ""}
+            for r in sheet.rows
+        ],
+    }
 
 
 def _key_for(coin: Coin) -> list[str]:

@@ -137,7 +137,7 @@ def coin_out(coin: Coin) -> CoinOut:
     g = latest_quote(coin, GREYSHEET)
     out.latest_greysheet = PriceQuoteOut.model_validate(g) if g else None
     out.photo_count = len(coin.photos)
-    out.thumbnail_url = photo_url(coin.photos[0].id) if coin.photos else None
+    out.thumbnail_url = f"{photo_url(coin.photos[0].id)}?size=thumb" if coin.photos else None
     out.coin_type_slug = coin.coin_type.slug
     out.collection_number = coin.collection.number
     out.collection_type_slug = collection_type_slug(coin.coin_type.slug, coin.collection.finish)
@@ -174,7 +174,8 @@ def coin_detail(coin: Coin) -> CoinDetail:
     return CoinDetail(
         **base,
         photos=[
-            PhotoOut(id=p.id, sort_order=p.sort_order, source=p.source, url=photo_url(p.id))
+            PhotoOut(id=p.id, sort_order=p.sort_order, source=p.source, url=photo_url(p.id),
+                     thumb_url=f"{photo_url(p.id)}?size=thumb")
             for p in coin.photos
         ],
         price_quotes=[PriceQuoteOut.model_validate(q) for q in coin.price_quotes],

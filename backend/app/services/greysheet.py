@@ -87,7 +87,11 @@ def require_grade(coin: Coin) -> None:
         raise PricingError("This coin needs a numeric grade to look up CPG.")
 
 
-def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
+def sheet_key(coin: Coin, gsid: int | None) -> str:
+    return f"gsid:{gsid}" if gsid else f"pcgs:{coin.pcgs_number}"
+
+
+def fetch_cpg(coin: Coin, gsid: int | None = None, cached: dict | None = None) -> dict:
     """Return {'value', 'grade_used', 'description', 'raw', 'greysheet_value', 'sheet'} for the coin's current price.
 
     `sheet` holds CPG for every grade of the issue (same single API call).
@@ -95,19 +99,23 @@ def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
     `greysheet_value` (wholesale) is only filled on Greysheet's Advanced API tier; on Basic it's None.
 
     Looks up by the coin's PCGS number, or by Greysheet id when the catalog entry has no PCGS number.
+    `cached` is a recent all-grades response for the same issue (see grade_prices.recent_entry): no API call.
     """
     if not (coin.pcgs_number or gsid):
         raise PricingError("This coin needs a PCGS number to look up CPG.")
     require_grade(coin)
 
-    with client() as c:
-        # No grade: Greysheet returns every grade in this one call, which also feeds the price-by-grade table.
-        data = get(
-            c,
-            "/GetPricingRequest",
-            PcgsNumber=None if gsid else coin.pcgs_number,
-            Gsid=gsid,
-        )
+    if cached is not None:
+        data = [cached]
+    else:
+        with client() as c:
+            # No grade: Greysheet returns every grade in this one call, which also feeds the price-by-grade table.
+            data = get(
+                c,
+                "/GetPricingRequest",
+                PcgsNumber=None if gsid else coin.pcgs_number,
+                Gsid=gsid,
+            )
     ident = f"Greysheet id {gsid}" if gsid else f"PCGS #{coin.pcgs_number}"
     if not data:
         raise PricingError(f"Greysheet has no pricing for {ident}")
@@ -127,13 +135,14 @@ def fetch_cpg(coin: Coin, gsid: int | None = None) -> dict:
         "raw": {"row": row, "gsid": entry.get("GsId"), "name": entry.get("Name")},
         "greysheet_value": _money(row.get("GreyVal")),
         "sheet": {
-            "key": f"gsid:{gsid}" if gsid else f"pcgs:{coin.pcgs_number}",
+            "key": sheet_key(coin, gsid),
             "gsid": entry.get("GsId"),
             "name": entry.get("Name"),
             "designation": designation,
             "rows": [
                 {"grade": r.get("Grade"), "label": str(r.get("GradeLabel") or r.get("Grade")), "cac": bool(r.get("IsCac")),
-                 "cpg": str(v) if (v := _money(r.get("CpgVal"))) is not None else None}
+                 "cpg": str(v) if (v := _money(r.get("CpgVal"))) is not None else None,
+                 "grey": str(g) if (g := _money(r.get("GreyVal"))) is not None else None}
                 for r in entry.get("PricingData") or []
             ],
         },

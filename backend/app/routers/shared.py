@@ -2,6 +2,8 @@
 
 from decimal import Decimal
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -38,11 +40,12 @@ def shared_collection(token: str, db: Session = Depends(get_db)):
     show = col.share_show_values
     out = []
     for c in coins:
-        fields = {k: getattr(c, k) for k in SharedCoin.model_fields if k not in ("value_estimate", "photo_urls")}
+        fields = {k: getattr(c, k) for k in SharedCoin.model_fields if k not in ("value_estimate", "photo_urls", "thumb_url")}
         out.append(SharedCoin(
             **fields,
             value_estimate=value_estimate(c) if show else None,
             photo_urls=[f"/api/shared/{token}/photos/{p.id}" for p in c.photos],
+            thumb_url=f"/api/shared/{token}/photos/{c.photos[0].id}?size=thumb" if c.photos else None,
         ))
     series = BY_SLUG.get(col.coin_type.slug)
     total = None
@@ -62,13 +65,13 @@ def shared_collection(token: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{token}/photos/{photo_id}")
-def shared_photo(token: str, photo_id: int, db: Session = Depends(get_db)):
+def shared_photo(token: str, photo_id: int, size: Literal["full", "thumb"] = "full", db: Session = Depends(get_db)):
     col = _shared_collection(db, token)
     photo = db.get(CoinPhoto, photo_id)
     sold = photo is not None and (photo.coin.sale_date is not None or photo.coin.sale_price is not None)
     if photo is None or photo.coin.collection_id != col.id or sold:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo not found")
-    path = store.photo_path(photo.coin_id, photo.file_name)
-    if not path.exists():
+    found = store.file_for(photo, size)
+    if found is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo file missing")
-    return FileResponse(path, media_type=photo.content_type, headers={"Cache-Control": "public, max-age=3600"})
+    return FileResponse(found[0], media_type=found[1], headers={"Cache-Control": "public, max-age=3600"})

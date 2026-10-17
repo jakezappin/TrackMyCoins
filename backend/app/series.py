@@ -58,9 +58,6 @@ class Series:
         gold = self.category == "Gold" or self.slug.startswith(("gold-eagles", "gold-buffalo", "gold-type"))
         return "gold" if gold else "silver"
 
-    def nodes_for(self, finish: str) -> tuple[int, ...]:
-        return self.ms_nodes if finish == "MS" else self.pr_nodes
-
 
 C, N, D, Q, H, DOL, GOLD, ASE, COM, TYPESETS = CATEGORIES
 GOLD_MINTS = ("P", "C", "D", "O", "S", "CC")  # C = Charlotte, D = Dahlonega (to 1861) or Denver
