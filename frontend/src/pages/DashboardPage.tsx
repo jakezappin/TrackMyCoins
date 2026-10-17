@@ -7,6 +7,7 @@ import HScroll from "../components/HScroll";
 import NewCollectionDialog from "../components/NewCollectionDialog";
 import QuickSearch from "../components/QuickSearch";
 import ValueHistoryChart from "../components/ValueHistoryChart";
+import MoreMenu from "../components/MoreMenu";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import { ValueNote } from "../components/SummaryCards";
 import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, metalFor, money, shortDate, soldPath } from "../format";
@@ -52,15 +53,19 @@ export default function DashboardPage() {
             {t.collection_count === 1 ? "" : "s"}
           </p>
         </div>
-        <div className="row">
-          <RefreshPrices collectionId={null} coinCount={t.coin_count} onDone={refresh} />
-          <Link className="btn" to="/import">
-            Import coins
-          </Link>
-          <a className="btn" href={api.insuranceUrl(null)} download title="PDF inventory of every coin with photos and values, for your insurer">
-            Insurance report
-          </a>
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+        <div className="head-actions">
+          <span className="act-refresh">
+            <RefreshPrices collectionId={null} coinCount={t.coin_count} onDone={refresh} />
+          </span>
+          <span className="act-more">
+            <MoreMenu>
+              <Link to="/import">Import coins</Link>
+              <a href={api.insuranceUrl(null)} download>
+                Insurance report (PDF)
+              </a>
+            </MoreMenu>
+          </span>
+          <button className="btn btn-primary act-add" onClick={() => setCreating(true)}>
             + New collection
           </button>
         </div>

@@ -4,6 +4,7 @@ import { api, type Coin, type Collection } from "../api";
 import { useApp } from "../App";
 import CoinTable from "../components/CoinTable";
 import ShareCollection from "../components/ShareCollection";
+import MoreMenu from "../components/MoreMenu";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import SummaryCards from "../components/SummaryCards";
 import ValueHistoryChart from "../components/ValueHistoryChart";
@@ -85,31 +86,31 @@ export default function CollectionPage() {
             <p className="muted">{collection.collection_type_label}</p>
           </div>
         )}
-        <div className="row">
-          <details className="menu">
-            <summary className="btn">⋯</summary>
-            <div className="menu-pop">
-              <button onClick={() => setRenaming(true)}>Rename collection</button>
-              <button className="danger" onClick={remove}>
-                Delete collection
-              </button>
-            </div>
-          </details>
-          <RefreshPrices collectionId={collection.id} coinCount={collection.summary.coin_count} onDone={reload} />
-          <Link className="btn" to={`${collectionPath(collection)}/status`}>
+        <div className="head-actions">
+          <span className="act-refresh">
+            <RefreshPrices collectionId={collection.id} coinCount={collection.summary.coin_count} onDone={reload} />
+          </span>
+          <Link className="btn act-status" to={`${collectionPath(collection)}/status`}>
             Collection Status
           </Link>
-          <a className="btn" href={api.exportUrl(collection.id)} download>
-            Export
-          </a>
-          <Link className="btn" to={`/import?collection=${collection.id}`}>
-            Import
-          </Link>
-          <ShareCollection collection={collection} onChange={setCollection} />
-          <a className="btn" href={api.insuranceUrl(collection.id)} download title="PDF inventory with photos and values, for your insurer">
-            Insurance report
-          </a>
-          <Link className="btn btn-primary" to={`/coins/new?collection=${collection.id}`}>
+          <span className="act-more">
+            <MoreMenu>
+              <Link to={`/import?collection=${collection.id}`}>Import coins</Link>
+              <a href={api.exportUrl(collection.id)} download>
+                Export to Excel
+              </a>
+              <a href={api.insuranceUrl(collection.id)} download>
+                Insurance report (PDF)
+              </a>
+              <ShareCollection collection={collection} onChange={setCollection} asMenuItem />
+              <hr />
+              <button type="button" onClick={() => setRenaming(true)}>Rename collection</button>
+              <button type="button" className="danger" onClick={remove}>
+                Delete collection
+              </button>
+            </MoreMenu>
+          </span>
+          <Link className="btn btn-primary act-add" to={`/coins/new?collection=${collection.id}`}>
             + Add coin
           </Link>
         </div>

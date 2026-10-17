@@ -1,8 +1,18 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { api, type Collection } from "../api";
 
 /** "Share" button + dialog: turn a read-only public link on or off for one collection. */
-export default function ShareCollection({ collection, onChange }: { collection: Collection; onChange: (c: Collection) => void }) {
+export default function ShareCollection({
+  collection,
+  onChange,
+  asMenuItem,
+}: {
+  collection: Collection;
+  onChange: (c: Collection) => void;
+  /** Render as a plain item inside a drop-down menu instead of a button. */
+  asMenuItem?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +45,10 @@ export default function ShareCollection({ collection, onChange }: { collection: 
 
   return (
     <>
-      <button className="btn" onClick={() => setOpen(true)}>
-        {shared ? "Shared" : "Share"}
+      <button type="button" className={asMenuItem ? undefined : "btn"} onClick={() => setOpen(true)}>
+        {asMenuItem ? (shared ? "Sharing… (on)" : "Share…") : shared ? "Shared" : "Share"}
       </button>
-      {open && (
+      {open && createPortal(
         <div className="modal-backdrop" onClick={() => setOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Share “{collection.name}”</h2>
@@ -93,7 +103,8 @@ export default function ShareCollection({ collection, onChange }: { collection: 
             </div>
             {shared && <p className="muted small">Stopping sharing turns this link off for good. Sharing again makes a new link.</p>}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

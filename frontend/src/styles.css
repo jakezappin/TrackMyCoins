@@ -2436,3 +2436,81 @@ table {
   background: var(--surface);
   color: var(--text);
 }
+
+/* ---- Page header actions: main buttons + "More" menu ------------------------ */
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.act-refresh {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.more-menu summary {
+  list-style: none;
+  cursor: pointer;
+}
+.more-menu .menu-pop {
+  min-width: 220px;
+}
+.menu-pop a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+.menu-pop a:hover {
+  background: var(--surface-2);
+}
+.menu-pop hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 4px 2px;
+}
+@media (max-width: 640px) {
+  .page-head:has(.head-actions) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .head-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "add add"
+      "refresh more";
+    gap: 8px;
+  }
+  .head-actions:has(.act-status) {
+    grid-template-columns: 1fr 1fr auto;
+    grid-template-areas:
+      "add add more"
+      "refresh status status";
+  }
+  .act-add {
+    grid-area: add;
+  }
+  .act-refresh {
+    grid-area: refresh;
+  }
+  .act-status {
+    grid-area: status;
+  }
+  .act-more {
+    grid-area: more;
+  }
+  .head-actions .btn {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+  .act-more .menu,
+  .act-more summary {
+    height: 100%;
+  }
+}
