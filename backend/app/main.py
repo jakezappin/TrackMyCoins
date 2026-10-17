@@ -8,7 +8,7 @@ from sqlalchemy import select
 from .config import get_settings
 from .db import SessionLocal
 from .models import CoinType
-from .routers import auth, catalog, coins, collections, dashboard, jobs, photos, pricing, reports, shared
+from .routers import auth, catalog, coins, collections, dashboard, jobs, label, photos, pricing, reports, shared
 from .series import SERIES
 
 
@@ -45,7 +45,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Coin App", lifespan=lifespan)
-for r in (auth, catalog, collections, coins, dashboard, jobs, photos, pricing, reports, shared):
+for r in (auth, catalog, collections, coins, dashboard, jobs, label, photos, pricing, reports, shared):
     app.include_router(r.router)
 app.include_router(reports.insurance_router)
 

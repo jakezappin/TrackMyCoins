@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     greysheet_api_key: str = ""
     greysheet_api_token: str = ""
     greysheet_use_sandbox: bool = False
+    # Claude (reads slab labels from photos). Without a key, "Read label" says it isn't set up.
+    anthropic_api_key: str = ""
+    label_model: str = "claude-opus-5-5"
     # Optional: skip catalog-tree discovery by naming the Greysheet node id(s) per coin type slug,
     # e.g. GREYSHEET_NODE_OVERRIDES='{"morgan-dollars": [1234]}'
     greysheet_node_overrides: dict[str, list[int]] = {}

@@ -1,5 +1,6 @@
 """Photo storage on local disk under data/photos/<coin_id>/."""
 
+import io
 import shutil
 import uuid
 from pathlib import Path
@@ -41,18 +42,39 @@ def coin_dir(coin_id: int) -> Path:
     return settings.photo_dir / str(coin_id)
 
 
-def save_bytes(coin_id: int, data: bytes, content_type: str) -> str:
+def _heic_to_jpeg(data: bytes) -> bytes:
+    """iPhone photos: most browsers can't show HEIC, so keep a JPEG instead."""
+    import pillow_heif
+    from PIL import Image, ImageOps
+
+    pillow_heif.register_heif_opener()
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            out = io.BytesIO()
+            im.save(out, "JPEG", quality=90)
+    except Exception as e:
+        raise PhotoError("Couldn't read that HEIC photo") from e
+    return out.getvalue()
+
+
+def save_bytes(coin_id: int, data: bytes, content_type: str) -> tuple[str, str]:
+    """Store a photo; returns (file name, content type actually stored)."""
     content_type = content_type.split(";")[0].strip().lower()
+    if content_type == "image/heif":
+        content_type = "image/heic"
     ext = ALLOWED_TYPES.get(content_type)
     if ext is None:
         raise PhotoError(f"Unsupported image type: {content_type or 'unknown'}")
     if len(data) > settings.max_photo_bytes:
         raise PhotoError("Image is too large")
+    if content_type == "image/heic":
+        data, content_type, ext = _heic_to_jpeg(data), "image/jpeg", ".jpg"
     d = coin_dir(coin_id)
     d.mkdir(parents=True, exist_ok=True)
     name = f"{uuid.uuid4().hex}{ext}"
     (d / name).write_bytes(data)
-    return name
+    return name, content_type
 
 
 def photo_path(coin_id: int, file_name: str) -> Path:

@@ -62,6 +62,31 @@ export interface Collection {
   summary: Summary;
 }
 
+/** What Claude read off a slab label photo. */
+export interface LabelReading {
+  found_label: boolean;
+  grading_service: Exclude<GradingService, "RAW"> | null;
+  cert_number: string | null;
+  year: number | null;
+  mint_mark: string | null;
+  coin_type: string | null;
+  denomination: string | null;
+  grade_prefix: string | null;
+  grade: number | null;
+  grade_plus: boolean;
+  grade_star: boolean;
+  strike_designation: string | null;
+  variety: string | null;
+  vam: string | null;
+  cac_sticker: CacSticker | null;
+  confidence: "high" | "medium" | "low";
+  notes: string | null;
+  /** "barcode" = scanned (and, for PCGS, confirmed by lookup); "claude" = read from the printed label. */
+  source: "barcode" | "claude";
+  /** The PCGS lookup that confirmed a scanned barcode, when there was one. */
+  lookup?: LookupResult | null;
+}
+
 /** A coin as a visitor to a shared link sees it: no cost, seller, notes or sale details. */
 export type SharedCoin = Omit<
   CoinFields,
@@ -392,6 +417,11 @@ export const api = {
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}`, b),
   deleteCoin: (inv: string) => request<void>("DELETE", `/api/coins/${encodeURIComponent(inv)}`),
 
+  readLabel: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<LabelReading>("POST", "/api/read-label", fd);
+  },
   uploadPhotos: (inv: string, files: File[]) => {
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));

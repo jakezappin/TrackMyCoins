@@ -7,8 +7,10 @@ import {
   type CoinFields,
   type DuplicateCert,
   type GradingService,
+  type LabelReading,
   type LookupResult,
 } from "../api";
+import PhotoButtons from "../components/PhotoButtons";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
 import { coinPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
@@ -104,6 +106,9 @@ export default function CoinFormPage() {
   const [findBusy, setFindBusy] = useState(false);
   const [findMsg, setFindMsg] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CatalogCandidate[]>([]);
+  const [labelBusy, setLabelBusy] = useState(false);
+  const [labelError, setLabelError] = useState<string | null>(null);
+  const [label, setLabel] = useState<LabelReading | null>(null);
   const [dup, setDup] = useState<{ service: string; cert: string; duplicate: DuplicateCert } | null>(null);
 
   useEffect(() => {
@@ -219,13 +224,13 @@ export default function CoinFormPage() {
   });
 
   /** Warn (and return true) if this cert is already on hand in one of the user's collections. */
-  async function checkDuplicate(): Promise<boolean> {
-    const cert = form.cert_number?.trim();
-    if (!cert || form.grading_service === "RAW") return false;
+  async function checkDuplicate(service: GradingService = form.grading_service, certIn = form.cert_number): Promise<boolean> {
+    const cert = certIn?.trim();
+    if (!cert || service === "RAW") return false;
     try {
-      const { duplicate } = await api.certCheck(form.grading_service, cert, editInv);
+      const { duplicate } = await api.certCheck(service, cert, editInv);
       if (duplicate) {
-        setDup({ service: form.grading_service, cert, duplicate });
+        setDup({ service, cert, duplicate });
         return true;
       }
     } catch {
@@ -234,18 +239,54 @@ export default function CoinFormPage() {
     return false;
   }
 
-  async function doLookup() {
-    if (!form.cert_number) return;
-    if (await checkDuplicate()) return;
+  async function doLookup(service: GradingService = form.grading_service, cert = form.cert_number) {
+    if (!cert) return;
+    if (await checkDuplicate(service, cert)) return;
     setLookupBusy(true);
     setLookupError(null);
     setLookup(null);
     try {
-      const r = await api.lookup(form.grading_service, form.cert_number);
-      setLookup(r);
+      applyLookup(await api.lookup(service, cert));
+    } catch (e) {
+      setLookupError((e as Error).message);
+    } finally {
+      setLookupBusy(false);
+    }
+  }
+
+  function applyLookup(r: LookupResult) {
+    setLookup(r);
+    setForm((f) => ({
+      ...f,
+      cert_number: r.cert_number,
+      year: r.year ?? f.year,
+      mint_mark: r.mint_mark ?? f.mint_mark,
+      grade_prefix: r.grade_prefix ?? f.grade_prefix,
+      grade: r.grade ?? f.grade,
+      grade_plus: r.grade ? r.grade_plus : f.grade_plus,
+      grade_star: r.grade ? r.grade_star : f.grade_star,
+      strike_designation: r.strike_designation ?? f.strike_designation,
+      vam: r.vam ?? f.vam,
+      pcgs_number: r.pcgs_number ?? f.pcgs_number,
+      cac: r.cac ?? f.cac,
+      cac_sticker: r.cac === null ? f.cac_sticker : r.cac_sticker,
+    }));
+    setImportUrls(r.image_urls);
+  }
+
+  /** Read the slab label from a photo, fill in the form, and keep the photo for the coin. */
+  async function readLabel(file: File) {
+    setLabelBusy(true);
+    setLabelError(null);
+    setLabel(null);
+    try {
+      const r = await api.readLabel(file);
+      setLabel(r);
+      if (!r.found_label) return;
       setForm((f) => ({
         ...f,
-        cert_number: r.cert_number,
+        grading_service: r.grading_service ?? (f.grading_service === "RAW" ? "PCGS" : f.grading_service),
+        cert_number: r.cert_number ?? f.cert_number,
         year: r.year ?? f.year,
         mint_mark: r.mint_mark ?? f.mint_mark,
         grade_prefix: r.grade_prefix ?? f.grade_prefix,
@@ -253,16 +294,22 @@ export default function CoinFormPage() {
         grade_plus: r.grade ? r.grade_plus : f.grade_plus,
         grade_star: r.grade ? r.grade_star : f.grade_star,
         strike_designation: r.strike_designation ?? f.strike_designation,
+        variety: r.variety ?? f.variety,
         vam: r.vam ?? f.vam,
-        pcgs_number: r.pcgs_number ?? f.pcgs_number,
-        cac: r.cac ?? f.cac,
-        cac_sticker: r.cac === null ? f.cac_sticker : r.cac_sticker,
+        cac: r.cac_sticker ? true : f.cac,
+        cac_sticker: r.cac_sticker ?? f.cac_sticker,
       }));
-      setImportUrls(r.image_urls);
+      if (!editInv) setFiles((cur) => (cur.length + importUrls.length < 10 ? [...cur, file] : cur));
+      // PCGS certs can be looked up for the rest (PCGS number, photos, price guide).
+      // A scanned PCGS barcode was already confirmed by a lookup, so use that one.
+      if (r.lookup) {
+        if (!(await checkDuplicate(r.lookup.grading_service, r.lookup.cert_number))) applyLookup(r.lookup);
+      } else if (r.grading_service === "PCGS" && r.cert_number) await doLookup("PCGS", r.cert_number);
+      else if (r.grading_service && r.cert_number) await checkDuplicate(r.grading_service, r.cert_number);
     } catch (e) {
-      setLookupError((e as Error).message);
+      setLabelError((e as Error).message);
     } finally {
-      setLookupBusy(false);
+      setLabelBusy(false);
     }
   }
 
@@ -415,7 +462,7 @@ export default function CoinFormPage() {
                 <input
                   {...text("cert_number")}
                   placeholder="e.g. 12345678"
-                  onBlur={checkDuplicate}
+                  onBlur={() => checkDuplicate()}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -424,7 +471,7 @@ export default function CoinFormPage() {
                   }}
                 />
               </label>
-              <button type="button" className="btn btn-primary" onClick={doLookup} disabled={!form.cert_number || lookupBusy}>
+              <button type="button" className="btn btn-primary" onClick={() => doLookup()} disabled={!form.cert_number || lookupBusy}>
                 {lookupBusy ? "Looking up…" : "Look up"}
               </button>
               {vurl && (
@@ -436,6 +483,18 @@ export default function CoinFormPage() {
           }
         </div>
         )}
+        <div className="read-label">
+          <span className="small muted">Or read it from a photo of the slab label:</span>
+          <PhotoButtons
+            multiple={false}
+            takeLabel={labelBusy ? "Reading label…" : "Photo of label"}
+            chooseLabel="Choose photo"
+            disabled={labelBusy}
+            onFiles={(fs) => readLabel(fs[0])}
+          />
+        </div>
+        {labelError && <p className="error small">{labelError}</p>}
+        {label && <LabelSummary r={label} kept={!editInv && label.found_label} />}
         {lookupError && <p className="error">{lookupError}</p>}
         {lookup && (
           <div className="lookup-result">
@@ -739,12 +798,17 @@ export default function CoinFormPage() {
       {!editInv && (
         <section className="card form-section">
           <h2>Photos</h2>
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 10 - importUrls.length))}
+          <PhotoButtons
+            disabled={files.length + importUrls.length >= 10}
+            onFiles={(fs) => setFiles((cur) => [...cur, ...fs].slice(0, 10 - importUrls.length))}
           />
+          {files.length > 0 && (
+            <div className="thumb-row">
+              {files.map((f, i) => (
+                <FileThumb key={`${f.name}-${f.lastModified}-${i}`} file={f} onRemove={() => setFiles((cur) => cur.filter((_, j) => j !== i))} />
+              ))}
+            </div>
+          )}
           <p className="muted small">
             Up to 10 photos per coin, including any imported from the grading service. You can add or remove photos
             later on the coin page.
@@ -752,5 +816,47 @@ export default function CoinFormPage() {
         </section>
       )}
     </form>
+  );
+}
+
+function LabelSummary({ r, kept }: { r: LabelReading; kept: boolean }) {
+  if (!r.found_label) {
+    return <p className="warn small">Couldn't find a slab label in that photo.{r.notes ? ` ${r.notes}` : ""}</p>;
+  }
+  const date = r.year ? `${r.year}${r.mint_mark && r.mint_mark !== "P" ? `-${r.mint_mark}` : ""}` : "";
+  const grade = `${r.grade_prefix ?? ""}${r.grade ?? ""}${r.grade_plus ? "+" : ""}${r.grade_star ? "★" : ""}`;
+  const parts = [date, r.coin_type, r.variety, grade, r.strike_designation].filter(Boolean).join(" ");
+  return (
+    <div className="lookup-result">
+      <p className="small">
+        <strong>{r.source === "barcode" ? "Barcode scanned:" : "Label read:"}</strong> {r.grading_service ?? "Unknown service"}
+        {r.cert_number ? ` #${r.cert_number}` : ""}
+        {parts ? ` · ${parts}` : ""}
+        {r.cac_sticker ? ` · CAC ${r.cac_sticker}` : ""}
+      </p>
+      {r.confidence !== "high" && (
+        <p className="warn small">Some of the label was hard to read. Check the cert number and grade before saving.</p>
+      )}
+      {r.notes && r.source === "claude" && <p className="muted small">{r.notes}</p>}
+      <p className="muted small">
+        {r.source === "barcode" && !r.year
+          ? `The barcode only holds the cert number. Use Verify ↗ to see ${r.grading_service ?? "the grading service"}'s details, then fill in the date and grade below`
+          : "Fields below were filled in from the label"}
+        {kept ? ". The photo will be saved with the coin." : "."}
+      </p>
+    </div>
+  );
+}
+
+function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return (
+    <span className="file-thumb">
+      <img src={url} alt={file.name} />
+      <button type="button" className="icon-btn" onClick={onRemove} aria-label={`Remove ${file.name}`}>
+        ✕
+      </button>
+    </span>
   );
 }

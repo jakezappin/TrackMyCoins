@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type CoinDetail } from "../api";
 import { useApp } from "../App";
+import PhotoButtons from "../components/PhotoButtons";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import EstimatedValueCard from "../components/EstimatedValueCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
@@ -91,7 +92,7 @@ export default function CoinDetailPage() {
     update(await api.coin(inv));
   }
 
-  async function upload(files: FileList | null) {
+  async function upload(files: FileList | File[] | null) {
     if (!files?.length) return;
     try {
       update(await api.uploadPhotos(inv, Array.from(files)));
@@ -209,7 +210,12 @@ export default function CoinDetailPage() {
             )}
           </div>
           <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />
-          <p className="muted small">{coin.photos.length} / 10 photos</p>
+          <div className="photo-foot">
+            <span className="muted small">{coin.photos.length} / 10 photos</span>
+            {coin.photos.length < 10 && (
+              <PhotoButtons takeLabel="Take photo" chooseLabel="Add photos" onFiles={(fs) => upload(fs)} />
+            )}
+          </div>
         </section>
 
         {/* Facts + pricing */}

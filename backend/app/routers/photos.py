@@ -40,10 +40,10 @@ async def upload_photos(
     for f in files:
         data = await f.read()
         try:
-            name = store.save_bytes(coin.id, data, f.content_type or "")
+            name, ctype = store.save_bytes(coin.id, data, f.content_type or "")
         except store.PhotoError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{f.filename}: {e}")
-        db.add(CoinPhoto(coin_id=coin.id, file_name=name, content_type=f.content_type, sort_order=order))
+        db.add(CoinPhoto(coin_id=coin.id, file_name=name, content_type=ctype, sort_order=order))
         order += 1
     db.commit()
     db.refresh(coin)
@@ -62,7 +62,7 @@ def import_photos(
     for url in urls:
         try:
             data, ctype = store.download_image(url)
-            name = store.save_bytes(coin.id, data, ctype)
+            name, ctype = store.save_bytes(coin.id, data, ctype)
         except Exception as e:  # keep going; one bad image shouldn't block the rest
             errors.append(str(e))
             continue
