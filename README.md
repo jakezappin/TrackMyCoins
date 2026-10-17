@@ -99,7 +99,7 @@ cd backend && .venv/bin/python -m scripts.greysheet_check kennedy-half-dollars  
 
 Each fetch uses 2 of PCGS's 1,000 free API calls a day.
 
-PCGS auction prices include the buyer's premium. The chart's toggle can show the estimated hammer price instead, removing each house's premium (e.g. Stack's 20–22%, Heritage 20%).
+PCGS auction prices include the buyer's premium.
 
 ## Coin types
 

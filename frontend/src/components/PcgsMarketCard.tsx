@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { AuctionSale, PcgsMarket } from "../api";
 import { money, shortDate } from "../format";
-import { hammerPrice } from "../premium";
 
 interface Props {
   market: PcgsMarket | null;
@@ -177,45 +176,11 @@ function AuctionChart({ sales, guide, cpg }: { sales: AuctionSale[]; guide: numb
   );
 }
 
-type PriceMode = "premium" | "hammer";
-const MODE_KEY = "coinapp.auctionPriceMode";
-
 export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch }: Props) {
   const guide = market?.price_guide != null ? Number(market.price_guide) : null;
   const cpg = cpgValue != null ? Number(cpgValue) : null;
-  const [mode, setMode] = useState<PriceMode>(() => {
-    try {
-      return localStorage.getItem(MODE_KEY) === "hammer" ? "hammer" : "premium";
-    } catch {
-      return "premium";
-    }
-  });
-  function chooseMode(m: PriceMode) {
-    setMode(m);
-    try {
-      localStorage.setItem(MODE_KEY, m);
-    } catch {
-      // not remembered; still switches
-    }
-  }
-  // PCGS prices include the buyer's premium; "hammer" divides it back out.
-  const sales = useMemo(
-    () =>
-      (market?.auctions ?? []).map((s) => {
-        const h = hammerPrice(Number(s.price), s.auctioneer);
-        return {
-          ...s,
-          withPremium: Number(s.price),
-          hammer: h.hammer,
-          rate: h.rate,
-          exact: h.exact,
-          price: String(mode === "hammer" ? h.hammer : Number(s.price)),
-        };
-      }),
-    [market, mode],
-  );
+  const sales = market?.auctions ?? [];
   const avg = sales.length ? sales.reduce((t, s) => t + Number(s.price), 0) / sales.length : null;
-  const allExact = sales.every((s) => s.exact);
 
   return (
     <section className="card pcgs-market">
@@ -250,13 +215,8 @@ export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch 
               <dd>{money(market.price_guide)}</dd>
             </div>
             <div>
-              <dt>
-                Avg. of last {sales.length || ""} sales{mode === "hammer" ? " (hammer)" : ""}
-              </dt>
-              <dd>
-                {mode === "hammer" && !allExact ? "≈ " : ""}
-                {money(avg)}
-              </dd>
+              <dt>Avg. of last {sales.length || ""} sales</dt>
+              <dd>{money(avg)}</dd>
             </div>
             <div>
               <dt>PCGS population</dt>
@@ -271,39 +231,13 @@ export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch 
             <p className="muted small">No recent auction sales recorded at this grade.</p>
           ) : (
             <>
-              <div className="premium-toggle">
-                <div className="segmented" role="tablist" aria-label="Auction prices">
-                  {(
-                    [
-                      ["premium", "With buyer's premium"],
-                      ["hammer", "Hammer (no premium)"],
-                    ] as const
-                  ).map(([m, label]) => (
-                    <button
-                      key={m}
-                      type="button"
-                      role="tab"
-                      aria-selected={mode === m}
-                      className={`seg ${mode === m ? "active" : ""}`}
-                      onClick={() => chooseMode(m)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <span className="muted small">
-                  {mode === "premium"
-                    ? "What the buyer paid. PCGS's auction prices include the buyer's premium."
-                    : "The winning bid, with each house's buyer's premium removed (e.g. Stack's 20–22%, Heritage 20%)."}
-                </span>
-              </div>
+              <p className="muted small">Auction prices include the buyer's premium.</p>
               <AuctionChart sales={sales} guide={guide} cpg={cpg} />
               <table className="history apr-table">
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th className="num">{mode === "hammer" ? "Hammer" : "Price"}</th>
-                    <th className="num">{mode === "hammer" ? "With premium" : "Hammer"}</th>
+                    <th className="num">Price</th>
                     <th>Auction</th>
                     <th>Slab</th>
                   </tr>
@@ -312,14 +246,7 @@ export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch 
                   {sales.map((s, i) => (
                     <tr key={i}>
                       <td>{monthLabel(s.date)}</td>
-                      <td className="num">
-                        {mode === "hammer" && !s.exact ? "≈ " : ""}
-                        {money(s.price)}
-                      </td>
-                      <td className="num muted" title={`Buyer's premium ${Math.round(s.rate * 1000) / 10}%`}>
-                        {mode === "hammer" ? money(s.withPremium) : `${s.exact ? "" : "≈ "}${money(s.hammer)}`}
-                        <span className="bp-rate"> ({Math.round(s.rate * 1000) / 10}%)</span>
-                      </td>
+                      <td className="num">{money(s.price)}</td>
                       <td>
                         {s.url ? (
                           <a href={s.url} target="_blank" rel="noreferrer" title={s.sale_name ?? undefined}>

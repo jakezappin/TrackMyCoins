@@ -23,7 +23,7 @@ const FEATURES = [
   },
   {
     title: "Recent auction sales",
-    body: "The last ten auction results for your coin and grade, charted against the price guides with or without the buyer's premium, and linked to every lot.",
+    body: "The last ten auction results for your coin and grade, charted against the price guides (buyer's premium included), with links to every lot.",
     icon: <path d="M5 17l4-5 4 3 6-8M5 7h.01M9 12h.01M13 15h.01M19 7h.01" />,
   },
   {
