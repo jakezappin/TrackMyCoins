@@ -1110,7 +1110,7 @@ table {
 }
 .status-row {
   display: grid;
-  grid-template-columns: 28px var(--date-col, 150px) 1fr;
+  grid-template-columns: 28px var(--date-col, 150px) 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
@@ -1172,12 +1172,19 @@ table {
   color: var(--muted);
   border-style: dashed;
 }
+.status-want {
+  justify-self: end;
+}
 @media (max-width: 520px) {
   .status-row {
-    grid-template-columns: 24px 1fr;
+    grid-template-columns: 24px 1fr auto;
   }
   .status-coins {
-    grid-column: 2;
+    grid-column: 2 / -1;
+  }
+  .status-want {
+    grid-column: 3;
+    grid-row: 1;
   }
 }
 

@@ -82,6 +82,7 @@ export default function StatusPage() {
     return status.rows;
   }, [status, filter]);
 
+  // Owned dates suggest the next grade up (someone looking to upgrade); missing ones just the finish.
   const canWant =
     !!collection && mode === "full" && !coinTypes.find((t) => t.id === collection.coin_type_id)?.is_type_set;
 
@@ -186,21 +187,21 @@ export default function StatusPage() {
                   {r.coins.length ? (
                     r.coins.map((c) => <CoinChip key={c.id} coin={c} />)
                   ) : (
-                    <>
-                      <span className="tag missing-tag">Missing</span>
-                      {canWant && (
-                        <AddWant
-                          collectionId={collection.id}
-                          year={r.year}
-                          mintMark={r.mint_mark}
-                          variety={r.variety}
-                          gradePrefix={collection.finish === "MS" ? "MS" : "PR"}
-                          label={`${r.label} ${collection.collection_type_label}`}
-                        />
-                      )}
-                    </>
+                    <span className="tag missing-tag">Missing</span>
                   )}
                 </span>
+                {canWant && (
+                  <span className="status-want">
+                    <AddWant
+                      collectionId={collection.id}
+                      year={r.year}
+                      mintMark={r.mint_mark}
+                      variety={r.variety}
+                      {...wantTarget(r.coins[0], collection.finish === "MS" ? "MS" : "PR")}
+                      label={`${r.label} ${collection.collection_type_label}`}
+                    />
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -229,4 +230,15 @@ export default function StatusPage() {
       )}
     </div>
   );
+}
+
+const SHELDON = [1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 53, 55, 58, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70];
+
+/** Target grade for "+ Want": the grade above the best coin owned, or none for a missing date. */
+function wantTarget(best: Coin | undefined, uncirculated: "MS" | "PR") {
+  if (!best?.grade) return { gradePrefix: uncirculated };
+  const next = SHELDON.find((g) => g > best.grade!);
+  if (!next) return { gradePrefix: uncirculated };
+  const prefix = next >= 60 ? (best.grade_prefix === "PR" || best.grade_prefix === "SP" ? best.grade_prefix : uncirculated) : best.grade_prefix ?? uncirculated;
+  return { gradePrefix: prefix, grade: next };
 }
