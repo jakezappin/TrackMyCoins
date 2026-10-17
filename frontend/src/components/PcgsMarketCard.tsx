@@ -176,20 +176,55 @@ function AuctionChart({ sales, guide, cpg }: { sales: AuctionSale[]; guide: numb
   );
 }
 
+const COLLAPSE_KEY = "pcgs-market-collapsed";
+
 export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch }: Props) {
   const guide = market?.price_guide != null ? Number(market.price_guide) : null;
   const cpg = cpgValue != null ? Number(cpgValue) : null;
   const sales = market?.auctions ?? [];
   const avg = sales.length ? sales.reduce((t, s) => t + Number(s.price), 0) / sales.length : null;
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1");
+      } catch {
+        // Remembering is only a convenience.
+      }
+      return !c;
+    });
 
   return (
-    <section className="card pcgs-market">
+    <section className={`card pcgs-market${collapsed ? " collapsed" : ""}`}>
       <div className="section-head">
-        <h2>PCGS market</h2>
-        <button className="btn" onClick={onFetch} disabled={busy}>
-          {busy ? "Fetching…" : market ? "Refresh PCGS Data" : "Get PCGS Data"}
+        <button type="button" className="collapse-toggle" onClick={toggle} aria-expanded={!collapsed}>
+          <span className="chev" aria-hidden="true">
+            ▾
+          </span>
+          <h2>PCGS market</h2>
         </button>
+        {!collapsed && (
+          <button className="btn" onClick={onFetch} disabled={busy}>
+            {busy ? "Fetching…" : market ? "Refresh PCGS Data" : "Get PCGS Data"}
+          </button>
+        )}
       </div>
+      {collapsed ? (
+        market && (
+          <p className="muted small collapsed-summary">
+            Price Guide {money(market.price_guide)}
+            {avg != null ? ` · avg. of last ${sales.length} sales ${money(avg)}` : ""}
+            {market.population != null ? ` · pop ${market.population.toLocaleString()}` : ""}
+          </p>
+        )
+      ) : (
+      <>
       {error && <p className="error small">{error}</p>}
 
       {!market ? (
@@ -268,6 +303,8 @@ export default function PcgsMarketCard({ market, cpgValue, busy, error, onFetch 
             </>
           )}
         </>
+      )}
+      </>
       )}
     </section>
   );

@@ -2553,3 +2553,70 @@ table {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Card / form footers, collapsible cards --------------------------------- */
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.card-foot .row {
+  margin-left: auto;
+}
+.form-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.form-foot .row {
+  margin-left: auto;
+}
+.collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.collapse-toggle h2 {
+  margin: 0;
+}
+.collapse-toggle .chev {
+  display: inline-block;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.collapsed .collapse-toggle .chev {
+  transform: rotate(-90deg);
+}
+.collapsed-summary {
+  margin: 0;
+}
+@media (max-width: 520px) {
+  .form-foot {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .form-foot .row {
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .form-foot .btn {
+    justify-content: center;
+    text-align: center;
+  }
+}

@@ -13,7 +13,7 @@ import {
 import PhotoButtons from "../components/PhotoButtons";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
-import { coinPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
+import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
 
 const EMPTY: CoinFields = {
   year: null,
@@ -310,6 +310,19 @@ export default function CoinFormPage() {
       setLabelError((e as Error).message);
     } finally {
       setLabelBusy(false);
+    }
+  }
+
+  async function removeCoin() {
+    if (!editInv) return;
+    const label = `${form.year ?? ""}${form.mint_mark && form.mint_mark !== "P" ? `-${form.mint_mark}` : ""}`;
+    if (!confirm(`Delete ${editInv}${label ? ` (${label})` : ""}? This can't be undone.`)) return;
+    try {
+      await api.deleteCoin(editInv);
+      await refresh();
+      navigate(collection ? collectionPath(collection) : "/dashboard");
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
@@ -815,6 +828,22 @@ export default function CoinFormPage() {
           </p>
         </section>
       )}
+
+      <div className="form-foot">
+        {editInv && (
+          <button type="button" className="btn danger-outline" onClick={removeCoin} disabled={saving}>
+            Delete coin
+          </button>
+        )}
+        <div className="row">
+          <button type="button" className="btn" onClick={() => navigate(-1)}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" disabled={saving}>
+            {saving ? "Saving…" : "Save coin"}
+          </button>
+        </div>
+      </div>
     </form>
   );
 }

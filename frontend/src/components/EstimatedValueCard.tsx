@@ -38,6 +38,14 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
     (source === "custom" && custom !== (coin.custom_value ?? "")) ||
     (source === "cpg" && (premium("toner") !== saved.toner || premium("holder") !== saved.holder));
 
+  function reset() {
+    setSource(coin.value_source);
+    setOn({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium) });
+    setAmount(saved);
+    setCustom(coin.custom_value ?? "");
+    setError(null);
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -133,11 +141,18 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
         )}
 
         {dirty && (
-          <div className="row">
-            <span className="muted small">New value: {money(preview)}</span>
-            <button className="btn btn-primary" disabled={busy}>
-              {busy ? "Saving…" : "Save"}
-            </button>
+          <div className="card-foot">
+            <span className="small">
+              <span className="muted">New value</span> <strong>{money(preview)}</strong>
+            </span>
+            <div className="row">
+              <button type="button" className="btn" disabled={busy} onClick={reset}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" disabled={busy}>
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </div>
           </div>
         )}
         {error && <p className="error small">{error}</p>}
