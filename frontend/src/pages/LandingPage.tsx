@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import CoinPlaceholder from "../components/CoinPlaceholder";
 import Logo from "../components/Logo";
 
 const FEATURES = [
@@ -185,14 +184,14 @@ export default function LandingPage() {
           </div>
 
           <div className="lp-coins" aria-hidden>
-            <CoinPlaceholder className="lp-coin c1" date="1921" typeName="Peace Dollar" note="" />
-            <CoinPlaceholder className="lp-coin c2" date="1893-S" typeName="Morgan Dollar" note="" />
-            <CoinPlaceholder className="lp-coin c3" date="1878-CC" typeName="Morgan Dollar" note="" />
+            <img className="lp-coin c1" src="/img/coins/morgan-1889p-obverse.webp" alt="" width={640} height={640} />
+            <img className="lp-coin c2" src="/img/coins/morgan-1880s-reverse.webp" alt="" width={640} height={640} />
+            <img className="lp-coin c3" src="/img/coins/morgan-1879s-obverse.webp" alt="" width={640} height={640} />
             <div className="lp-float">
               <span className="lp-float-check">✓</span>
               <div>
-                <strong>1878-CC MS65</strong>
-                <span>GSA Hard Pack · CAC</span>
+                <strong>1879-S Morgan Dollar</strong>
+                <span>NGC MS67+ · in your collection</span>
               </div>
             </div>
           </div>
@@ -264,7 +263,8 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <span>© {new Date().getFullYear()} TrackMyCoins</span>
         <span>
-          Values from Greysheet (CPG) and PCGS. Not affiliated with PCGS, NGC, CAC, ANACS or CDN Publishing.
+          Values from Greysheet (CPG) and PCGS. Not affiliated with PCGS, NGC, CAC, ANACS or CDN Publishing. Coin
+          photos: Wikimedia Commons, public domain.
         </span>
       </footer>
     </div>
