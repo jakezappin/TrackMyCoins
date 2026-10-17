@@ -7,6 +7,7 @@ import CoinFormPage from "./pages/CoinFormPage";
 import CollectionPage from "./pages/CollectionPage";
 import AccountPage from "./pages/AccountPage";
 import DashboardPage from "./pages/DashboardPage";
+import ImportPage from "./pages/ImportPage";
 import LandingPage from "./pages/LandingPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
 import SharedCollectionPage from "./pages/SharedCollectionPage";
@@ -72,6 +73,7 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/collections/:typeSlug/sold" element={<SoldPage />} />
           <Route path="/collections/:typeSlug/:number" element={<CollectionPage />} />
           <Route path="/collections/:typeSlug/:number/status" element={<StatusPage />} />

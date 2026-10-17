@@ -62,6 +62,24 @@ export interface Collection {
   summary: Summary;
 }
 
+export interface ImportRow {
+  row: number;
+  sheet: string;
+  fields: Partial<CoinFields> & Record<string, unknown>;
+  valuation: Record<string, unknown>;
+  errors: string[];
+  description: string;
+  lookup_raw: Record<string, unknown> | null;
+  photo_urls: string[];
+}
+
+export interface ImportPreview {
+  collection_id: number;
+  rows: ImportRow[];
+  ok_count: number;
+  error_count: number;
+}
+
 /** What Claude read off a slab label photo. */
 export interface LabelReading {
   found_label: boolean;
@@ -417,6 +435,20 @@ export const api = {
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}`, b),
   deleteCoin: (inv: string) => request<void>("DELETE", `/api/coins/${encodeURIComponent(inv)}`),
 
+  importPreview: (collectionId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("collection_id", String(collectionId));
+    fd.append("file", file);
+    return request<ImportPreview>("POST", "/api/import/preview", fd);
+  },
+  importCerts: (collectionId: number, certs: string) =>
+    request<ImportPreview>("POST", "/api/import/certs", { collection_id: collectionId, certs }),
+  importCommit: (collectionId: number, rows: ImportRow[], importPhotos: boolean) =>
+    request<{ created: string[]; skipped: { row: number; description: string; errors: string[] }[] }>(
+      "POST",
+      "/api/import/commit",
+      { collection_id: collectionId, rows, import_photos: importPhotos },
+    ),
   readLabel: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);

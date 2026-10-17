@@ -102,6 +102,9 @@ export default function CollectionPage() {
           <a className="btn" href={api.exportUrl(collection.id)} download>
             Export
           </a>
+          <Link className="btn" to={`/import?collection=${collection.id}`}>
+            Import
+          </Link>
           <ShareCollection collection={collection} onChange={setCollection} />
           <a className="btn" href={api.insuranceUrl(collection.id)} download title="PDF inventory with photos and values, for your insurer">
             Insurance report

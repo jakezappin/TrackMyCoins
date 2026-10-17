@@ -1,0 +1,265 @@
+"""Bulk import: turn spreadsheet rows (CSV / Excel, including our own export) into coin fields.
+
+Parsing is forgiving about column names and formats; every row is then checked with the same rules as
+adding a coin by hand, and problems are reported per row so the user can fix the file or skip the row.
+"""
+
+import csv
+import io
+import re
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+
+from openpyxl import load_workbook
+from pydantic import ValidationError
+
+from ..schemas import CoinFields
+
+MAX_ROWS = 2000
+
+
+class ImportError_(Exception):
+    pass
+
+
+def _key(name) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+
+
+# Normalized header -> field. Our own export's headers are all here.
+ALIASES = {
+    "date": "date", "datemint": "date", "datemintmark": "date", "coin": "date", "description": "date",
+    "year": "year",
+    "mint": "mint_mark", "mintmark": "mint_mark", "mm": "mint_mark",
+    "variety": "variety", "pedigree": "variety",
+    "vam": "vam",
+    "gradingservice": "grading_service", "service": "grading_service", "grader": "grading_service",
+    "tpg": "grading_service", "company": "grading_service",
+    "cert": "cert_number", "certno": "cert_number", "certnumber": "cert_number", "certification": "cert_number",
+    "certificationnumber": "cert_number", "serial": "cert_number",
+    "grade": "grade",
+    "designation": "strike_designation", "strikedesignation": "strike_designation",
+    "cac": "cac", "caced": "cac",
+    "cacsticker": "cac_sticker", "sticker": "cac_sticker",
+    "collectorslab": "slab", "slab": "slab", "holder": "slab",
+    "packaging": "packaging",
+    "toning": "toning", "toned": "toning",
+    "pcgs": "pcgs_number", "pcgsno": "pcgs_number", "pcgsnumber": "pcgs_number", "pcgscoinnumber": "pcgs_number",
+    "pricepaid": "price_paid", "cost": "price_paid", "paid": "price_paid", "purchaseprice": "price_paid",
+    "datepurchased": "purchase_date", "purchasedate": "purchase_date", "purchased": "purchase_date",
+    "dateacquired": "purchase_date", "acquired": "purchase_date",
+    "purchasedfrom": "purchased_from", "seller": "purchased_from", "source": "purchased_from",
+    "dealer": "purchased_from", "from": "purchased_from",
+    "saleprice": "sale_price", "soldfor": "sale_price",
+    "saledate": "sale_date", "datesold": "sale_date",
+    "soldto": "sold_to", "buyer": "sold_to",
+    "notes": "notes", "note": "notes", "comments": "notes",
+    "tonerpremium": "toner_premium", "holderpremium": "holder_premium",
+    "valuesource": "value_source", "estimatedvalue": "estimated_value", "myvalue": "estimated_value",
+}
+
+# "1881-S" / "1881/CC" (any letters after a dash are the mint mark, so typos get flagged), or "1881 S".
+DATE_RE = re.compile(r"^\s*(\d{4})(?:\s*[-/]\s*([A-Z]{1,2})\b|\s+(CC|[PDSOW])\b)?\s*(.*)$", re.I)
+GRADE_RE = re.compile(r"^(?:(raw)\s*)?([A-Za-z]{1,3})?[\s-]*(\d{1,2})?\s*(\+)?\s*(★|\*|star)?\s*(.*)$", re.I)
+SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
+            "RAW": "RAW", "UNGRADED": "RAW", "NONE": "RAW"}
+YES = {"yes", "y", "true", "1", "x", "✓", "green", "gold"}
+
+
+def read_rows(filename: str, data: bytes) -> list[tuple[str, int, dict]]:
+    """[(sheet, row number, {header: value})] from a CSV or Excel file."""
+    name = filename.lower()
+    if name.endswith((".xlsx", ".xlsm")):
+        try:
+            wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        except Exception as e:
+            raise ImportError_("Couldn't open that Excel file.") from e
+        # Our export: coins on hand in "Coins", sold coins in "Sold". Otherwise the first sheet.
+        sheets = [s for s in ("Coins", "Sold") if s in wb.sheetnames] or [wb.sheetnames[0]]
+        out = []
+        for sheet in sheets:
+            rows = wb[sheet].iter_rows(values_only=True)
+            header = next(rows, None)
+            if not header:
+                continue
+            for i, values in enumerate(rows, start=2):
+                if values and any(v not in (None, "") for v in values):
+                    out.append((sheet, i, dict(zip(header, values))))
+        return out
+    if name.endswith((".csv", ".txt")):
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = data.decode("latin-1")
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            raise ImportError_("That CSV file has no header row.")
+        return [("CSV", i, row) for i, row in enumerate(reader, start=2) if any((v or "").strip() for v in row.values())]
+    raise ImportError_("Upload a .csv or .xlsx file.")
+
+
+def _text(v) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    s = str(v).strip()
+    return s or None
+
+
+def _money(v, errors: list[str], label: str) -> Decimal | None:
+    s = _text(v)
+    if s is None:
+        return None
+    try:
+        d = Decimal(re.sub(r"[$,\s]", "", s))
+    except InvalidOperation:
+        errors.append(f"{label} isn't a number: {s}")
+        return None
+    return d.quantize(Decimal("0.01"))
+
+
+def _date(v, errors: list[str], label: str) -> date | None:
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    s = str(v).strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%b %d, %Y", "%B %d, %Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    errors.append(f"{label} isn't a date I recognize: {s} (use YYYY-MM-DD or MM/DD/YYYY)")
+    return None
+
+
+def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list[str]]:
+    """(coin fields, valuation fields, errors) for one spreadsheet row."""
+    vals: dict = {}
+    for header, value in raw.items():
+        field = ALIASES.get(_key(header))
+        if field and field not in vals:
+            vals[field] = value
+    errors: list[str] = []
+    f: dict = {}
+
+    # Date: "1881-S", "1878 8TF", or separate Year / Mint columns.
+    year = mint = rest = None
+    d = _text(vals.get("date"))
+    if d:
+        m = DATE_RE.match(d)
+        if m:
+            year, mint, rest = int(m.group(1)), (m.group(2) or m.group(3) or "").upper() or None, m.group(4).strip() or None
+    if _text(vals.get("year")):
+        try:
+            year = int(float(_text(vals["year"])))
+        except ValueError:
+            errors.append(f"Year isn't a number: {vals['year']}")
+    if _text(vals.get("mint_mark")):
+        mint = _text(vals["mint_mark"]).upper()
+    if year is None:
+        errors.append("No date: add a Date column like 1881-S, or Year and Mint columns")
+    f["year"] = year
+    f["mint_mark"] = mint or "P"
+    f["variety"] = _text(vals.get("variety")) or rest
+    f["vam"] = _text(vals.get("vam"))
+
+    # Grade: "MS65+ DMPL", "PR69 DCAM", "Raw AU55", "65".
+    service = _text(vals.get("grading_service"))
+    grade_text = _text(vals.get("grade"))
+    is_raw = False
+    if grade_text:
+        m = GRADE_RE.match(grade_text)
+        if m and (m.group(2) or m.group(3) or m.group(1)):
+            is_raw = bool(m.group(1))
+            prefix = (m.group(2) or "").upper() or None
+            if prefix in ("PF", "PROOF"):
+                prefix = "PR"
+            f["grade_prefix"] = prefix
+            f["grade"] = int(m.group(3)) if m.group(3) else None
+            f["grade_plus"] = bool(m.group(4))
+            f["grade_star"] = bool(m.group(5))
+            f["strike_designation"] = m.group(6).strip() or None
+        else:
+            errors.append(f"Couldn't read the grade: {grade_text}")
+    if _text(vals.get("strike_designation")):
+        f["strike_designation"] = _text(vals["strike_designation"])
+
+    if service:
+        svc = SERVICES.get(_key(service).upper())
+        if svc is None:
+            errors.append(f"Unknown grading service: {service} (use PCGS, NGC, ANACS, CACG or Raw)")
+        f["grading_service"] = svc or "RAW"
+    else:
+        f["grading_service"] = "RAW" if is_raw or not _text(vals.get("cert_number")) else None
+        if f["grading_service"] is None:
+            errors.append("There's a cert number but no grading service")
+            f["grading_service"] = "RAW"
+    if is_raw:
+        f["grading_service"] = "RAW"
+    f["cert_number"] = _text(vals.get("cert_number"))
+    if f["grading_service"] != "RAW" and not f["cert_number"]:
+        errors.append(f"{f['grading_service']} coin without a cert number")
+
+    # CAC: "Yes", or the sticker color in either column.
+    sticker = (_text(vals.get("cac_sticker")) or "").lower()
+    cac = (_text(vals.get("cac")) or "").lower()
+    f["cac_sticker"] = sticker if sticker in ("green", "gold") else (cac if cac in ("green", "gold") else None)
+    f["cac"] = bool(f["cac_sticker"]) or cac in YES
+
+    slab = (_text(vals.get("slab")) or "").lower()
+    f.update(slab_soapbox="soapbox" in slab, slab_ngc_fatty="fatty" in slab, slab_rattler="rattler" in slab,
+             slab_ogh="ogh" in slab or "old green" in slab)
+    pack = (_text(vals.get("packaging")) or "").lower() + " " + slab
+    f.update(gsa_hard_pack="hard" in pack, gsa_soft_pack="soft" in pack, ike_blue_pack="blue" in pack,
+             ike_brown_pack="brown" in pack)
+    toning = (_text(vals.get("toning")) or "").lower()
+    f.update(toning_obverse="obv" in toning, toning_reverse="rev" in toning, toning_dual="dual" in toning,
+             toning_rainbow="rainbow" in toning)
+    if toning in YES and not any(f[k] for k in ("toning_obverse", "toning_reverse", "toning_dual", "toning_rainbow")):
+        f["toning_obverse"] = True
+
+    f["pcgs_number"] = _text(vals.get("pcgs_number"))
+    f["price_paid"] = _money(vals.get("price_paid"), errors, "Price paid")
+    f["purchase_date"] = _date(vals.get("purchase_date"), errors, "Date purchased")
+    f["purchased_from"] = _text(vals.get("purchased_from"))
+    f["sale_price"] = _money(vals.get("sale_price"), errors, "Sale price")
+    f["sale_date"] = _date(vals.get("sale_date"), errors, "Sale date")
+    f["sold_to"] = _text(vals.get("sold_to"))
+    f["notes"] = _text(vals.get("notes"))
+    if sold_sheet and f["sale_price"] is None and f["sale_date"] is None:
+        errors.append("Row on the Sold sheet without a sale price or date")
+
+    valuation = {
+        "toner_premium": _money(vals.get("toner_premium"), errors, "Toner premium"),
+        "holder_premium": _money(vals.get("holder_premium"), errors, "Holder premium"),
+    }
+    own = (_text(vals.get("value_source")) or "").lower().startswith("own")
+    est = _money(vals.get("estimated_value"), errors, "Estimated value")
+    if own and est is not None:
+        valuation.update(value_source="custom", custom_value=est)
+
+    if not errors:
+        try:
+            f = CoinFields(**f).model_dump(mode="json")
+        except ValidationError as e:
+            for err in e.errors():
+                where = ".".join(str(p) for p in err["loc"]) or "row"
+                errors.append(f"{where}: {err['msg']}")
+    else:
+        f = {k: (v.isoformat() if isinstance(v, date) else str(v) if isinstance(v, Decimal) else v) for k, v in f.items()}
+    valuation = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in valuation.items() if v is not None}
+    return f, valuation, errors
+
+
+def split_certs(text: str) -> list[str]:
+    """Cert numbers from pasted text: one per line, or separated by commas / spaces."""
+    seen = []
+    for c in re.split(r"[\s,;]+", text or ""):
+        c = c.strip().strip(".")
+        if c and c not in seen:
+            seen.append(c)
+    return seen
