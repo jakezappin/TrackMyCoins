@@ -559,9 +559,10 @@ table {
 .thumb {
   width: 40px;
   height: 40px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 6px;
   display: block;
+  background: var(--surface-2);
 }
 .thumb.ph {
   object-fit: contain;
@@ -747,9 +748,10 @@ table {
 .import-thumb img {
   width: 84px;
   height: 84px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 8px;
   display: block;
+  background: var(--surface-2);
 }
 .import-thumb input {
   position: absolute;
@@ -801,9 +803,12 @@ table {
   place-items: center;
   overflow: hidden;
 }
-.hero-photo img {
-  max-width: 100%;
-  max-height: 100%;
+.hero-photo > img {
+  /* Fill the square box and scale the whole photo to fit (tall slab photos included), never crop. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 .photo-actions {
@@ -826,7 +831,8 @@ table {
 .thumb-btn img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: var(--surface-2);
 }
 .thumb-btn.active {
   border-color: var(--accent);
@@ -1922,8 +1928,9 @@ table {
   width: 38px;
   height: 38px;
   border-radius: 6px;
-  object-fit: cover;
+  object-fit: contain;
   flex: none;
+  background: var(--surface-2);
 }
 .qs-thumb.ph {
   opacity: 0.6;
@@ -2024,8 +2031,9 @@ table {
   width: 48px;
   height: 48px;
   border-radius: 8px;
-  object-fit: cover;
+  object-fit: contain;
   flex: none;
+  background: var(--surface-2);
 }
 .sale-thumb.ph {
   opacity: 0.7;
@@ -2369,9 +2377,10 @@ table {
 .file-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 8px;
   border: 1px solid var(--border);
+  background: var(--surface-2);
 }
 .file-thumb .icon-btn {
   position: absolute;
