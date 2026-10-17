@@ -10,11 +10,14 @@ import {
   type LabelReading,
   type LookupResult,
 } from "../api";
+import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
 import { readNgcHandoff } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money } from "../format";
+
+const SERVICE_NAMES: Record<GradingService, string> = { PCGS: "PCGS", NGC: "NGC", ANACS: "ANACS", CACG: "CAC Grading", RAW: "Raw" };
 
 const EMPTY: CoinFields = {
   year: null,
@@ -74,7 +77,7 @@ function verifyUrl(service: GradingService, cert: string, grade: number | null):
     case "PCGS":
       return `https://www.pcgs.com/cert/${encodeURIComponent(cert)}`;
     case "NGC":
-      return `https://www.ngccoin.com/certlookup/${encodeURIComponent(cert)}/${grade ? `?grade=${grade}` : ""}`;
+      return `https://www.ngccoin.com/certlookup/${encodeURIComponent(cert)}/${grade ? `${grade}/` : ""}`;
     case "ANACS":
       return "https://anacs.com/verify/";
     case "CACG":
@@ -111,6 +114,7 @@ export default function CoinFormPage() {
   const [ngcHandoff] = useState(() => (editInv ? null : readNgcHandoff(location.hash)));
   const [ngcState, setNgcState] = useState<"idle" | "busy" | "done">(ngcHandoff ? "busy" : "idle");
   const [ngcPreviews, setNgcPreviews] = useState<string[]>([]);
+  const [cacNote, setCacNote] = useState<string | null>(null);
   const [labelBusy, setLabelBusy] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelReading | null>(null);
@@ -360,6 +364,22 @@ export default function CoinFormPage() {
     }
   }
 
+  /** NGC has no lookup we can use, but CAC's site still tells us about a sticker. */
+  async function checkCac() {
+    const cert = form.cert_number?.trim();
+    setCacNote(null);
+    if (!cert) return;
+    try {
+      const r = await api.lookup("NGC", cert);
+      if (r.cac) {
+        setForm((f) => ({ ...f, cac: true, cac_sticker: r.cac_sticker ?? f.cac_sticker ?? "green" }));
+        setCacNote(`CAC: ${r.cac_sticker ? `${r.cac_sticker} sticker` : "stickered"} (from CAC's records).`);
+      }
+    } catch {
+      // Optional; the user can tick CAC themselves.
+    }
+  }
+
   async function findPcgs() {
     if (!coinType || !form.year) {
       setFindMsg("Enter the year and mint first.");
@@ -458,6 +478,7 @@ export default function CoinFormPage() {
       </div>
     );
 
+  const canLookUp = form.grading_service === "PCGS";
   const vurl = lookup?.verify_url && form.grading_service !== "NGC" ? lookup.verify_url : verifyUrl(form.grading_service, form.cert_number ?? "", form.grade);
   const isSold = Boolean(form.sale_price || form.sale_date);
 
@@ -525,18 +546,22 @@ export default function CoinFormPage() {
                 <input
                   {...text("cert_number")}
                   placeholder="e.g. 12345678"
-                  onBlur={() => checkDuplicate()}
+                  onBlur={async () => {
+                    if (!(await checkDuplicate()) && form.grading_service === "NGC") checkCac();
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      doLookup();
+                      if (canLookUp) doLookup();
                     }
                   }}
                 />
               </label>
-              <button type="button" className="btn btn-primary" onClick={() => doLookup()} disabled={!form.cert_number || lookupBusy}>
-                {lookupBusy ? "Looking up…" : "Look up"}
-              </button>
+              {canLookUp && (
+                <button type="button" className="btn btn-primary" onClick={() => doLookup()} disabled={!form.cert_number || lookupBusy}>
+                  {lookupBusy ? "Looking up…" : "Look up"}
+                </button>
+              )}
               {vurl && (
                 <a className="btn" href={vurl} target="_blank" rel="noreferrer">
                   Verify ↗
@@ -546,6 +571,16 @@ export default function CoinFormPage() {
           }
         </div>
         )}
+        {!isRaw && !canLookUp && (
+          <p className="muted small">
+            {SERVICE_NAMES[form.grading_service]} doesn't allow automated lookups.{" "}
+            {form.grading_service === "ANACS"
+              ? "Use Verify ↗ to open ANACS's verification page and enter the cert there"
+              : `Use Verify ↗ to open this coin on ${SERVICE_NAMES[form.grading_service]}'s site`}
+            , then fill in the date and grade below.
+          </p>
+        )}
+        {cacNote && <p className="small muted">{cacNote}</p>}
         <div className="read-label">
           <span className="small muted">Or read it from a photo of the slab label:</span>
           <PhotoButtons
@@ -567,11 +602,22 @@ export default function CoinFormPage() {
             </div>
           </div>
         )}
-        {form.grading_service === "NGC" && !editInv && !ngcHandoff && (
-          <p className="small muted">
-            Adding NGC coins? <Link to="/ngc-button">Get the one-tap button</Link> to fill this in, photos included,
-            straight from NGC's page.
-          </p>
+        {form.grading_service === "NGC" && !editInv && ngcPreviews.length === 0 && (
+          <>
+            <NgcPhotoLink
+              expectedCert={form.cert_number}
+              onFound={(r) => {
+                if (!form.cert_number) set("cert_number", r.cert_number);
+                setImportUrls((cur) => [...cur.filter((u) => !r.urls.includes(u)), ...r.urls]);
+              }}
+            />
+            {!ngcHandoff && (
+              <p className="small muted">
+                Or skip the copying: <Link to="/ngc-button">get the one-tap button</Link> and add the coin, photos
+                included, straight from NGC's page.
+              </p>
+            )}
+          </>
         )}
         {labelError && <p className="error small">{labelError}</p>}
         {label && <LabelSummary r={label} kept={!editInv && label.found_label} />}
