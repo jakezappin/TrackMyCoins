@@ -6,13 +6,12 @@ In order of preference:
 3. CPG from the app's own price history (every price sheet fetched is kept), if it covers the purchase date.
    It starts empty, so this takes over gradually as the history grows.
 4. The average of up to 10 PCGS auction sales of the issue and grade nearest the purchase date (within a year).
-   PCGS only returns about 3 years of sales, so the result is saved on the coin once worked out.
+   Sales come from the app's auction archive (services/price_archive.py), topped up from PCGS when stale.
 5. The price paid.
 
 The purchase date is the day the coin was added if none was entered.
 """
 
-import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -20,10 +19,10 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..db import SessionLocal
 from ..models import Coin, CpgHistory
 from . import quota
 from .coins import CENTS, CPG
-from .lookups import pcgs
 
 RECENT = timedelta(days=61)  # "within 2 months" of the purchase
 HISTORY_GAP = timedelta(days=61)  # a history price unconfirmed for longer than this before the purchase doesn't count
@@ -115,30 +114,18 @@ def estimate(db: Session, coin: Coin) -> Estimate:
     return Estimate(None, None, "", pending=pending)
 
 
-# One PCGS call returns ~3 years of sales for an issue and grade; share it between coins for a day.
-_sales_cache: dict[tuple, tuple[float, list[dict]]] = {}
+def _sales(pcgs_number: str, grade: int, plus: bool, user_id: int) -> list[tuple[str, Decimal]]:
+    """Archived sales for this issue and grade, after fetching PCGS's full list if it hasn't been in 3 months
+    (one call, charged to the user). The archive keeps sales PCGS has since dropped."""
+    from . import price_archive
 
-
-def _sales(pcgs_number: str, grade: int, plus: bool, user_id: int) -> list[dict]:
-    key = (pcgs_number, grade, plus)
-    hit = _sales_cache.get(key)
-    if hit and time.time() - hit[0] < 24 * 3600:
-        return hit[1]
-    quota.spend(user_id, "pcgs")
-    params = {"PCGSNo": pcgs_number, "GradeNo": grade, "PlusGrade": "true" if plus else "false"}
-    with pcgs._client() as c:
-        apr = pcgs._get(c, "/coindetail/GetAPRByGrade", **params, NumberOfRecords=1000)
-    sales = []
-    for a in apr.get("Auctions") or []:
-        ym = pcgs._sale_date(a.get("Date"))
-        try:
-            price = Decimal(str(a.get("Price")))
-        except Exception:
-            continue
-        if ym and price > 0:
-            sales.append((ym, price))
-    _sales_cache[key] = (time.time(), sales)
-    return sales
+    with SessionLocal() as db:
+        last = price_archive.last_full_fetch(db, pcgs_number, grade, plus)
+        if last is None or datetime.now(timezone.utc) - last > price_archive.AUCTIONS_EVERY:
+            quota.spend(user_id, "pcgs")
+            price_archive.fetch_full(db, pcgs_number, grade, plus)
+            db.commit()
+        return price_archive.sales_for(db, pcgs_number, grade, plus)
 
 
 def _months_apart(ym: str, d: date) -> int:
@@ -146,11 +133,12 @@ def _months_apart(ym: str, d: date) -> int:
     return (y - d.year) * 12 + (m - d.month)
 
 
-def average_near(sales: list[tuple[str, Decimal]], start: date) -> tuple[Decimal, int, str] | None:
+def average_near(sales: list[tuple[str, Decimal]], start: date,
+                 window: int = AUCTION_WINDOW_MONTHS) -> tuple[Decimal, int, str] | None:
     """(average, count, "first..last" months) of up to 10 sales nearest the purchase month, within a year.
     Ties go to the sale before the purchase (what the market was then)."""
     near = [(abs(_months_apart(ym, start)), _months_apart(ym, start) > 0, ym, p) for ym, p in sales
-            if abs(_months_apart(ym, start)) <= AUCTION_WINDOW_MONTHS]
+            if abs(_months_apart(ym, start)) <= window]
     near.sort(key=lambda s: (s[0], s[1]))
     picked = near[:AUCTION_SALES]
     if not picked:

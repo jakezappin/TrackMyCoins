@@ -111,6 +111,24 @@ def coin_facts(facts: dict) -> dict:
     }
 
 
+def sale_from_apr(a: dict) -> dict | None:
+    """One auction record from GetAPRByGrade, or None if it has no date or price."""
+    date = _sale_date(a.get("Date"))
+    if not date or a.get("Price") in (None, ""):
+        return None
+    return {
+        "date": date,
+        "price": str(a["Price"]),
+        "auctioneer": a.get("Auctioneer") or None,
+        "sale_name": a.get("SaleName") or None,
+        "lot": str(a.get("LotNumV2") or a.get("LotNo") or "") or None,
+        "url": absolute_url(a.get("AuctionLotUrl")),
+        "service": a.get("Service") or None,
+        "cert_number": a.get("CertNo") or None,
+        "cac": bool(a.get("IsCAC")),
+    }
+
+
 def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10) -> dict:
     """PCGS Price Guide value, population and the most recent auction sales for a PCGS # and grade."""
     params = {"PCGSNo": pcgs_number, "GradeNo": grade, "PlusGrade": "true" if plus else "false"}
@@ -120,22 +138,7 @@ def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10)
             raise LookupError(facts.get("ServerMessage") or f"PCGS has no data for #{pcgs_number} in grade {grade}")
         apr = _get(client, "/coindetail/GetAPRByGrade", **params, NumberOfRecords=auctions)
 
-    sales = []
-    for a in apr.get("Auctions") or []:
-        date = _sale_date(a.get("Date"))
-        if not date or a.get("Price") in (None, ""):
-            continue
-        sales.append({
-            "date": date,
-            "price": str(a["Price"]),
-            "auctioneer": a.get("Auctioneer") or None,
-            "sale_name": a.get("SaleName") or None,
-            "lot": str(a.get("LotNumV2") or a.get("LotNo") or "") or None,
-            "url": absolute_url(a.get("AuctionLotUrl")),
-            "service": a.get("Service") or None,
-            "cert_number": a.get("CertNo") or None,
-            "cac": bool(a.get("IsCAC")),
-        })
+    sales = [x for x in (sale_from_apr(a) for a in apr.get("Auctions") or []) if x]
     sales.sort(key=lambda s: s["date"], reverse=True)
 
     guide = facts.get("PriceGuideValue")

@@ -101,6 +101,58 @@ class CpgHistory(Base):
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class AuctionSale(Base):
+    """A PCGS-reported auction sale, kept for good: PCGS only returns about 3 years of sales, so this archive keeps
+    what it drops. Each sale is stored once (`fingerprint`), however many coins or refreshes see it."""
+
+    __tablename__ = "auction_sales"
+    __table_args__ = (Index("ix_auction_sales_issue", "pcgs_number", "grade", "plus"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(40), unique=True)
+    pcgs_number: Mapped[str] = mapped_column(String(20))
+    grade: Mapped[int] = mapped_column(Integer)
+    plus: Mapped[bool] = mapped_column(Boolean, default=False)
+    sale_month: Mapped[str] = mapped_column(String(7))  # "2024-03" (PCGS gives month and year)
+    price: Mapped[Decimal] = mapped_column(Money)
+    service: Mapped[str | None] = mapped_column(String(10))  # who graded the coin sold: PCGS, NGC...
+    cac: Mapped[bool] = mapped_column(Boolean, default=False)
+    auctioneer: Mapped[str | None] = mapped_column(String(100))
+    lot: Mapped[str | None] = mapped_column(String(40))
+    cert_number: Mapped[str | None] = mapped_column(String(30))
+    url: Mapped[str | None] = mapped_column(String(500))
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuctionFetch(Base):
+    """When the full sales list (~3 years) for an issue and grade was last fetched from PCGS."""
+
+    __tablename__ = "auction_fetches"
+    __table_args__ = (UniqueConstraint("pcgs_number", "grade", "plus"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pcgs_number: Mapped[str] = mapped_column(String(20))
+    grade: Mapped[int] = mapped_column(Integer)
+    plus: Mapped[bool] = mapped_column(Boolean, default=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    sales_seen: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PcgsGuideHistory(Base):
+    """PCGS Price Guide value for an issue and grade over time; a new row only when it changes."""
+
+    __tablename__ = "pcgs_guide_history"
+    __table_args__ = (Index("ix_pcgs_guide_issue", "pcgs_number", "grade", "plus"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pcgs_number: Mapped[str] = mapped_column(String(20))
+    grade: Mapped[int] = mapped_column(Integer)
+    plus: Mapped[bool] = mapped_column(Boolean, default=False)
+    value: Mapped[Decimal] = mapped_column(Money)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class GradePriceSheet(Base):
     """CPG prices for every grade of one issue (one Greysheet call returns them all). Shared by every coin of
     that issue, so the price-by-grade table costs no extra API calls."""

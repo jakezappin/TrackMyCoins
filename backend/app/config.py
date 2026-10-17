@@ -41,7 +41,13 @@ class Settings(BaseSettings):
     claude_per_user_day: int = 30
     greysheet_per_user_day: int = 150
     pcgs_per_user_day: int = 100  # PCGS calls (a coin's market data is 2)
-    pcgs_site_day: int = 900  # PCGS allows 1,000 a day for the whole site; keep a margin
+    pcgs_site_day: int = 900
+    # Monthly price-data upkeep in the background (services/price_archive.py): its own daily allowances, kept
+    # small so it never crowds out people using the site. Off in tests.
+    background_jobs: bool = True
+    archive_pcgs_day: int = 100
+    archive_greysheet_day: int = 50
+    pcgs_site_day_note: str = ""  # PCGS allows 1,000 a day for the whole site; keep a margin
     # Bulk "Refresh prices" runs allowed per user in any rolling 7 days (each run spends Greysheet/PCGS calls).
     refresh_limit_per_week: int = 2
     # eBay Browse API (Production keyset: App ID / Cert ID) for "For sale on eBay now".

@@ -319,6 +319,19 @@ export type GradePrices =
       has_cac: boolean;
     };
 
+export interface PriceData {
+  cpg_prices: number;
+  cpg_issues: number;
+  cpg_since: string | null;
+  auction_sales: number;
+  auction_issues: number;
+  auction_since: string | null;
+  guide_values: number;
+  database_mb: number;
+  last_sheet_update: string | null;
+  last_auction_update: string | null;
+}
+
 /** Estimated value at purchase and where it came from. */
 export interface PurchaseValue {
   value: string | null;
@@ -711,6 +724,7 @@ export const api = {
   deleteWant: (id: number) => request<void>("DELETE", `/api/wants/${id}`),
   priceWant: (id: number) => request<WantItem>("POST", `/api/wants/${id}/price`),
   upgrades: (collectionId: number) => request<Upgrades>("GET", `/api/collections/${collectionId}/upgrades`),
+  priceData: () => request<PriceData>("GET", "/api/price-data"),
   fillPurchaseValue: (inv: string) =>
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/purchase-value`),
   moveTargets: (inv: string) =>

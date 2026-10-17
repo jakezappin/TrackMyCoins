@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..models import Coin, PriceQuote
-from . import catalog, grade_prices, greysheet, quota
+from . import catalog, grade_prices, greysheet, price_archive, quota
 from .coins import CPG, GREYSHEET, PCGS_GUIDE, PREMIUM, latest_quote
 from .lookups import pcgs
 
@@ -78,6 +78,7 @@ def refresh_pcgs(db: Session, coin: Coin) -> bool:
         coin.pcgs_number, coin.grade, coin.grade_plus, before_call=lambda: quota.spend(coin.user_id, "pcgs", 2)
     )
     coin.pcgs_market = {**data, "fetched_at": data.get("fetched_at") or datetime.now(timezone.utc).isoformat()}
+    price_archive.save_market(db, data, coin.grade, coin.grade_plus)
     if data["price_guide"] is not None:
         record(
             coin,

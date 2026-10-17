@@ -4,21 +4,24 @@ At each date where something changed, a coin counts if it had been bought (purch
 added) and not yet sold. Its value is its latest estimate as of that day: a CPG price, a "CPG + premiums"
 estimate or the owner's own value, whichever was recorded most recently.
 
-Before a coin's first estimate was recorded, the value runs in a straight line from its estimated value at
-purchase (see purchase_value.py) to that first estimate; without a value at purchase, the first estimate stands
-in. Those points are marked "backfilled" (the chart draws them dashed). Without this, a collection priced for the
-first time today would have a value on one day only, and no line.
+Before a coin's first estimate was recorded, the value runs from its estimated value at purchase (see
+purchase_value.py) to that first estimate. Where the auction archive has sales of the issue and grade around
+those dates, the line follows the market's ups and downs, scaled so it still starts and ends at those two values;
+otherwise it's a straight line. Without a value at purchase, the first estimate stands in. Those points are marked
+"backfilled" (the chart draws them dashed). There's a point at the start of every month so the shape shows.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..models import Coin
-from . import purchase_value
+from . import price_archive, purchase_value
 from .coins import CENTS, CPG, CUSTOM, PREMIUM
+
+MARKET_WINDOW_MONTHS = 6  # sales this close to a date describe the market then
 
 VALUE_SOURCES = {CPG, PREMIUM, CUSTOM}
 
@@ -41,6 +44,19 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
 
     # Per coin: when it was held, and its value estimates in time order.
     held, estimates, at_purchase = {}, {}, {}
+    sales: dict[tuple, list] = {}  # archived auction sales per issue and grade
+    market_key: dict[int, tuple] = {}
+    market_cache: dict[tuple, Decimal | None] = {}
+
+    def market(c_id: int, d: date) -> Decimal | None:
+        """Average auction price of the coin's issue and grade around a date, or None without sales then."""
+        key = market_key.get(c_id)
+        if key is None:
+            return None
+        if (key, d) not in market_cache:
+            got = purchase_value.average_near(sales[key], d, MARKET_WINDOW_MONTHS)
+            market_cache[(key, d)] = got[0] if got else None
+        return market_cache[(key, d)]
     days: set[date] = set()
     for c in coins:
         start = c.purchase_date or _day(c.created_at)
@@ -57,9 +73,21 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
         days.update(d for d, _ in estimates[c.id])
         if estimates[c.id] and estimates[c.id][0][0] > start:
             at_purchase[c.id] = purchase_value.estimate(db, c).value
+            if c.pcgs_number and c.grade:
+                key = (str(c.pcgs_number), int(c.grade), bool(c.grade_plus))
+                if key not in sales:
+                    sales[key] = price_archive.sales_for(db, *key)
+                market_key[c.id] = key
     if not coins:
         return []
-    days.add(datetime.now(timezone.utc).date())
+    today = datetime.now(timezone.utc).date()
+    days.add(today)
+    # The first of every month, so lines that follow the market show their shape.
+    m = min(days).replace(day=1)
+    while m < today:
+        if m > min(days):
+            days.add(m)
+        m = (m + timedelta(days=32)).replace(day=1)
 
     points = []
     for d in sorted(days):
@@ -84,7 +112,13 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None) -
                 pv = at_purchase.get(c.id)
                 if pv is not None and first_day > start:
                     share = Decimal((d - start).days) / Decimal((first_day - start).days)
-                    latest = pv + (first - pv) * share
+                    m0, m1, md = market(c.id, start), market(c.id, first_day), market(c.id, d)
+                    if m0 and m1 and md:
+                        # The market's shape, scaled to meet the value at purchase and the first estimate.
+                        k0, k1 = pv / m0, first / m1
+                        latest = md * (k0 + (k1 - k0) * share)
+                    else:
+                        latest = pv + (first - pv) * share
                 else:
                     latest = first
                 backfilled = True

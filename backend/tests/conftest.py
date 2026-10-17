@@ -12,6 +12,7 @@ os.environ["SIGNUP_MODE"] = "open"  # most tests sign up freely; test_deploy cov
 os.environ["PCGS_API_TOKEN"] = ""
 os.environ["GREYSHEET_API_KEY"] = ""
 os.environ["GREYSHEET_API_TOKEN"] = ""
+os.environ["BACKGROUND_JOBS"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

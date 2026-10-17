@@ -13,6 +13,7 @@ from ..db import SessionLocal
 from ..models import ApiUsage
 
 SITE = 0
+ARCHIVE = -1  # the background price-data upkeep (services/price_archive.py), with its own allowance
 NAMES = {"claude": "label reading", "greysheet": "Greysheet price lookups", "pcgs": "PCGS lookups"}
 
 
@@ -39,10 +40,12 @@ def _row(db, day: date, user_id: int, service: str) -> ApiUsage:
     return row
 
 
-def spend(user_id: int, service: str, n: int = 1) -> None:
+def spend(user_id: int, service: str, n: int = 1, limit: int | None = None) -> None:
     """Record n calls about to be made, or raise QuotaExceeded. Uses its own session and commits at once, so it
-    counts even if the caller's work fails, and doesn't disturb the caller's transaction."""
+    counts even if the caller's work fails, and doesn't disturb the caller's transaction. `limit` replaces the
+    per-user allowance (the background upkeep's own); the site-wide limit still applies."""
     per_user, site = _limits(service)
+    per_user = limit if limit is not None else per_user
     today = date.today()
     with SessionLocal() as db:
         mine = _row(db, today, user_id, service)

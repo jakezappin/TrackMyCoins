@@ -8,7 +8,7 @@ from sqlalchemy import select
 from .config import check_production, get_settings
 from .db import SessionLocal
 from .models import CoinType
-from .services import ebay, quota
+from .services import ebay, price_archive, quota
 from .routers import attachments, auth, catalog, coins, collections, dashboard, importer, jobs, label, photos, pricing, reports, shared, wants
 from .series import SERIES
 
@@ -43,6 +43,7 @@ async def lifespan(_: FastAPI):
     check_production(get_settings())
     get_settings().photo_dir.mkdir(parents=True, exist_ok=True)
     seed_coin_types()
+    price_archive.start_background()  # monthly price-data upkeep, while the server is up
     yield
 
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useApp } from "../App";
+import PriceDataCard from "../components/PriceDataCard";
 
 export default function AccountPage() {
   const { user, setUser } = useApp();
@@ -161,6 +162,8 @@ export default function AccountPage() {
           </button>
         </div>
       </form>
+
+      <PriceDataCard />
     </div>
   );
 }

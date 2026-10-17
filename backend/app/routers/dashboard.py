@@ -14,6 +14,7 @@ from ..db import get_db
 from ..models import Coin, Collection, User
 from ..schemas import CoinOut, CollectionWithSummary
 from ..services.coins import CENTS, CPG, coin_out, on_hand, sold, value_totals
+from ..services import price_archive
 from ..services.history import value_history
 from .collections import _type_label, _with_summary, get_owned_collection
 
@@ -219,3 +220,9 @@ def search_coins(
         SearchHit(coin=coin_out(c), type_name=c.coin_type.name, collection_name=c.collection.name)
         for _, c in scored[:limit]
     ]
+
+
+@router.get("/price-data")
+def price_data(db: Session = Depends(get_db), _: User = Depends(current_user)):
+    """How much price history TrackMyCoins has collected (shared by everyone), and the database size."""
+    return price_archive.stats(db)
