@@ -20,6 +20,7 @@ class RefreshIn(BaseModel):
 
 
 WEEK = timedelta(days=7)
+GRACE = timedelta(minutes=30)
 
 
 def _aware(dt: datetime) -> datetime:
@@ -30,13 +31,14 @@ def allowance(db: Session, user_id: int) -> dict:
     """How many bulk refreshes are left in the rolling week, and when the next one frees up."""
     limit = get_settings().refresh_limit_per_week
     now = datetime.now(timezone.utc)
-    recent = sorted(
-        _aware(t) for t in db.scalars(
-            select(PriceRefreshRun.started_at).where(
-                PriceRefreshRun.user_id == user_id, PriceRefreshRun.started_at > now - WEEK
-            )
-        ).all()
-    )
+    runs = db.execute(
+        select(PriceRefreshRun.started_at, PriceRefreshRun.finished_at).where(
+            PriceRefreshRun.user_id == user_id, PriceRefreshRun.started_at > now - WEEK
+        )
+    ).all()
+    # Finished runs count; so does one started in the last half hour (still running). A run that never finished
+    # (the server stopped mid-way) is given back.
+    recent = sorted(_aware(s) for s, f in runs if f is not None or now - _aware(s) < GRACE)
     left = max(0, limit - len(recent))
     next_at = None if left else recent[len(recent) - limit] + WEEK
     return {"limit": limit, "used": len(recent), "left": left, "next_available_at": next_at}
@@ -64,9 +66,10 @@ def refresh_prices(body: RefreshIn, db: Session = Depends(get_db), user: User = 
             f"Prices can be refreshed {a['limit']} times a week. The next refresh is available "
             f"{when:%a %b} {when.day} at {when:%-I:%M %p} UTC.",
         )
-    db.add(PriceRefreshRun(user_id=user.id, scope=scope[:200]))
+    run = PriceRefreshRun(user_id=user.id, scope=scope[:200])
+    db.add(run)
     db.commit()
-    return jobs.start_refresh(user.id, body.collection_id, scope, body.include_pcgs).public()
+    return jobs.start_refresh(user.id, body.collection_id, scope, body.include_pcgs, run_id=run.id).public()
 
 
 @router.get("/jobs/current")

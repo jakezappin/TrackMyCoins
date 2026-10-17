@@ -1,14 +1,14 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
-from .config import get_settings
+from .config import check_production, get_settings
 from .db import SessionLocal
 from .models import CoinType
-from .services import ebay
+from .services import ebay, quota
 from .routers import auth, catalog, coins, collections, dashboard, importer, jobs, label, photos, pricing, reports, shared
 from .series import SERIES
 
@@ -40,6 +40,7 @@ def seed_coin_types() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    check_production(get_settings())
     get_settings().photo_dir.mkdir(parents=True, exist_ok=True)
     seed_coin_types()
     yield
@@ -49,6 +50,11 @@ app = FastAPI(title="Coin App", lifespan=lifespan)
 for r in (auth, catalog, collections, coins, dashboard, importer, jobs, label, photos, pricing, reports, shared):
     app.include_router(r.router)
 app.include_router(reports.insurance_router)
+
+
+@app.exception_handler(quota.QuotaExceeded)
+async def _quota_exceeded(_request, exc: quota.QuotaExceeded):
+    return JSONResponse(status_code=429, content={"detail": str(exc)})
 
 
 @app.get("/api/health")

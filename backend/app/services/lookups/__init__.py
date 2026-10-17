@@ -3,6 +3,7 @@
 import httpx
 
 from ...schemas import LookupResult
+from .. import quota
 from . import cac, pcgs
 from .base import LookupError, clean_cert
 
@@ -14,13 +15,16 @@ VERIFY_URLS = {
 }
 
 
-def lookup(service: str, cert: str, check_cac: bool = True) -> LookupResult:
+def lookup(service: str, cert: str, check_cac: bool = True, user_id: int | None = None) -> LookupResult:
+    """`user_id`: charge this user's daily PCGS allowance (a PCGS cert lookup is 2 calls)."""
     service = service.upper()
     cert = clean_cert(cert)
     if not cert:
         raise LookupError("Enter a cert number")
 
     if service == "PCGS":
+        if user_id is not None:
+            quota.spend(user_id, "pcgs", 2)
         result = pcgs.lookup(cert)
     elif service in VERIFY_URLS:
         result = LookupResult(

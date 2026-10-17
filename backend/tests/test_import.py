@@ -79,7 +79,7 @@ def test_export_round_trip(authed):
 def test_paste_pcgs_certs(authed, monkeypatch):
     col = _collection(authed, "morgan-dollars", name="Morgans")
 
-    def fake(service, cert, check_cac=True):
+    def fake(service, cert, check_cac=True, user_id=None):
         if cert == "999":
             raise lookups.LookupError("PCGS cert 999 not found")
         return LookupResult(grading_service="PCGS", cert_number=cert, year=1881, mint_mark="S", grade_prefix="MS",

@@ -72,3 +72,21 @@ def test_refresh_limited_per_week(authed, morgan_collection):
     assert (a["used"], a["left"]) == (2, 0) and a["next_available_at"]
     r = authed.post("/api/refresh-prices", json={"collection_id": cid})
     assert r.status_code == 429 and "2 times a week" in r.json()["detail"]
+
+
+def test_interrupted_refresh_is_given_back(authed, morgan_collection):
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal
+    from app.models import PriceRefreshRun, User
+
+    with SessionLocal() as db:
+        uid = db.query(User).first().id
+        # One run cut off an hour ago (never finished) and one still running: only the running one counts
+        db.add(PriceRefreshRun(user_id=uid, scope="x", started_at=datetime.now(timezone.utc) - timedelta(hours=1)))
+        db.add(PriceRefreshRun(user_id=uid, scope="y", started_at=datetime.now(timezone.utc) - timedelta(minutes=5)))
+        db.commit()
+    a = authed.get("/api/refresh-prices/allowance").json()
+    assert (a["used"], a["left"]) == (1, 1)
+    wait(authed, authed.post("/api/refresh-prices", json={"collection_id": morgan_collection["id"]}).json()["id"])
+    assert authed.get("/api/refresh-prices/allowance").json()["used"] == 2  # a finished run counts

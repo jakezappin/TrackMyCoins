@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..models import Coin, PriceQuote
-from . import catalog, grade_prices, greysheet
+from . import catalog, grade_prices, greysheet, quota
 from .coins import CPG, GREYSHEET, PCGS_GUIDE, PREMIUM, latest_quote
 from .lookups import pcgs
 
@@ -25,6 +25,8 @@ def refresh_cpg(db: Session, coin: Coin) -> bool:
         match = catalog.resolve_for_coin(db, coin)
         gsid = None if match.pcgs_number else match.gsid
     cached = grade_prices.recent_entry(db, greysheet.sheet_key(coin, gsid))
+    if cached is None:
+        quota.spend(coin.user_id, "greysheet")
     q = greysheet.fetch_cpg(coin, gsid=gsid, cached=cached)
     sheet = q.pop("sheet")
     if cached is None:
@@ -72,7 +74,9 @@ def refresh_pcgs(db: Session, coin: Coin) -> bool:
         catalog.resolve_for_coin(db, coin)
     if not coin.pcgs_number:
         raise greysheet.PricingError("This coin needs a PCGS number. Use Find on the edit page.")
-    data, called = pcgs.market_cached(coin.pcgs_number, coin.grade, coin.grade_plus)
+    data, called = pcgs.market_cached(
+        coin.pcgs_number, coin.grade, coin.grade_plus, before_call=lambda: quota.spend(coin.user_id, "pcgs", 2)
+    )
     coin.pcgs_market = {**data, "fetched_at": data.get("fetched_at") or datetime.now(timezone.utc).isoformat()}
     if data["price_guide"] is not None:
         record(

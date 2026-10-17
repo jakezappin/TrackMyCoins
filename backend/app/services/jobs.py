@@ -13,8 +13,8 @@ import httpx
 from sqlalchemy import select
 
 from ..db import SessionLocal
-from ..models import Coin, Collection
-from . import greysheet, lookups, price_refresh
+from ..models import Coin, Collection, PriceRefreshRun
+from . import greysheet, lookups, price_refresh, quota
 from .coins import on_hand
 
 
@@ -36,6 +36,7 @@ class Job:
     pcgs_stopped: str | None = None
     started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     finished_at: str | None = None
+    run_id: int | None = None  # PriceRefreshRun row, marked finished at the end
 
     def public(self) -> dict:
         d = asdict(self)
@@ -59,12 +60,14 @@ def running_for(user_id: int) -> Job | None:
     return next((j for j in _jobs.values() if j.user_id == user_id and j.status == "running"), None)
 
 
-def start_refresh(user_id: int, collection_id: int | None, scope: str, include_pcgs: bool) -> Job:
+def start_refresh(user_id: int, collection_id: int | None, scope: str, include_pcgs: bool,
+                  run_id: int | None = None) -> Job:
     with _lock:
         existing = running_for(user_id)
         if existing:
             return existing
-        job = Job(id=uuid.uuid4().hex[:12], user_id=user_id, kind="refresh-prices", scope=scope, include_pcgs=include_pcgs)
+        job = Job(id=uuid.uuid4().hex[:12], user_id=user_id, kind="refresh-prices", scope=scope, include_pcgs=include_pcgs,
+                  run_id=run_id)
         _jobs[job.id] = job
     threading.Thread(target=_run_refresh, args=(job, collection_id), daemon=True).start()
     return job
@@ -84,6 +87,7 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
         ids = list(db.scalars(q.order_by(Coin.year, Coin.mint_mark)).all())
         job.total = len(ids)
         pcgs_ok = job.include_pcgs
+        cpg_ok = True
         for coin_id in ids:
             coin = db.get(Coin, coin_id)
             job.current = _label(coin)
@@ -94,8 +98,12 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                 continue
             changed = called = False
             try:
-                called |= price_refresh.refresh_cpg(db, coin)
-                changed = True
+                if cpg_ok:
+                    called |= price_refresh.refresh_cpg(db, coin)
+                    changed = True
+            except quota.QuotaExceeded as e:  # out of today's Greysheet allowance: no more CPG this run
+                cpg_ok = False
+                job.messages.append(f"CPG stopped: {e}")
             except (greysheet.PricingError, lookups.LookupError) as e:
                 job.messages.append(f"{job.current}: CPG: {e}")
             except httpx.HTTPError as e:
@@ -104,6 +112,9 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                 try:
                     called |= price_refresh.refresh_pcgs(db, coin)
                     changed = True
+                except quota.QuotaExceeded as e:
+                    pcgs_ok = False
+                    job.pcgs_stopped = str(e)
                 except (greysheet.PricingError, lookups.LookupError) as e:
                     if "limit" in str(e).lower():
                         pcgs_ok = False
@@ -128,6 +139,14 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
     finally:
         job.current = None
         job.finished_at = datetime.now(timezone.utc).isoformat()
+        if job.run_id is not None:
+            try:
+                run = db.get(PriceRefreshRun, job.run_id)
+                if run is not None:
+                    run.finished_at = datetime.now(timezone.utc)
+                    db.commit()
+            except Exception:  # pragma: no cover - never let bookkeeping hide the job's own result
+                db.rollback()
         db.close()
 
 

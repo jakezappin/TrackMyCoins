@@ -65,3 +65,12 @@ def fresh_pcgs_cache():
     from app.services.lookups import pcgs
 
     pcgs._market_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Every test starts with clean login/sign-up counters (tests sign up many accounts from one address)."""
+    from app.routers import auth
+
+    for lim in (auth.login_limiter, auth.signup_limiter, auth.signup_counter):
+        lim._hits.clear()

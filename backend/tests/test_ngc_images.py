@@ -67,3 +67,32 @@ def test_photos_compressed_with_thumbnail_and_no_gps(tmp_path, monkeypatch):
 
     photos.delete_photo_file(1, name)
     assert not photos.thumb_path(1, name).exists()
+
+
+def test_huge_images_refused_before_decoding(tmp_path, monkeypatch):
+    import pytest as _pytest
+
+    from app.images import ImageTooLarge, open_image
+    from app.services import label_reader
+
+    monkeypatch.setattr(photos.settings, "photo_dir", tmp_path)
+    b = io.BytesIO()
+    Image.new("L", (13000, 13000)).save(b, "PNG")  # tiny file, ~500 MB if decoded in color
+    with _pytest.raises(ImageTooLarge):
+        open_image(b.getvalue())
+    with _pytest.raises(photos.PhotoError, match="too large"):
+        photos.save_bytes(1, b.getvalue(), "image/png")
+    with _pytest.raises(label_reader.LabelError, match="too large"):
+        label_reader.read_label(b.getvalue())
+
+
+def test_downloads_capped(monkeypatch):
+    import httpx
+    import pytest as _pytest
+
+    big = b"\xff" * (photos.settings.max_photo_bytes + 10)
+    real = httpx.Client
+    monkeypatch.setattr(photos.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(
+        lambda req: httpx.Response(200, content=big, headers={"content-type": "image/jpeg"})), **kw))
+    with _pytest.raises(photos.PhotoError, match="too large"):
+        photos.download_image("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/x/NGC1-001_OBV.jpg")

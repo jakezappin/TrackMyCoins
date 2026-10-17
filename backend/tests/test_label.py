@@ -90,7 +90,7 @@ def test_barcode_pcgs_confirmed_without_claude(authed, monkeypatch):
     monkeypatch.setattr(get_settings(), "pcgs_api_token", "tok")
     calls = []
 
-    def fake_lookup(service, cert, check_cac=True):
+    def fake_lookup(service, cert, check_cac=True, user_id=None):
         calls.append(cert)
         if cert != "43215678":
             raise label_reader.lookups.LookupError("not found")

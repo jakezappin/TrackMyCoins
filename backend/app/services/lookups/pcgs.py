@@ -157,12 +157,15 @@ MARKET_TTL = 24 * 60 * 60
 _market_cache: dict[tuple, tuple[float, dict]] = {}
 
 
-def market_cached(pcgs_number: str, grade: int, plus: bool = False) -> tuple[dict, bool]:
-    """(market data, whether PCGS was called)."""
+def market_cached(pcgs_number: str, grade: int, plus: bool = False, before_call=None) -> tuple[dict, bool]:
+    """(market data, whether PCGS was called). `before_call` runs only when PCGS will really be called (to
+    charge the daily allowance; it may raise to stop the call)."""
     key = (str(pcgs_number), int(grade), bool(plus))
     hit = _market_cache.get(key)
     if hit and time.time() - hit[0] < MARKET_TTL:
         return hit[1], False
+    if before_call is not None:
+        before_call()
     data = {**market(pcgs_number, grade, plus), "fetched_at": datetime.now(timezone.utc).isoformat()}
     _market_cache[key] = (time.time(), data)
     return data, True

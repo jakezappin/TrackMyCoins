@@ -10,7 +10,7 @@ from ..db import get_db
 from ..models import Coin, Collection, CoinPhoto, User
 from ..schemas import CoinFields, ImportValuation
 from ..series import BY_SLUG
-from ..services import importer, lookups
+from ..services import importer, lookups, quota
 from ..services import photos as store
 from ..services.coins import _cert_key, find_duplicate_cert, next_inventory_number
 from .coins import _validate
@@ -150,7 +150,12 @@ def preview_certs(body: CertsIn, db: Session = Depends(get_db), user: User = Dep
     rows = []
     for i, cert in enumerate(certs, start=1):
         try:
-            r = lookups.lookup("PCGS", cert)
+            r = lookups.lookup("PCGS", cert, user_id=user.id)
+        except quota.QuotaExceeded as e:  # keep what was looked up; the rest can be pasted again tomorrow
+            for later in certs[i - 1:]:
+                rows.append(ImportRow(row=len(rows) + 1, fields={"grading_service": "PCGS", "cert_number": later},
+                                      errors=[str(e)], description=f"PCGS #{later}"))
+            break
         except lookups.LookupError as e:
             rows.append(ImportRow(row=i, fields={"grading_service": "PCGS", "cert_number": cert}, errors=[str(e)],
                                   description=f"PCGS #{cert}"))
@@ -183,7 +188,7 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
     col = _collection(db, user, body.collection_id)
     # Rows that had problems in the preview stay skipped; the rest are checked again here.
     rows = _check(db, user, col, body.rows)
-    created: list[Coin] = []
+    created: list[tuple[Coin, list[str]]] = []
     for r in rows:
         if r.errors:
             continue
@@ -197,17 +202,24 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
         coin.holder_premium = v.holder_premium
         db.add(coin)
         db.flush()
-        created.append(coin)
-        if body.import_photos:
-            for order, url in enumerate(r.photo_urls[:4]):
-                try:
-                    data_, ctype = store.download_image(url)
-                    name, ctype = store.save_bytes(coin.id, data_, ctype)
-                except Exception:
-                    continue
-                db.add(CoinPhoto(coin_id=coin.id, file_name=name, content_type=ctype, sort_order=order, source="lookup"))
-    db.commit()
+        created.append((coin, r.photo_urls[:4] if body.import_photos else []))
+    db.commit()  # the coins are saved before any slow photo downloads
+
+    # Photos are downloaded outside any database transaction (downloads can take a while, and holding SQLite's
+    # write lock meanwhile made other saves and price refreshes fail with "database is locked").
+    for coin, urls in created:
+        saved = []
+        for order, url in enumerate(urls):
+            try:
+                data_, ctype = store.download_image(url)
+                name, ctype = store.save_bytes(coin.id, data_, ctype)
+            except Exception:
+                continue
+            saved.append(CoinPhoto(coin_id=coin.id, file_name=name, content_type=ctype, sort_order=order, source="lookup"))
+        if saved:
+            db.add_all(saved)
+            db.commit()
     return {
-        "created": [c.inventory_number for c in created],
+        "created": [c.inventory_number for c, _ in created],
         "skipped": [{"row": r.row, "description": r.description, "errors": r.errors} for r in rows if r.errors],
     }

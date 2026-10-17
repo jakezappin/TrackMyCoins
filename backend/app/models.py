@@ -97,6 +97,19 @@ class GradePriceSheet(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ApiUsage(Base):
+    """Calls made to paid / rate-limited services, per day: per user, and site-wide (user_id 0)."""
+
+    __tablename__ = "api_usage"
+    __table_args__ = (UniqueConstraint("day", "user_id", "service"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    user_id: Mapped[int] = mapped_column(Integer)  # 0 = whole site
+    service: Mapped[str] = mapped_column(String(20))  # claude | greysheet | pcgs
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class PriceRefreshRun(Base):
     """One use of "Refresh prices" (to cap how often a user can refresh in bulk, which spends API calls)."""
 
@@ -105,6 +118,9 @@ class PriceRefreshRun(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # Set when the run ends. A run cut short (e.g. Fly stopped the machine) never gets one and, after a grace
+    # period, stops counting against the weekly limit.
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scope: Mapped[str] = mapped_column(String(200))
 
 

@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..config import get_settings
+from ..images import ImageTooLarge, open_image
 
 settings = get_settings()
 
@@ -48,12 +49,8 @@ JPEG_QUALITY = 84
 THUMB_QUALITY = 76
 
 
-def _open(data: bytes):
-    import pillow_heif
-    from PIL import Image
-
-    pillow_heif.register_heif_opener()
-    return Image.open(io.BytesIO(data))
+def _open(data: bytes, side: int):
+    return open_image(data, max_side=side)
 
 
 def _to_jpeg(im, side: int, quality: int) -> bytes:
@@ -77,10 +74,12 @@ def _to_jpeg(im, side: int, quality: int) -> bytes:
 def _compress(data: bytes, content_type: str) -> tuple[bytes, str]:
     """Every photo is stored as an optimized JPEG (animated GIFs are kept as they are)."""
     try:
-        with _open(data) as im:
+        with _open(data, MAX_SIDE) as im:
             if content_type == "image/gif" and getattr(im, "is_animated", False):
                 return data, content_type
             return _to_jpeg(im, MAX_SIDE, JPEG_QUALITY), "image/jpeg"
+    except ImageTooLarge as e:
+        raise PhotoError(str(e)) from e
     except Exception as e:
         raise PhotoError("That file isn't a photo we can read. Try a JPEG, PNG or HEIC.") from e
 
@@ -121,7 +120,7 @@ def make_thumb(coin_id: int, file_name: str) -> Path | None:
     """Create (or recreate) the thumbnail; None if the photo can't be read."""
     src, dst = photo_path(coin_id, file_name), thumb_path(coin_id, file_name)
     try:
-        with _open(src.read_bytes()) as im:
+        with _open(src.read_bytes(), THUMB_SIDE) as im:
             dst.write_bytes(_to_jpeg(im, THUMB_SIDE, THUMB_QUALITY))
     except Exception:
         return None
@@ -150,8 +149,16 @@ def _host_allowed(url: str) -> bool:
 def download_image(url: str) -> tuple[bytes, str]:
     if not _host_allowed(url):
         raise PhotoError(f"Not an allowed image host: {url}")
+    limit = settings.max_photo_bytes
     with httpx.Client(timeout=20, follow_redirects=False) as client:
-        r = client.get(url, headers={"User-Agent": "coin-app/0.1"})
-    if r.status_code != 200:
-        raise PhotoError(f"Could not download image ({r.status_code}): {url}")
-    return r.content, r.headers.get("content-type", "")
+        with client.stream("GET", url, headers={"User-Agent": "coin-app/0.1"}) as r:
+            if r.status_code != 200:
+                raise PhotoError(f"Could not download image ({r.status_code}): {url}")
+            if int(r.headers.get("content-length") or 0) > limit:
+                raise PhotoError("That image is too large to import")
+            data = bytearray()
+            for chunk in r.iter_bytes():  # stop early instead of reading an endless or huge body
+                data += chunk
+                if len(data) > limit:
+                    raise PhotoError("That image is too large to import")
+            return bytes(data), r.headers.get("content-type", "")

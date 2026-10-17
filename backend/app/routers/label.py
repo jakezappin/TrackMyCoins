@@ -13,13 +13,13 @@ router = APIRouter(prefix="/api", tags=["label"])
 
 
 @router.post("/read-label")
-async def read_label(file: UploadFile, _: User = Depends(current_user)):
+async def read_label(file: UploadFile, user: User = Depends(current_user)):
     """Read a slab label from a photo: service, cert number, date, grade, designation, variety, CAC."""
     data = await file.read(get_settings().max_photo_bytes + 1)
     if len(data) > get_settings().max_photo_bytes:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "That photo is too large (15 MB max).")
     try:
-        return await run_in_threadpool(label_reader.read_label, data)
+        return await run_in_threadpool(label_reader.read_label, data, user.id)
     except label_reader.LabelError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
@@ -32,13 +32,13 @@ class NgcPageIn(BaseModel):
 
 
 @router.post("/ngc-page")
-def ngc_page(body: NgcPageIn, _: User = Depends(current_user)):
+def ngc_page(body: NgcPageIn, user: User = Depends(current_user)):
     """Details and photos from an NGC cert page, sent by the "Add to TrackMyCoins" bookmark that runs in the
     collector's own browser while they view the page."""
     cert = body.cert.strip()
     if not re.fullmatch(r"\d{5,10}-\d{3}", cert):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "That doesn't look like an NGC cert page.")
-    reading = label_reader.read_ngc_page(cert, body.grade, body.text)
+    reading = label_reader.read_ngc_page(cert, body.grade, body.text, user.id)
     photos = {"urls": [], "previews": []}
     for link in body.images:
         try:

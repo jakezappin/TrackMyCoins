@@ -403,3 +403,30 @@ def test_coin_fields_normalized(authed, morgan_collection):
     assert r.status_code == 422
     r = authed.post(f"/api/coins/{c['inventory_number']}/price-quotes", json={"source": "eBay", "value": "10"})
     assert r.status_code == 422
+
+
+def test_signup_limits_and_real_client_ip(client, monkeypatch):
+    from app.config import get_settings
+    from app.routers import auth
+
+    monkeypatch.setattr(get_settings(), "signup_mode", "invite")
+    monkeypatch.setattr(get_settings(), "invite_code", "RIGHT")
+    body = {"email": "g@example.com", "first_name": "G", "last_name": "H", "password": "long enough password"}
+    for _ in range(get_settings().signup_max_failures):
+        assert client.post("/api/auth/signup", json={**body, "invite_code": "WRONG"}).status_code == 403
+    assert client.post("/api/auth/signup", json={**body, "invite_code": "RIGHT"}).status_code == 429  # guessing stopped
+    # Another address (as Fly's proxy reports it) isn't affected, and a faked X-Forwarded-For doesn't help
+    r = client.post("/api/auth/signup", json={**body, "invite_code": "RIGHT"}, headers={"Fly-Client-IP": "203.0.113.9"})
+    assert r.status_code == 201
+    assert auth.signup_limiter.blocked("ip:testclient")
+
+
+def test_production_needs_a_real_session_secret(monkeypatch):
+    import pytest as _pytest
+
+    from app.config import DEV_SECRET, Settings, check_production
+
+    monkeypatch.setenv("FLY_APP_NAME", "trackmycoins")
+    with _pytest.raises(RuntimeError):
+        check_production(Settings(session_secret=DEV_SECRET))
+    check_production(Settings(session_secret="x" * 64))  # fine

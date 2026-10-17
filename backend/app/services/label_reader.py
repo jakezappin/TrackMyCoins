@@ -17,16 +17,10 @@ import zxingcpp
 from PIL import Image, ImageOps
 
 from ..config import get_settings
-from . import lookups
+from ..images import ImageTooLarge, open_image
+from . import lookups, quota
 
 log = logging.getLogger(__name__)
-
-try:  # iPhone photos (HEIC) when the browser sends them as-is
-    import pillow_heif
-
-    pillow_heif.register_heif_opener()
-except ImportError:  # pragma: no cover
-    pass
 
 MAX_SIDE = 1800  # plenty for label text; keeps the request small
 
@@ -90,12 +84,14 @@ DIGITS = re.compile(r"\d{7,10}")
 
 
 def _open(data: bytes) -> Image.Image:
-    """Any phone photo (HEIC, huge JPEG, rotated) as an upright RGB image."""
+    """Any phone photo (HEIC, huge JPEG, rotated) as an upright RGB image, refused if enormous."""
     try:
-        with Image.open(io.BytesIO(data)) as im:
-            im = ImageOps.exif_transpose(im).convert("RGB")
-            im.thumbnail((BARCODE_SIDE, BARCODE_SIDE))
-            return im
+        im = open_image(data, max_side=BARCODE_SIDE)
+        im = ImageOps.exif_transpose(im).convert("RGB")
+        im.thumbnail((BARCODE_SIDE, BARCODE_SIDE))
+        return im
+    except ImageTooLarge as e:
+        raise LabelError(str(e)) from e
     except Exception as e:
         raise LabelError("That file isn't a photo we can read. Try a JPEG or PNG.") from e
 
@@ -123,7 +119,7 @@ def _blank(**fields) -> dict:
     return r
 
 
-def _from_barcodes(texts: list[str]) -> dict | None:
+def _from_barcodes(texts: list[str], user_id: int | None = None) -> dict | None:
     """A reading from the slab barcode, or None if it can't be matched to a cert."""
     for t in texts:
         m = NGC_CERT.search(t)
@@ -135,7 +131,7 @@ def _from_barcodes(texts: list[str]) -> dict | None:
     candidates = list(dict.fromkeys(d for t in texts for d in DIGITS.findall(t)))[:2]  # PCGS allows 1,000 calls/day
     for cert in candidates:
         try:
-            found = lookups.lookup("PCGS", cert)
+            found = lookups.lookup("PCGS", cert, user_id=user_id)
         except (lookups.LookupError, httpx.HTTPError):
             continue
         if found.year is None and found.grade is None:
@@ -151,11 +147,11 @@ def _from_barcodes(texts: list[str]) -> dict | None:
     return None
 
 
-def read_label(data: bytes) -> dict:
+def read_label(data: bytes, user_id: int | None = None) -> dict:
     img = _open(data)
     texts = _barcode_texts(img)
     if texts:
-        hit = _from_barcodes(texts)
+        hit = _from_barcodes(texts, user_id)
         if hit:
             return hit
     settings = get_settings()
@@ -166,6 +162,8 @@ def read_label(data: bytes) -> dict:
             "Couldn't find a barcode in that photo. Try a closer, sharper photo of the label's barcode, "
             "or enter the cert number yourself."
         )
+    if user_id is not None:
+        quota.spend(user_id, "claude")
     b64 = _jpeg_b64(img)
     result = _ask_claude(
         [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
@@ -233,16 +231,18 @@ DATE_IN_TEXT = re.compile(r"\b(1[789]\d\d|20[0-4]\d)(?:[\s-]+(CC|[PDSOW]))?\b")
 GRADE_IN_TEXT = re.compile(r"\b(MS|PF|PR|SP|AU|XF|EF|VF|F|VG|G|AG|FR|PO)\s?(\d{1,2})(\s?\+)?(\s?(?:★|\*))?", re.I)
 
 
-def read_ngc_page(cert: str, grade_in_url: str | None, text: str) -> dict:
+def read_ngc_page(cert: str, grade_in_url: str | None, text: str, user_id: int | None = None) -> dict:
     """Coin details from NGC's cert page text: Claude when configured, a simple parser otherwise.
     The cert comes from the page address, so it is always trusted over anything in the text."""
     text = (text or "")[:4000]
     result = None
     if get_settings().anthropic_api_key and text.strip():
         try:
+            if user_id is not None:
+                quota.spend(user_id, "claude")
             result = _ask_claude([{"type": "text", "text": NGC_PAGE_PROMPT + text}], "")
             result["source"] = "ngc_page"
-        except LabelError as e:
+        except (LabelError, quota.QuotaExceeded) as e:
             log.warning("NGC page read fell back to the simple parser: %s", e)
     if result is None:
         result = _blank(source="ngc_page", confidence="medium")

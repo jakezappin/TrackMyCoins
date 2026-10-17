@@ -19,10 +19,10 @@ router = APIRouter(prefix="/api", tags=["pricing", "lookups"])
 def cert_lookup(
     service: str = Query(..., description="PCGS, NGC, ANACS or CACG"),
     cert: str = Query(..., min_length=1, max_length=30),
-    _: User = Depends(current_user),
+    user: User = Depends(current_user),
 ):
     try:
-        return lookups.lookup(service, cert)
+        return lookups.lookup(service, cert, user_id=user.id)
     except lookups.LookupError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:
