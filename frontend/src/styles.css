@@ -3374,9 +3374,10 @@ table {
 }
 
 /* ---- Precious Metals page ---- */
-.metals-page .card + .card,
-.metals-page .spot-cards + .card,
-.metals-page .copper-line + .card {
+/* Space between the page's sections (not the price tiles, which are cards in a grid). */
+.metals-page > .card + .card,
+.metals-page > .spot-cards + .card,
+.metals-page > .copper-line + .card {
   margin-top: 16px;
 }
 .spot-cards {
