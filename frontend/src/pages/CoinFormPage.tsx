@@ -115,8 +115,8 @@ const OGP_SERIES = [
 type PackKey = "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_pack" | "ogp" | "capital_holder";
 const VARIETY_HINTS: Record<string, string> = {
   "classic-commemoratives": "e.g. Alabama, Boone",
-  "washington-quarters": "Design from 1999 on, e.g. Delaware, Yellowstone",
-  "morgan-dollars": "e.g. 8TF, 1880/79 (overdate), O/S (over-mintmark)",
+  "washington-quarters": "e.g. Delaware, Yellowstone",
+  "morgan-dollars": "e.g. 8TF, 1880/79, O/S",
 };
 
 function verifyUrl(service: GradingService, cert: string, grade: number | null): string | null {
@@ -816,20 +816,20 @@ export default function CoinFormPage() {
           </p>
         ) : (
         <div className="lookup-bar">
-          <label className="field">
+          <label className="field service-field">
             <span>Service</span>
             <select {...text("grading_service")}>
               {SERVICES.filter((s) => s !== "RAW").map((s) => (
                 <option key={s} value={s}>
-                  {s === "OTHER" ? "Other grading service" : s}
+                  {s === "OTHER" ? "Other Grading Service" : s}
                 </option>
               ))}
             </select>
           </label>
           {form.grading_service === "OTHER" && (
-            <label className="field">
+            <label className="field company-field">
               <span>Grading company</span>
-              <input {...text("other_service")} placeholder="e.g. PCI, TruGrade, SEGS" maxLength={60} required />
+              <input {...text("other_service")} placeholder="PCI, TruGrade, SEGS…" maxLength={60} required />
             </label>
           )}
           <label className="field grow">
@@ -1085,7 +1085,7 @@ export default function CoinFormPage() {
             <span>Variety / issue (optional)</span>
             <input
               {...text("variety")}
-              placeholder={VARIETY_HINTS[coinType?.slug ?? ""] ?? "e.g. Type 2, 1942/1 (overdate), D/S (over-mintmark)"}
+              placeholder={VARIETY_HINTS[coinType?.slug ?? ""] ?? "e.g. Type 2, 1942/1, D/S"}
               maxLength={150}
             />
           </label>

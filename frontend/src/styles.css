@@ -728,6 +728,19 @@ table {
 .lookup-bar .field {
   width: 170px;
 }
+/* Wide enough for "Other Grading Service" and the company placeholder; the select matches the inputs' height so
+   the labels line up. */
+.lookup-bar .field.service-field {
+  width: 215px;
+}
+.lookup-bar .field.company-field {
+  width: 230px;
+}
+.lookup-bar select,
+.lookup-bar input {
+  height: 40px;
+  box-sizing: border-box;
+}
 .lookup-bar .field.grow {
   flex: 1;
   min-width: 180px;
