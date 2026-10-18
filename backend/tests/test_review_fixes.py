@@ -273,3 +273,17 @@ def test_security_headers(client):
     r = client.get("/api/health")
     assert r.headers["X-Frame-Options"] == "DENY" and r.headers["X-Content-Type-Options"] == "nosniff"
     assert client.get("/api/shared/nope").headers["Referrer-Policy"] == "no-referrer"
+
+
+def test_one_address(client, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "canonical_host", "trackmycoins.app")
+    r = client.get("/dashboard?x=1", headers={"host": "trackmycoins.fly.dev"}, follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == "https://trackmycoins.app/dashboard?x=1"
+    r = client.post("/api/auth/login", json={}, headers={"host": "www.trackmycoins.app"}, follow_redirects=False)
+    assert r.status_code == 308 and r.headers["location"] == "https://trackmycoins.app/api/auth/login"
+    # The address itself, local hosts and Fly's health checks are left alone.
+    assert client.get("/api/health", headers={"host": "trackmycoins.app"}).status_code == 200
+    assert client.get("/api/health", headers={"host": "trackmycoins.fly.dev"}, follow_redirects=False).status_code == 200
+    assert client.get("/api/health", headers={"host": "127.0.0.1:8080"}).status_code == 200

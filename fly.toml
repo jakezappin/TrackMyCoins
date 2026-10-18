@@ -5,6 +5,7 @@ primary_region = "iad"  # Ashburn, Virginia. List regions with: fly platform reg
 [build]
 
 [env]
+  CANONICAL_HOST = "trackmycoins.app"  # trackmycoins.fly.dev and www. redirect here
   SIGNUP_MODE = "invite"  # registering needs INVITE_CODE (set with: fly secrets set INVITE_CODE=...)
 
 [http_service]

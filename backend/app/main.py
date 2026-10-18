@@ -3,7 +3,7 @@ import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
@@ -53,6 +53,20 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Coin App", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def one_address(request, call_next):
+    """trackmycoins.fly.dev and www.trackmycoins.app -> trackmycoins.app (same path). Fly's health checks, which
+    come in on the machine's own address, are left alone."""
+    canonical = get_settings().canonical_host
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    if canonical and host != canonical and (host == f"www.{canonical}" or host.endswith(".fly.dev")) \
+            and request.url.path != "/api/health":
+        url = f"https://{canonical}{request.url.path}" + (f"?{request.url.query}" if request.url.query else "")
+        # 308 keeps the method and body for anything but a plain page load.
+        return RedirectResponse(url, status_code=301 if request.method in ("GET", "HEAD") else 308)
+    return await call_next(request)
 
 
 @app.middleware("http")

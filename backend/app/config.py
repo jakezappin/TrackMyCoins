@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     session_cookie: str = "coinapp_session"
     session_max_age: int = 60 * 60 * 24 * 14  # 14 days
     cookie_secure: bool = False  # set True once served over HTTPS
+    # The site's one address (e.g. "trackmycoins.app"): its www. and *.fly.dev addresses redirect there, so there's
+    # one login and one set of links. Empty: answer on any address (local development).
+    canonical_host: str = ""
 
     # Who can create an account: "invite" (needs INVITE_CODE; the default), "open" (anyone) or "closed".
     # With "invite" and no INVITE_CODE set, nobody can register.
