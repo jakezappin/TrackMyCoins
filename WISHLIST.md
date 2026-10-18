@@ -7,7 +7,47 @@ Features we've talked about and put on hold, with what we learned so they're qui
 1. Install on phone (installable web app: icon, full screen).
 2. Rapid batch add (scan slab after slab into a queue, review, save all).
 
-(Bullion collections were built 2026-10-18.)
+(Bullion collections, the Precious Metals page, Grading Tracker, ICG, Storage, error coins and the Add Coin search
+were built 2026-10-18. Install on phone is on hold.)
+
+## Seller tools (eBay / Whatnot / TikTok Shop)
+
+Agreed 2026-10-18 to keep these on their own list. **If built, they're switched on per user in Account settings
+(off by default)**, so collectors who don't sell never see the extra menus, columns, buttons or dashboard cards.
+Suggested order: 1 → 2 → 4 (with Connect eBay) → 5.
+
+1. **Selling status and channels.** Per coin and bullion item: Listed on eBay / Whatnot / TikTok (listing link, price,
+   date) → Sold → Shipped. Warn about double selling (listed in two places, sold in one). Aging list (listed 30/60/90
+   days; CPG moved since listing).
+2. **Fees and net, profit by platform.** Each platform's fee rates set once (they change; no hard-coded rates).
+   "Sells for $X on Whatnot: you net $Y after fees, shipping and supplies." Gross, fees, cost of goods and net by
+   platform, month and year.
+3. *(not chosen yet)* Bought-a-lot cost split: spread a lot's price across its coins (evenly, by CPG, or by hand).
+4. **Listing kit, then Connect eBay.**
+   - Kit: eBay title under 80 characters ("1881-S Morgan Silver Dollar PCGS MS65 CAC"), item specifics, description,
+     photos, copy buttons; Whatnot bulk-upload CSV and eBay bulk-listing file for chosen coins (no API needed).
+   - Connect eBay (OAuth, user consent on eBay's own sign-in; we never see passwords): **List on eBay** from the coin
+     page with a preview → Inventory API (inventory item by SKU = inventory #, offer, publish). Category from the
+     series, item specifics via Taxonomy API, seller's shipping / payment / return policies via Account API,
+     suggested price and net after fees on the preview. Coin then shows Listed on eBay with the link.
+   - Needs: a RuName (redirect) in the eBay developer portal for sandbox and production →
+     `https://trackmycoins.app/api/ebay/connect/callback`; refresh tokens (~18 months) stored encrypted, with
+     disconnect; photos uploaded to eBay or given as short-lived private links (ours are behind login); sellers need
+     eBay Business Policies on; build and test in the sandbox first.
+   - Once we store eBay tokens, the Marketplace Account Deletion endpoint (`/api/ebay/account-deletion`, built
+     2026-10-18, currently acknowledge-only) must delete that user's eBay connection.
+   - eBay's "create a draft, finish on eBay" (Sell Listing API) seems to be limited access; plan on full listings
+     with a final confirm step.
+5. **Live show planner (Whatnot / TikTok Live).** Pick coins for a stream: order, starting bid and floor (from cost
+   and CPG); phone-friendly run sheet during the show; afterwards enter hammer prices and buyers, which marks them
+   sold with fees worked out. Giveaways and breaks tracked as cost/marketing. Pairs with printed inventory # / QR
+   labels for pulling coins fast.
+
+Other seller ideas mentioned: suggested Buy It Now / starting bid from CPG and comps; photo helpers (square crops,
+obverse + reverse side by side, watermark); buyer want lists matched to new inventory; consignment (split, payout
+owed); ship-by list (packaging, tracking, insurance); tax-time report (sales by platform vs 1099-K, cost of goods,
+short- vs long-term). Platform APIs: eBay is documented and we have keys; TikTok Shop has an API with app approval;
+no broadly open Whatnot seller API that we know of, so CSV upload there.
 
 ## On hold
 
@@ -33,8 +73,9 @@ Real CPG history from Greysheet would replace the auction step for older purchas
 
 ### eBay sold prices
 - Needs eBay's Marketplace Insights API (limited release; apply through eBay developer support).
-- The "For sale on eBay now" card (Browse API, asking prices) is built and hidden until `EBAY_CLIENT_ID` /
-  `EBAY_CLIENT_SECRET` are set; it appears automatically once they are.
+- The "For sale on eBay now" card (Browse API, asking prices) is built and hidden until the eBay keys are set.
+  Keys are now in `.env` as `EBAY_APP_ID_*` / `EBAY_CERT_ID_*` (sandbox and production); the app still reads
+  `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET`, so switch it to the new names when the eBay box work starts.
 
 ### Forgot password by email
 - Plan: reset tokens (hashed, 1-hour expiry), email via Resend, rate-limited request endpoint.
@@ -52,10 +93,6 @@ Real CPG history from Greysheet would replace the auction step for older purchas
 ### QR code stickers
 - Printable QR stickers (e.g. for flips or slab sleeves) that open the coin's page. Only the owner (logged in) would
   see the coin; consider what a stranger scanning one should see.
-
-### Storage location (back burner)
-- Where each coin is kept (home safe, bank box). Probably unpopular: many collectors don't want to record where their
-  stack is; the Notes field covers anyone who does.
 
 ### Dealer buy-back estimate for bullion
 Show what a dealer would likely pay (below melt) next to melt value. No major U.S. dealer (APMEX, JM Bullion,
