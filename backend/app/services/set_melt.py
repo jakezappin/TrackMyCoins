@@ -13,6 +13,7 @@ DIME_90, QUARTER_90, HALF_90 = 0.07234, 0.18084, 0.36169
 QUARTER_40, HALF_40, DOLLAR_40 = 0.07395, 0.14789, 0.31625
 DIME_999, QUARTER_999, HALF_999 = 0.08149, 0.20373, 0.40743
 DOLLAR_90 = 0.77344  # silver commemorative dollar (Prestige sets)
+WAR_NICKEL = 0.05626  # 35% silver Jefferson nickel (the 1942 6-coin proof set has one)
 EAGLE = 1.0
 
 # Mints that struck circulating half dollars in mint-set years (Walking Liberty 1947, Franklin 1948-1963,
@@ -29,12 +30,21 @@ def _mints(slug: str, year: int) -> int:
     return len(strikes.get("MS", set()))
 
 
+def _quarters(year: int) -> int:
+    """Quarters in a year's sets: five State / ATB / American Women designs from 1999, six in 2009 (D.C. and the
+    territories), two in 2021 (Tuskegee Airmen and Crossing the Delaware)."""
+    return 6 if year == 2009 else 2 if year == 2021 else 5 if year >= 1999 else 1
+
+
+def _quarter(year: int) -> float:
+    return QUARTER_999 if year >= 2019 else QUARTER_90
+
+
 def _proof_set_90(year: int) -> float:
     """Silver Proof sets' dime, quarters and half: 90% silver to 2018, .999 from 2019."""
-    quarters = 6 if year == 2009 else 5 if year >= 1999 else 1
     if year >= 2019:
-        return DIME_999 + quarters * QUARTER_999 + HALF_999
-    return DIME_90 + quarters * QUARTER_90 + HALF_90
+        return DIME_999 + _quarters(year) * QUARTER_999 + HALF_999
+    return DIME_90 + _quarters(year) * QUARTER_90 + HALF_90
 
 
 def silver_oz(slug: str, year: int, variety: str | None) -> float | None:
@@ -58,7 +68,8 @@ def silver_oz(slug: str, year: int, variety: str | None) -> float | None:
         if "prestige" in v:
             return DOLLAR_90 + (HALF_90 if year == 1993 else 0)  # the 1993 Madison half is silver too
         if year <= 1964:
-            return DIME_90 + QUARTER_90 + HALF_90
+            war_nickel = WAR_NICKEL if year == 1942 and "6 coins" in v else 0  # both 1942 nickels
+            return round(DIME_90 + QUARTER_90 + HALF_90 + war_nickel, 5)
         if 1968 <= year <= 1970:
             return HALF_40
         return 0.0
@@ -68,12 +79,11 @@ def silver_oz(slug: str, year: int, variety: str | None) -> float | None:
         if "premier" in v:
             return DIME_90 + QUARTER_90 + HALF_90
         if "quarters" in v:
-            return 5 * (QUARTER_999 if year >= 2019 else QUARTER_90)
-        if "innovation" in v:
-            return None  # American Innovation dollars: not silver unless stated
+            return round(_quarters(year) * _quarter(year), 5)
         base = _proof_set_90(year)
         if "limited edition" in v:
-            return round(base + EAGLE, 4)
+            eagles = 2 if year == 2021 else 1  # 2021: both the Type 1 and the Type 2 Silver Eagle
+            return round(base + eagles * EAGLE, 4)
         return round(base, 4)
     return None
 

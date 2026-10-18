@@ -182,6 +182,17 @@ def sync(db: Session, coin_type: CoinType) -> SyncResult:
             rows.setdefault(parsed["gsid"], {**parsed, "node_id": nid})
     if not rows:
         raise PricingError(f"Greysheet returned no {coin_type.name} items")
+    if series is not None and series.is_set:
+        # Two sets the same year differing only in coin count (1942 proof: 5 or 6 coins): keep the count.
+        same: dict[tuple, list[dict]] = {}
+        for r in rows.values():
+            same.setdefault((r["year"], r["mint_mark"], r["variety"]), []).append(r)
+        for group in same.values():
+            if len(group) > 1:
+                for r in group:
+                    m = re.search(r"(\d+) Coins", r["name"])
+                    if m:
+                        r["variety"] = ", ".join(x for x in (r["variety"], f"{m.group(1)} Coins") if x)
 
     db.execute(delete(CatalogEntry).where(CatalogEntry.coin_type_id == coin_type.id))
     db.add_all(CatalogEntry(coin_type_id=coin_type.id, synced_at=now, **r) for r in rows.values())

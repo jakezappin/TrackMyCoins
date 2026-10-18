@@ -75,3 +75,30 @@ def test_ogp_price_and_silver_table():
     assert set_melt.silver_oz("us-mint-sets", 1966, "Special Mint Set") == pytest.approx(0.1479, abs=1e-3)
     assert set_melt.silver_oz("us-proof-sets", 1990, "Clad Proof Set") == 0.0
     assert set_melt.silver_oz("us-silver-proof-sets", 2022, "Silver Proof Set") == pytest.approx(1.5076, abs=1e-3)
+
+
+def test_silver_content_edge_years():
+    s = set_melt.silver_oz
+    assert s("us-silver-proof-sets", 2021, "Silver Proof Set") == pytest.approx(0.8964, abs=1e-3)  # two quarters
+    assert s("us-silver-proof-sets", 2021, "Silver Limited Edition Proof Set") == pytest.approx(2.8964, abs=1e-3)  # two Eagles
+    assert s("us-silver-proof-sets", 2009, "Silver Proof Set") == pytest.approx(1.5191, abs=1e-3)  # six quarters
+    assert s("us-silver-proof-sets", 2009, "Silver Quarters Proof Set") == pytest.approx(1.0850, abs=1e-3)
+    assert s("us-proof-sets", 1942, "Proof Set, 6 Coins") == pytest.approx(0.6711, abs=1e-3)  # + the war nickel
+    assert s("us-proof-sets", 1942, "Proof Set, 5 Coins") == pytest.approx(0.6149, abs=1e-3)
+    assert s("us-proof-sets", 1993, "Prestige Proof Set") == pytest.approx(1.1351, abs=1e-3)
+    assert s("us-proof-sets", 2022, "American Innovation Proof Set") == 0.0  # clad dollars
+
+
+def test_sets_differing_only_by_coin_count_stay_apart(client, monkeypatch):
+    from app.db import SessionLocal
+    from app.models import CatalogEntry, CoinType
+    from app.services import catalog
+
+    items = [_item(10, "1942", "Proof Set", "5 Coins", "904756"), _item(11, "1942", "Proof Set", "6 Coins", "904757")]
+    monkeypatch.setattr(greysheet, "client", lambda: contextlib.nullcontext())
+    monkeypatch.setattr(greysheet, "get", lambda c, path, **kw: items if kw.get("NodeId") == 9020 else [])
+    with SessionLocal() as db:
+        t = db.query(CoinType).filter_by(slug="us-proof-sets").one()
+        catalog.sync(db, t)
+        assert sorted(e.variety for e in db.query(CatalogEntry).filter_by(coin_type_id=t.id)) == [
+            "Proof Set, 5 Coins", "Proof Set, 6 Coins"]
