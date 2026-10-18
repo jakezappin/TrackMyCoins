@@ -7,7 +7,7 @@ adding a coin by hand, and problems are reported per row so the user can fix the
 import csv
 import io
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from openpyxl import load_workbook
@@ -153,21 +153,42 @@ def _money(v, errors: list[str], label: str) -> Decimal | None:
     return d.quantize(Decimal("0.01"))
 
 
+def _two_digit_year(d: date) -> date:
+    """A 2-digit year read as a full one ("12/31/17" -> 2017-12-31): 00 up to this year is 20xx, later is 19xx.
+    (strptime's %Y takes "17" as the year 0017.)"""
+    if d.year >= 100:
+        return d
+    century = 2000 if d.year <= date.today().year % 100 else 1900
+    try:
+        return d.replace(year=century + d.year)
+    except ValueError:  # Feb 29 in a year that isn't a leap year
+        return d.replace(year=century + d.year, day=28)
+
+
 def _date(v, errors: list[str], label: str) -> date | None:
     if v is None or v == "":
         return None
     if isinstance(v, datetime):
-        return v.date()
-    if isinstance(v, date):
-        return v
-    s = str(v).strip()
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%b %d, %Y", "%B %d, %Y", "%d %b %Y"):
-        try:
-            return datetime.strptime(s, fmt).date()
-        except ValueError:
-            continue
-    errors.append(f"{label} isn't a date I recognize: {s} (use YYYY-MM-DD or MM/DD/YYYY)")
-    return None
+        d = v.date()
+    elif isinstance(v, date):
+        d = v
+    else:
+        s = str(v).strip()
+        d = None
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%b %d, %Y", "%B %d, %Y", "%d %b %Y"):
+            try:
+                d = datetime.strptime(s, fmt).date()
+                break
+            except ValueError:
+                continue
+        if d is None:
+            errors.append(f"{label} isn't a date I recognize: {s} (use YYYY-MM-DD or MM/DD/YYYY)")
+            return None
+    d = _two_digit_year(d)
+    if d.year < 1900 or d > date.today() + timedelta(days=1):
+        errors.append(f"{label} {d:%m/%d/%Y} looks mistyped (it's in the future or before 1900).")
+        return None
+    return d
 
 
 def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list[str], dict]:

@@ -314,3 +314,35 @@ def test_ebay_account_deletion_endpoint(client, monkeypatch):
     assert r.status_code == 200 and r.json() == {"challengeResponse": want}
     assert r.headers["content-type"].startswith("application/json")
     assert client.post("/api/ebay/account-deletion", json={"metadata": {"topic": "MARKETPLACE_ACCOUNT_DELETION"}}).status_code == 204
+
+
+def test_saved_coin_with_bad_date_still_shows(authed, morgan_collection):
+    """A year-0017 purchase date saved by an old import must not break the collection (it 500'd)."""
+    from datetime import date
+
+    c = authed.post("/api/coins", json=coin_payload(morgan_collection["id"])).json()
+    with SessionLocal() as db:
+        coin = db.get(Coin, c["id"])
+        coin.purchase_date = date(17, 12, 31)
+        coin.strike_designation = "XYZ"
+        db.commit()
+    r = authed.get(f"/api/collections/{morgan_collection['id']}/coins")
+    assert r.status_code == 200 and r.json()[0]["purchase_date"] == "0017-12-31"
+    assert authed.get(f"/api/coins/{c['inventory_number']}").status_code == 200
+    # Saving it again still asks for a sensible date.
+    r = authed.put(f"/api/coins/{c['inventory_number']}", json=coin_payload(morgan_collection["id"], cert_number=c["cert_number"],
+                                                                         purchase_date="0017-12-31"))
+    assert r.status_code == 422 and "2017" in r.text
+
+
+def test_import_reads_two_digit_years():
+    from datetime import date
+
+    from app.services.importer import _date
+
+    errors: list[str] = []
+    assert _date("12/31/17", errors, "Date purchased") == date(2017, 12, 31)
+    assert _date("3/15/98", errors, "Date purchased") == date(1998, 3, 15)
+    assert _date(date(17, 12, 31), errors, "Date purchased") == date(2017, 12, 31)  # an Excel cell typed as 0017
+    assert _date("2025-03-15", errors, "Date purchased") == date(2025, 3, 15) and not errors
+    assert _date("1/1/1850", errors, "Date purchased") is None and "looks mistyped" in errors[0]

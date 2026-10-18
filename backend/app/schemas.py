@@ -379,6 +379,51 @@ class PriceQuoteOut(ORM):
 
 
 class CoinOut(CoinFields, ORM):
+    """A saved coin, shown as it is. CoinFields' rules are for what's typed in: re-checking saved coins against them
+    (a year-0017 date from an old import, a designation added to the rules later) would break the whole page."""
+
+    @field_validator("year")
+    @classmethod
+    def _year(cls, v):
+        return v
+
+    @field_validator("grade_prefix")
+    @classmethod
+    def _grade_prefix(cls, v):
+        return v
+
+    @field_validator("cert_number")
+    @classmethod
+    def _cert(cls, v):
+        return v
+
+    @field_validator("pcgs_number")
+    @classmethod
+    def _pcgs_number(cls, v):
+        return v
+
+    @field_validator("purchase_date", "sale_date")
+    @classmethod
+    def _sensible_date(cls, v, info):
+        return v
+
+    @field_validator("strike_designation", mode="before")
+    @classmethod
+    def _designation(cls, v):
+        return v
+
+    @model_validator(mode="after")
+    def _error(self):
+        return self
+
+    @model_validator(mode="after")
+    def _details(self):
+        return self
+
+    @model_validator(mode="after")
+    def _sale_after_purchase(self):
+        return self
+
     id: int
     coin_type_id: int
     collection_id: int
