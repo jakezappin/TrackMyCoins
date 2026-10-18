@@ -5,7 +5,7 @@ import { shortDate } from "../format";
 const sizeLabel = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`);
 
 /** Receipts, invoices and other documents kept with a coin (private: never shown on shared links). */
-export default function AttachmentsCard({ inventoryNumber }: { inventoryNumber: string }) {
+export default function AttachmentsCard({ inventoryNumber, kind = "coin" }: { inventoryNumber: string; kind?: "coin" | "bullion" }) {
   const [items, setItems] = useState<Attachment[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -15,10 +15,10 @@ export default function AttachmentsCard({ inventoryNumber }: { inventoryNumber: 
 
   useEffect(() => {
     api
-      .attachments(inventoryNumber)
+      .attachments(inventoryNumber, kind)
       .then(setItems)
       .catch((e) => setError((e as Error).message));
-  }, [inventoryNumber]);
+  }, [inventoryNumber, kind]);
 
   async function act(label: string, fn: () => Promise<void>) {
     if (busyRef.current) return;
@@ -38,13 +38,13 @@ export default function AttachmentsCard({ inventoryNumber }: { inventoryNumber: 
   const onFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (files.length) act("upload", async () => setItems(await api.uploadAttachments(inventoryNumber, files)));
+    if (files.length) act("upload", async () => setItems(await api.uploadAttachments(inventoryNumber, files, kind)));
   };
 
   const remove = (a: Attachment) => {
     if (!confirm(`Delete ${a.name}?`)) return;
     act(`del-${a.id}`, async () => {
-      await api.deleteAttachment(a.id);
+      await api.deleteAttachment(a.url);
       setItems((cur) => (cur ?? []).filter((x) => x.id !== a.id));
     });
   };

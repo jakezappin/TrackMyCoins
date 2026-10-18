@@ -713,6 +713,8 @@ export interface Attachment {
   url: string;
 }
 
+const attachmentBase = (kind: "coin" | "bullion") => (kind === "bullion" ? "/api/bullion/items" : "/api/coins");
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: "same-origin", headers: {} };
   if (body instanceof FormData) {
@@ -863,13 +865,16 @@ export const api = {
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/photos/import`, { urls }),
   reorderPhotos: (inv: string, photo_ids: number[]) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/photos/order`, { photo_ids }),
-  attachments: (inv: string) => request<Attachment[]>("GET", `/api/coins/${encodeURIComponent(inv)}/attachments`),
-  uploadAttachments: (inv: string, files: File[]) => {
+  /** Receipts & documents of a coin, or (kind "bullion") of a bullion item. */
+  attachments: (inv: string, kind: "coin" | "bullion" = "coin") =>
+    request<Attachment[]>("GET", `${attachmentBase(kind)}/${encodeURIComponent(inv)}/attachments`),
+  uploadAttachments: (inv: string, files: File[], kind: "coin" | "bullion" = "coin") => {
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));
-    return request<Attachment[]>("POST", `/api/coins/${encodeURIComponent(inv)}/attachments`, fd);
+    return request<Attachment[]>("POST", `${attachmentBase(kind)}/${encodeURIComponent(inv)}/attachments`, fd);
   },
-  deleteAttachment: (id: number) => request<void>("DELETE", `/api/attachments/${id}`),
+  /** `url` is the attachment's own address (coin or bullion). */
+  deleteAttachment: (url: string) => request<void>("DELETE", url),
   deletePhoto: (photoId: number) => request<void>("DELETE", `/api/photos/${photoId}`),
 
   lookup: (service: GradingService, cert: string) =>

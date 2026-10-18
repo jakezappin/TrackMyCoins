@@ -3,6 +3,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -13,7 +14,8 @@ from sqlalchemy.orm import Session, selectinload
 from ..auth import current_user
 from ..config import get_settings
 from ..db import get_db
-from ..models import BullionCollection, BullionItem, BullionPhoto, User
+from ..models import BullionAttachment, BullionCollection, BullionItem, BullionPhoto, User
+from ..services import attachments as docs
 from ..services import bullion as svc
 from ..services import photos as store
 
@@ -23,7 +25,7 @@ Metal = Literal["silver", "gold", "platinum", "palladium"]
 
 
 def _photo_key(item_id: int) -> str:
-    return f"bullion-{item_id}"  # bullion photos live apart from coin photos
+    return f"bullion-{item_id}"  # bullion photos and documents live apart from coins
 
 
 # ---- Schemas ------------------------------------------------------------------------------------------------
@@ -279,6 +281,7 @@ def delete_item(inv: str, db: Session = Depends(get_db), user: User = Depends(cu
     db.delete(item)
     db.commit()
     store.delete_coin_photo_files(_photo_key(item_id))
+    docs.delete_coin_files(_photo_key(item_id))
 
 
 @router.get("/items/{inv}/history")
@@ -358,3 +361,65 @@ def delete_photo(photo_id: int, db: Session = Depends(get_db), user: User = Depe
     db.delete(p)
     db.commit()
     store.delete_photo_file(key, name)
+
+
+# ---- Receipts & documents -----------------------------------------------------------------------------------
+
+def _doc_out(a: BullionAttachment) -> dict:
+    return {"id": a.id, "name": a.original_name, "content_type": a.content_type, "size": a.size_bytes,
+            "created_at": a.created_at, "url": f"/api/bullion/attachments/{a.id}"}
+
+
+def _docs(db: Session, item_id: int) -> list[dict]:
+    rows = db.scalars(select(BullionAttachment).where(BullionAttachment.item_id == item_id).order_by(BullionAttachment.created_at))
+    return [_doc_out(a) for a in rows]
+
+
+def _owned_doc(db: Session, user: User, attachment_id: int) -> BullionAttachment:
+    a = db.get(BullionAttachment, attachment_id)
+    item = db.get(BullionItem, a.item_id) if a else None
+    if item is None or item.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
+    return a
+
+
+@router.get("/items/{inv}/attachments")
+def list_docs(inv: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return _docs(db, _item(db, user, inv).id)
+
+
+@router.post("/items/{inv}/attachments")
+async def upload_docs(inv: str, files: list[UploadFile], db: Session = Depends(get_db), user: User = Depends(current_user)):
+    item = _item(db, user, inv)
+    have = len(_docs(db, item.id))
+    if have + len(files) > settings.max_attachments_per_coin:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"An item can have at most {settings.max_attachments_per_coin} files (it has {have}).")
+    for f in files:
+        data = await f.read(settings.max_attachment_bytes + 1)
+        try:
+            stored, name, ctype, size = docs.save(_photo_key(item.id), data, f.content_type or "", f.filename)
+        except docs.AttachmentError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{f.filename}: {e}")
+        db.add(BullionAttachment(item_id=item.id, file_name=stored, original_name=name, content_type=ctype, size_bytes=size))
+    db.commit()
+    return _docs(db, item.id)
+
+
+@router.get("/attachments/{attachment_id}")
+def get_doc(attachment_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    a = _owned_doc(db, user, attachment_id)
+    path = docs.path_for(_photo_key(a.item_id), a.file_name)
+    if not path.exists():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File missing")
+    return FileResponse(path, media_type=a.content_type, headers={
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(a.original_name)}",
+        "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+
+@router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_doc(attachment_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    a = _owned_doc(db, user, attachment_id)
+    docs.delete_file(_photo_key(a.item_id), a.file_name)
+    db.delete(a)
+    db.commit()

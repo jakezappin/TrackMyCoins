@@ -147,3 +147,19 @@ def test_bundled_history_round_trip(client, tmp_path, monkeypatch):
         assert svc.seed_from_bundle(db) == 2
         assert svc.seed_from_bundle(db) == 0  # only what's missing
         assert svc.SpotSeries.load(db, "gold").on(date(2001, 3, 5)) == Decimal("265.5")
+
+
+def test_bullion_documents(authed):
+    from app.services import attachments as docs
+
+    item = _item(authed, _col(authed))
+    inv = item["inventory_number"]
+    pdf = b"%PDF-1.4\n% receipt\n%%EOF\n"
+    got = authed.post(f"/api/bullion/items/{inv}/attachments", files=[("files", ("APMEX order.pdf", pdf, "application/pdf"))]).json()
+    assert [a["name"] for a in got] == ["APMEX order.pdf"] and got[0]["url"].startswith("/api/bullion/attachments/")
+    r = authed.get(got[0]["url"])
+    assert r.status_code == 200 and r.content == pdf
+    assert docs.coin_dir(f"bullion-{item['id']}").exists()  # stored apart from coin files
+    authed.delete(f"/api/bullion/items/{inv}")
+    assert not docs.coin_dir(f"bullion-{item['id']}").exists()
+    assert authed.get(got[0]["url"]).status_code == 404

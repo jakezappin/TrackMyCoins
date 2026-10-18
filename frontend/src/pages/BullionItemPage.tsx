@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type BullionItem } from "../api";
 import { useApp, useNavCollection } from "../App";
 import { METAL_LABEL, ozLabel, purityLabel, quantityLabel, weightLabel } from "../bullionFormat";
+import AttachmentsCard from "../components/AttachmentsCard";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import PhotoButtons from "../components/PhotoButtons";
 import ValueHistoryChart from "../components/ValueHistoryChart";
@@ -223,6 +224,8 @@ export default function BullionItemPage() {
         valueLabel="Melt value"
         emptyText="The chart fills in from the purchase date as daily spot prices are recorded."
       />
+
+      <AttachmentsCard inventoryNumber={item.inventory_number} kind="bullion" />
 
       {selling && (
         <SellDialog

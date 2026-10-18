@@ -461,6 +461,20 @@ class BullionPhoto(Base):
     item: Mapped[BullionItem] = relationship(back_populates="photos")
 
 
+class BullionAttachment(Base):
+    """A receipt, invoice or other document kept with a bullion item (PDF or photo). Private."""
+
+    __tablename__ = "bullion_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("bullion_items.id", ondelete="CASCADE"), index=True)
+    file_name: Mapped[str] = mapped_column(String(80))
+    original_name: Mapped[str] = mapped_column(String(200))
+    content_type: Mapped[str] = mapped_column(String(60))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class BullionCounter(Base):
     """Next bullion inventory number per (user, metal): AG-00001, AU-00001... Never reused."""
 
