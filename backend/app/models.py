@@ -310,6 +310,8 @@ class Coin(Base):
     # Original U.S. Mint packaging for 40% silver Ikes: Blue Pack (uncirculated), Brown Pack (proof).
     ike_blue_pack: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     ike_brown_pack: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Still in its Original Government Packaging (modern commemoratives, Blue/Brown Pack Ikes).
+    ogp: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     # Toning
     toning_obverse: Mapped[bool] = mapped_column(Boolean, default=False)

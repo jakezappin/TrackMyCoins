@@ -150,6 +150,7 @@ class CoinFields(BaseModel):
     gsa_soft_pack: bool = False
     ike_blue_pack: bool = False
     ike_brown_pack: bool = False
+    ogp: bool = False  # Original Government Packaging
 
     toning_obverse: bool = False
     toning_reverse: bool = False
@@ -457,6 +458,7 @@ class SharedCoin(BaseModel):
     gsa_soft_pack: bool
     ike_blue_pack: bool
     ike_brown_pack: bool
+    ogp: bool = False
     toning_obverse: bool
     toning_reverse: bool
     toning_dual: bool

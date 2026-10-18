@@ -58,14 +58,17 @@ def _clean(v) -> str | None:
 
 
 # CoinDate looks like "1881-S", "1880/79-CC", "1882-O/S", "1887/6", "1878 8TF", "1793 Chain", "1840-C"
-# (Charlotte gold) or "2011-(W)" (struck at West Point but carrying no mint mark, e.g. bullion eagles).
+# (Charlotte gold), "2011-(W)" (struck at West Point but carrying no mint mark, e.g. bullion eagles) or
+# "1776~2026-D" (the dual-dated Semiquincentennial coins: the year is the second one).
+# "1991-95-P" (the WWII 50th Anniversary commemoratives, dated 1991-1995 and issued in 1993) is rewritten first.
+_DUAL_ISSUED = {"1991-95": "1993"}
 _DATE_RE = re.compile(
-    r"^(?P<year>1[789]\d\d|20\d\d)(?P<over>/\d{1,2})?"
+    r"^(?P<dual>1776~)?(?P<year>1[789]\d\d|20\d\d)(?P<over>/\d{1,2})?"
     r"(?:-(?:(?P<mint>CC|C|O|S|D|W|P)(?P<mint_over>/(?:CC|C|O|S|D))?|\((?P<struck>[A-Z]{1,2})\)))?"
     r"(?:\s+(?P<extra>.+))?$"
 )
 # Varieties that don't distinguish a coin (1921 "Morgan" just separates it from the Peace dollar).
-_IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE"}
+_IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE", "5OZ SILVER"}
 
 
 def parse_collectible(d: dict) -> dict | None:
@@ -76,7 +79,12 @@ def parse_collectible(d: dict) -> dict | None:
         return None
     if "[TYPE]" in name.upper() or d.get("IsSet") is True or d.get("IsType") is True:
         return None
-    m = _DATE_RE.match(_clean(d.get("CoinDate")) or "")
+    coin_date = _clean(d.get("CoinDate")) or ""
+    for dual, issued in _DUAL_ISSUED.items():
+        if coin_date.startswith(dual):
+            coin_date = issued + coin_date[len(dual):]
+            d = {**d, "Variety": ", ".join(x for x in ("1991-1995", _clean(d.get("Variety"))) if x)}
+    m = _DATE_RE.match(coin_date)
     if not m:
         return None
 
@@ -91,15 +99,29 @@ def parse_collectible(d: dict) -> dict | None:
         designation = canonical(tail.group(1))
 
     parts = []
+    # Specimen and Special Mint Set strikes are collected with business strikes (an ATB 5 oz Satin Finish, a 1965
+    # SMS dime): file them under MS, named so they keep a checklist line of their own.
+    finish_note = None
+    if strike in ("SP", "SMS"):
+        tags = " ".join(x for x in (_clean(d.get("Variety")), _clean(d.get("Variety2"))) if x).upper()
+        if strike == "SMS" and "SMS" not in tags:
+            finish_note = "SMS"
+        elif strike == "SP" and not any(w in tags for w in ("SATIN", "SPECIMEN", "SMS")):
+            finish_note = "Specimen"
+        strike = "MS"
     if m.group("over"):
         parts.append(f"{m.group('year')}{m.group('over')}")
     if m.group("mint_over"):
         parts.append(f"{m.group('mint')}{m.group('mint_over')}")
     if m.group("struck"):
         parts.append(f"({m.group('struck')})")  # no mint mark on the coin
+    if m.group("dual") and _clean(d.get("DenominationShort")):
+        parts.append(_clean(d.get("DenominationShort")))  # America 250 mixes denominations: "25c Mayflower Compact"
     for v in (m.group("extra"), _clean(d.get("Variety")), _clean(d.get("Variety2"))):
         if v and v.upper() not in _IGNORED_VARIETIES:
             parts.append(v)
+    if finish_note:
+        parts.append(finish_note)
 
     return {
         "gsid": int(d["Gsid"]),
@@ -109,7 +131,8 @@ def parse_collectible(d: dict) -> dict | None:
         "mint_mark": m.group("mint") or "P",
         "designation": designation,
         "strike": strike[:5],
-        "variety": ", ".join(parts)[:255] or None,
+        "variety": re.sub(r"^(\S+), ", r"\1 ", ", ".join(parts))[:255] if m.group("dual") and len(parts) > 1
+        else (", ".join(parts)[:255] or None),
         "name": name[:255],
     }
 

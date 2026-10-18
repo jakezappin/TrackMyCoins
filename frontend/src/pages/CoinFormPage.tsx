@@ -40,6 +40,7 @@ const EMPTY: CoinFields = {
   gsa_soft_pack: false,
   ike_blue_pack: false,
   ike_brown_pack: false,
+  ogp: false,
   toning_obverse: false,
   toning_reverse: false,
   toning_dual: false,
@@ -64,7 +65,8 @@ const FALLBACK_DESIGNATIONS: Record<string, string[]> = {
 const VAM_SERIES = ["morgan-dollars", "peace-dollars"];
 // Series sold by the GSA in its hard and soft pack holders.
 const GSA_SERIES = ["morgan-dollars", "peace-dollars"];
-type PackKey = "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_pack";
+const OGP_SERIES = ["modern-commemorative-halves", "modern-commemorative-dollars"];
+type PackKey = "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_pack" | "ogp";
 const VARIETY_HINTS: Record<string, string> = {
   "classic-commemoratives": "e.g. Alabama, Boone",
   "washington-quarters": "Design from 1999 on, e.g. Delaware, Yellowstone",
@@ -187,6 +189,13 @@ export default function CoinFormPage() {
   }
   if (coinType?.slug === "ike-dollars") {
     packaging.push(isProof ? ["ike_brown_pack", "Brown Pack (40% silver proof)", null] : ["ike_blue_pack", "Blue Pack (40% silver)", null]);
+  }
+  // Still in its Original Government Packaging: modern commemoratives, and Blue / Brown Pack Ikes.
+  if (
+    (coinType && OGP_SERIES.includes(coinType.slug)) ||
+    (coinType?.slug === "ike-dollars" && (form.ike_blue_pack || form.ike_brown_pack || form.ogp))
+  ) {
+    packaging.push(["ogp", "OGP (original government packaging)", null]);
   }
   // When editing, a coin can only move to collections of its own series, or type sets that include it.
   const collectionGroups = useMemo(() => {

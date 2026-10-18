@@ -36,6 +36,11 @@ YEARS: dict[str, tuple[tuple[int, int | None], ...]] = {
     "barber-quarters": ((1892, 1916),),
     "standing-liberty-quarters": ((1916, 1921), (1923, 1930), (2016, 2016)),
     "washington-quarters": ((1932, 1932), (1934, 1974), (1976, None)),  # none dated 1933 or 1975
+    "atb-5oz-silver": ((2010, 2021),),
+    "america-250": ((2026, 2026),),
+    "modern-commemorative-halves": ((1982, 1982), (1986, 1986), (1989, 1989), (1991, 1996), (2001, 2001),
+                                    (2003, 2003), (2008, 2008), (2011, 2011), (2013, 2022), (2024, None)),
+    "modern-commemorative-dollars": ((1983, 1984), (1986, 2022), (2024, None)),
     "seated-liberty-half-dollars": ((1839, 1891),),
     "barber-half-dollars": ((1892, 1915),),
     "kennedy-half-dollars": ((1964, 1974), (1976, None)),  # 1975: all dated 1776-1976
@@ -79,8 +84,9 @@ FACE: dict[str, int] = {
     "shield-nickels": 5, "liberty-head-nickels": 5, "buffalo-nickels": 5, "jefferson-nickels": 5,
     "seated-liberty-half-dimes": 5,
     "seated-liberty-dimes": 10, "barber-dimes": 10, "mercury-dimes": 10, "roosevelt-dimes": 10,
-    "barber-quarters": 25, "standing-liberty-quarters": 25, "washington-quarters": 25,
+    "barber-quarters": 25, "standing-liberty-quarters": 25, "washington-quarters": 25, "atb-5oz-silver": 25,
     "seated-liberty-half-dollars": 50, "barber-half-dollars": 50, "kennedy-half-dollars": 50,
+    "modern-commemorative-halves": 50, "modern-commemorative-dollars": 100,
     "seated-liberty-dollars": 100, "trade-dollars": 100, "morgan-dollars": 100, "peace-dollars": 100,
     "ike-dollars": 100, "sacagawea-dollars": 100, "american-silver-eagles": 100, "gold-dollars": 100,
     "early-quarter-eagles": 250, "classic-head-quarter-eagles": 250, "liberty-quarter-eagles": 250,
@@ -137,6 +143,8 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "barber-quarters": ("barber",),
     "standing-liberty-quarters": ("slq",),
     "washington-quarters": ("washington", "state quarter", "statehood"),
+    "atb-5oz-silver": ("5oz", "5 oz", "five ounce", "atb5"),
+    "america-250": ("semiquincentennial", "semiq", "america 250", "250th", "1776 2026", "1776~2026"),
     "seated-liberty-half-dollars": ("seated",),
     "barber-half-dollars": ("barber",),
     "kennedy-half-dollars": ("kennedy",),
@@ -169,6 +177,8 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "gold-eagles-50": ("goldeagle",),
     "gold-buffalos": ("goldbuffalo",),
     "classic-commemoratives": ("commemorative", "commem"),
+    "modern-commemorative-halves": ("commemorative", "commem"),
+    "modern-commemorative-dollars": ("commemorative", "commem"),
 }
 
 # Face value written out: (pattern, cents), checked in order on folded text; the first hit wins.
@@ -185,7 +195,7 @@ _FACE_PATTERNS: list[tuple[re.Pattern, int]] = [
     (re.compile(r"\$\s*5(?![0-9])"), 500),
     (re.compile(r"\$\s*4(?![0-9])"), 400),
     (re.compile(r"\$\s*3(?![0-9])"), 300),
-    (re.compile(r"\bhalfdollar\b|\b50\s*c\b"), 50),
+    (re.compile(r"\bhalfdollar\b|\b50\s*c\b|\bhalf\b"), 50),  # half cents and dimes are folded already
     (re.compile(r"\$\s*1(?![0-9])|\bdollar\b"), 100),
     (re.compile(r"\b25\s*c\b|\bquarter\b"), 25),
     (re.compile(r"\b10\s*c\b|\bdime\b"), 10),
@@ -201,12 +211,17 @@ def _this_year() -> int:
     return date.today().year
 
 
+def _latest_year() -> int:
+    """The newest date a coin can carry: the Mint sells some next-year-dated coins before the year starts."""
+    return _this_year() + 1
+
+
 def year_ok(slug: str, year: int | None) -> bool:
     """Was this series struck in that year? (Series without a list, or no year, aren't flagged.)"""
     ranges = YEARS.get(slug)
     if not ranges or year is None:
         return True
-    return any(lo <= year <= (hi or _this_year()) for lo, hi in ranges)
+    return any(lo <= year <= (hi or _latest_year()) for lo, hi in ranges)
 
 
 def years_label(slug: str) -> str:
@@ -261,9 +276,10 @@ def year_problem(series: Series, year: int | None) -> str | None:
     """Why a year can't be right for a series, or None."""
     if year_ok(series.slug, year):
         return None
-    if year is not None and year > _this_year():
+    if year is not None and year > _latest_year():
         return f"{year} is in the future."
-    return f"{year} isn't a {series.name} date ({series.plural} were struck {years_label(series.slug)})."
+    article = "an" if series.name[:1].upper() in "AEIOU" else "a"
+    return f"{year} isn't {article} {series.name} date ({series.plural} were struck {years_label(series.slug)})."
 
 
 def _norm(text: str) -> str:
@@ -301,7 +317,8 @@ def _candidates(text: str, year: int | None) -> list[Series]:
     if named:
         # "Indian $5" or "Seated Liberty dime": the face value picks among designs used on several coins.
         if face is not None:
-            named = [s for s in named if FACE.get(s.slug) == face]  # none left: a design we don't track
+            # none left: a design we don't track. Mixed-denomination sets (no FACE) take any.
+            named = [s for s in named if FACE.get(s.slug, face) == face]
         # A longer keyword is a better hit ("gold buffalo" over "buffalo", "indian head cent" over "indian").
         if len(named) > 1:
             def best(s: Series) -> int:

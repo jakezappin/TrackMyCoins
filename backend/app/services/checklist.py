@@ -2,8 +2,9 @@
 
 The list of date/mints comes from the cached Greysheet catalog. Most series are checked off by year and
 mint. Where one year has several designs or major varieties collected separately, they're checked off by
-issue instead: classic commemoratives (e.g. "1936 Boone"), Washington quarters from 1999 on (State,
-Territories, ATB, American Women) and the 1878 Philadelphia Morgan tail-feather varieties.
+issue instead: commemoratives (e.g. "1936 Boone"), Washington quarters from 1999 on (State, Territories, ATB,
+American Women), ATB 5 oz silver designs, the America 250 coins and the 1878 Philadelphia Morgan tail-feather
+varieties.
 """
 
 import re
@@ -51,12 +52,18 @@ def _full(variety: str) -> str:
 ISSUE_RULES = {
     "classic-commemoratives": [(lambda y, m: True, _variety_with_overdate)],
     "washington-quarters": [(lambda y, m: y >= 1999, _design)],
+    "modern-commemorative-halves": [(lambda y, m: True, _variety_with_overdate)],
+    "modern-commemorative-dollars": [(lambda y, m: True, _variety_with_overdate)],
+    # One line per design, and the collector Satin Finish versions on lines of their own.
+    "atb-5oz-silver": [(lambda y, m: True, _full)],
+    # Mixed denominations and designs, all dated 2026: "25c Mayflower Compact", "50c Enduring Liberty, ... Privy".
+    "america-250": [(lambda y, m: True, _full)],
     # 8TF, 7TF Reverse of 1878, 7TF Reverse of 1879, 7/8TF Strong, 7/8TF Weak are collected as separate coins.
     "morgan-dollars": [(lambda y, m: y == 1878 and m == "P", _full)],
 }
 
 # Series that also offer a type set: one line per design, any date or mint.
-TYPE_SET_SERIES = {"classic-commemoratives"}
+TYPE_SET_SERIES = {"classic-commemoratives", "modern-commemorative-halves", "modern-commemorative-dollars"}
 MODES = ("full", "type")
 
 

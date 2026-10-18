@@ -50,7 +50,8 @@ type GradeFields = Pick<CoinFields, "grading_service" | "grade_prefix" | "grade"
 type ToningFields = Pick<CoinFields, "toning_obverse" | "toning_reverse" | "toning_dual" | "toning_rainbow">;
 type SlabFields = Pick<
   CoinFields,
-  "slab_soapbox" | "slab_ngc_fatty" | "slab_rattler" | "slab_ogh" | "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_pack"
+  | "slab_soapbox" | "slab_ngc_fatty" | "slab_rattler" | "slab_ogh" | "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack"
+  | "ike_brown_pack" | "ogp"
 >;
 
 export function gradeLabel(c: GradeFields): string {
@@ -83,6 +84,7 @@ export function slabLabel(c: SlabFields): string[] {
   if (c.gsa_soft_pack) s.push("GSA Soft Pack");
   if (c.ike_blue_pack) s.push("Blue Pack");
   if (c.ike_brown_pack) s.push("Brown Pack");
+  if (c.ogp) s.push("OGP");
   return s;
 }
 

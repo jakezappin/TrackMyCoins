@@ -229,3 +229,16 @@ def test_date_and_mint_must_exist():
     assert date_problem(BY_SLUG["early-quarter-eagles"], 1802, "P", "MS") is None  # real, missing from Greysheet
     assert date_problem(BY_SLUG["jefferson-nickels"], 2020, "W", "PR") is None
     assert date_problem(BY_SLUG["kennedy-half-dollars"], 1970, "P", "MS")  # 1970 halves: D (business), S (proof)
+
+
+def test_ogp_round_trip(authed):
+    from app.services import importer
+
+    f, *_ = importer.row_to_fields({"Date": "1986-S", "Grade": "PR69 DCAM", "Service": "Raw", "Packaging": "OGP"})
+    assert f["ogp"] is True
+    f, *_ = importer.row_to_fields({"Date": "1973-S", "Grade": "PR68", "Packaging": "Brown Pack, OGP"})
+    assert f["ogp"] and f["ike_brown_pack"]
+    f, *_ = importer.row_to_fields({"Date": "1986-S", "Grade": "PR69", "OGP": "Yes"})
+    assert f["ogp"] is True
+    f, *_ = importer.row_to_fields({"Date": "1986-S", "Grade": "PR69"})
+    assert f["ogp"] is False

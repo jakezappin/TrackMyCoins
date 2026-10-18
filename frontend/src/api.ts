@@ -198,6 +198,8 @@ export interface CoinFields {
   gsa_soft_pack: boolean;
   ike_blue_pack: boolean;
   ike_brown_pack: boolean;
+  /** Original Government Packaging */
+  ogp: boolean;
   toning_obverse: boolean;
   toning_reverse: boolean;
   toning_dual: boolean;

@@ -95,6 +95,9 @@ SERIES: list[Series] = [
     # Includes 50 States, D.C. & Territories, America the Beautiful, Crossing the Delaware, American Women.
     Series("washington-quarters", "Washington Quarter", "Washington Quarters", "WAS", Q, ("P", "D", "S", "W"),
            (8949, 8950, 9689, 9567, 12168, 12169), (8951, 8952, 9690, 9301, 15354, 12170), silver_proofs=True),
+    # 5 oz silver bullion quarters, 2010-2021: one per design, plus the collector "P" Satin Finish versions.
+    Series("atb-5oz-silver", "America the Beautiful 5 oz Silver", "America the Beautiful 5 oz Silver", "ATB5", Q,
+           ("P",), (9598,)),
     # Half dollars
     Series("seated-liberty-half-dollars", "Seated Liberty Half Dollar", "Seated Liberty Half Dollars", "SLH", H,
            ("P", "O", "S", "CC"), (8955,), (8956,)),
@@ -156,6 +159,15 @@ SERIES: list[Series] = [
     # Classic silver commemoratives 1892-1954: half dollars plus the Isabella quarter and Lafayette dollar.
     Series("classic-commemoratives", "Classic Commemorative", "Classic Commemoratives", "COM", COM,
            ("P", "D", "S"), (9003,)),
+    # Modern commemoratives (1982 on): clad half dollars (the 1982 Washington is silver) and silver dollars.
+    Series("modern-commemorative-halves", "Modern Commemorative Half Dollar", "Modern Commemorative Half Dollars",
+           "MCH", COM, ("P", "D", "S", "W"), (9005,), (9570,)),
+    Series("modern-commemorative-dollars", "Modern Commemorative Dollar", "Modern Commemorative Dollars",
+           "MCD", COM, ("P", "D", "S", "W"), (9006,), (9554,)),
+    # The Semiquincentennial (dual-dated 1776~2026): the Emerging Liberty dime, five quarters, the Enduring Liberty
+    # half and the dollar; proofs (clad and silver) and the Liberty Bell silver and gold issues.
+    Series("america-250", "America 250 (2026)", "America 250 (2026)", "A250", COM, ("P", "D", "S", "W"),
+           (16071, 16037, 16073, 16278), (16072, 16038, 16074, 16066), silver_proofs=True),
 ]
 
 # Mixed-series type sets. Each line is one design; a coin fills it when its catalog entry comes from that node.

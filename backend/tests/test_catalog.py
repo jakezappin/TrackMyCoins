@@ -366,3 +366,31 @@ def test_cpg_reuses_recent_sheet_and_records_changes_only(authed, morgan_collect
     again = authed.post(f"/api/coins/{a['inventory_number']}/cpg").json()  # unchanged price
     cpg = [q for q in again["price_quotes"] if q["source"] == "CPG"]
     assert len(cpg) == 1 and cpg[0]["confirmed_at"]  # re-confirmed, not duplicated
+
+
+def test_parse_semiquincentennial_and_atb_5oz():
+    def d(date, variety, variety2="", desg="MS", denom=None, name=""):
+        return {"Gsid": 1, "Name": name or f"{date} {variety}", "CoinDate": date, "Desg": desg, "Variety": variety,
+                "Variety2": variety2, "DenominationShort": denom}
+
+    p = parse_collectible(d("1776~2026-D", "Mayflower Compact", denom="25c"))
+    assert (p["year"], p["mint_mark"], p["strike"], p["variety"]) == (2026, "D", "MS", "25c Mayflower Compact")
+    p = parse_collectible(d("1776~2026-S", "Emerging Liberty", "Silver", desg="PR", denom="10c"))
+    assert (p["strike"], p["variety"]) == ("PR", "10c Emerging Liberty, Silver")
+    # ATB 5 oz: the bullion strike, and the collector Satin Finish (specimen) filed with business strikes
+    p = parse_collectible(d("2010", "5oz Silver", "Hot Springs"))
+    assert (p["mint_mark"], p["strike"], p["variety"]) == ("P", "MS", "Hot Springs")
+    p = parse_collectible(d("2010-P", "5oz Silver", "Hot Springs, Satin Finish", desg="SP"))
+    assert (p["strike"], p["variety"]) == ("MS", "Hot Springs, Satin Finish")
+    assert parse_collectible(d("1965", "", desg="SMS"))["variety"] == "SMS"
+
+
+def test_new_series_dates():
+    from app.series import BY_SLUG
+    from app.services.series_match import date_problem
+
+    atb, a250 = BY_SLUG["atb-5oz-silver"], BY_SLUG["america-250"]
+    assert date_problem(atb, 2015, "P", "SP") is None
+    assert "isn't an America the Beautiful" in date_problem(atb, 2022, "P", "MS")
+    assert date_problem(a250, 2026, "D", "MS") is None
+    assert "no 2026-S America 250" in date_problem(a250, 2026, "S", "MS") or "proofs" in date_problem(a250, 2026, "S", "MS")

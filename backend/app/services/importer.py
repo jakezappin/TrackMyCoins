@@ -43,7 +43,7 @@ ALIASES = {
     "cac": "cac", "caced": "cac",
     "cacsticker": "cac_sticker", "sticker": "cac_sticker",
     "collectorslab": "slab", "slab": "slab", "holder": "slab",
-    "packaging": "packaging",
+    "packaging": "packaging", "ogp": "ogp", "originalgovernmentpackaging": "ogp",
     "toning": "toning", "toned": "toning",
     "pcgs": "pcgs_number", "pcgsno": "pcgs_number", "pcgsnumber": "pcgs_number", "pcgscoinnumber": "pcgs_number",
     "pricepaid": "price_paid", "cost": "price_paid", "paid": "price_paid", "purchaseprice": "price_paid",
@@ -239,7 +239,8 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
              slab_ogh="ogh" in slab or "old green" in slab)
     pack = (_text(vals.get("packaging")) or "").lower() + " " + slab
     f.update(gsa_hard_pack="hard" in pack, gsa_soft_pack="soft" in pack, ike_blue_pack="blue" in pack,
-             ike_brown_pack="brown" in pack)
+             ike_brown_pack="brown" in pack,
+             ogp=bool(re.search(r"\bogp\b|original (government|mint) packag", pack)) or (_text(vals.get("ogp")) or "").lower() in YES)
     toning = (_text(vals.get("toning")) or "").lower()
     f.update(toning_obverse="obv" in toning, toning_reverse="rev" in toning, toning_dual="dual" in toning,
              toning_rainbow="rainbow" in toning)

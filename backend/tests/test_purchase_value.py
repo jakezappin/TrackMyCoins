@@ -102,7 +102,7 @@ def test_cpg_history_extends_or_adds():
 
 
 def test_chart_runs_from_value_at_purchase(authed, morgan_collection):
-    today = date.today()
+    today = datetime.now(timezone.utc).date()  # the server's day (prices are dated in UTC)
     a = _coin(authed, morgan_collection["id"], purchase_date=(today - timedelta(days=100)).isoformat(), price_paid="100")
     # Another coin bought halfway, so the chart has a point in between.
     _coin(authed, morgan_collection["id"], purchase_date=(today - timedelta(days=50)).isoformat(), price_paid=None)
