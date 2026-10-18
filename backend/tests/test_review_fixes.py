@@ -300,3 +300,17 @@ def test_icg_coins(authed, morgan_collection):
     assert look["grading_service"] == "ICG" and "icgcoin.com/verification" in look["verify_url"]
     f, _, errors, _ = row_to_fields({"Date": "1881-S", "Grade": "MS65", "Service": "ICG", "Cert": "1234567891"})
     assert f["grading_service"] == "ICG" and not errors
+
+
+def test_ebay_account_deletion_endpoint(client, monkeypatch):
+    import hashlib
+
+    from app.config import get_settings
+
+    s = get_settings()
+    monkeypatch.setattr(s, "ebay_verification_token", "t" * 40)
+    r = client.get("/api/ebay/account-deletion", params={"challenge_code": "abc123"})
+    want = hashlib.sha256(("abc123" + "t" * 40 + s.ebay_deletion_endpoint).encode()).hexdigest()
+    assert r.status_code == 200 and r.json() == {"challengeResponse": want}
+    assert r.headers["content-type"].startswith("application/json")
+    assert client.post("/api/ebay/account-deletion", json={"metadata": {"topic": "MARKETPLACE_ACCOUNT_DELETION"}}).status_code == 204

@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # eBay Browse API (Production keyset: App ID / Cert ID) for "For sale on eBay now".
     ebay_client_id: str = ""
     ebay_client_secret: str = ""
+    # eBay Marketplace Account Deletion notifications: the token typed into eBay's developer portal, and the exact
+    # address entered there (eBay hashes both into its challenge).
+    ebay_verification_token: str = ""
+    ebay_deletion_endpoint: str = "https://trackmycoins.app/api/ebay/account-deletion"
     # Claude (reads slab labels from photos). Without a key, "Read label" says it isn't set up.
     anthropic_api_key: str = ""
     label_model: str = "claude-opus-5-5"
