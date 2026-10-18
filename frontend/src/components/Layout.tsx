@@ -57,6 +57,9 @@ export default function Layout() {
           <NavLink to="/metals" className="nav-item">
             Precious Metals
           </NavLink>
+          <NavLink to="/grading" className="nav-item">
+            Grading Tracker
+          </NavLink>
 
           <button className="nav-item nav-action" onClick={() => setCreating(true)}>
             + New collection

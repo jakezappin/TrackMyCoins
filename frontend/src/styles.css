@@ -3509,3 +3509,135 @@ table {
   .hide-narrow { display: none; }
   .show-narrow { display: inline; }
 }
+
+/* ---- Grading Tracker ---- */
+.tag.grading {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.grading-banner {
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.section-title {
+  font-size: 1rem;
+  margin: 20px 0 10px;
+}
+.submission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.submission-strip {
+  display: grid;
+  grid-auto-flow: column;
+  /* Three cards fill the row; more scroll sideways. */
+  grid-auto-columns: calc((100% - 24px) / 3);
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 6px;
+}
+.submission-strip > div {
+  scroll-snap-align: start;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .submission-strip { grid-auto-columns: 82%; }
+}
+.submission-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+  border-left: 4px solid var(--border);
+  height: 100%;
+}
+.submission-card:hover { box-shadow: 0 2px 8px rgba(20, 24, 30, 0.1); }
+.submission-card.green { border-left-color: var(--green); }
+.submission-card.yellow { border-left-color: #c9a227; }
+.submission-card.orange { border-left-color: #d9731a; }
+.submission-card.red { border-left-color: var(--red); }
+.submission-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.status-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.status-pill.sent, .status-pill.at_grader, .status-pill.shipped_back { background: var(--accent-soft); color: var(--accent); }
+.status-pill.returned { background: var(--green-soft); color: var(--green); }
+.turnaround { display: flex; flex-direction: column; gap: 4px; }
+.turnaround-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.turnaround-fill { height: 100%; border-radius: 999px; background: var(--muted); }
+.turnaround.green .turnaround-fill { background: var(--green); }
+.turnaround.yellow .turnaround-fill { background: #c9a227; }
+.turnaround.orange .turnaround-fill { background: #d9731a; }
+.turnaround.red .turnaround-fill { background: var(--red); }
+.turnaround-text { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.turnaround-word { font-weight: 600; }
+.turnaround-word.green { color: var(--green); }
+.turnaround-word.yellow { color: #9a7a10; }
+.turnaround-word.orange { color: #b45a0c; }
+.turnaround-word.red { color: var(--red); }
+.submission-page .card + .card,
+.submission-page .card + form,
+.submission-page form + .card { margin-top: 16px; }
+.coin-search { position: relative; margin-bottom: 12px; }
+.coin-search input { width: 100%; }
+.coin-search-hits {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.coin-search-hits li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.coin-search-hits li:last-child { border-bottom: 0; }
+.cell-input { width: 100%; min-width: 80px; padding: 4px 6px; }
+.addon-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 12px; }
+.total-cost { font-size: 1.2rem; padding-top: 6px; }
+.results-modal { max-width: 760px; }
+.result-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+}
+.result-row legend { padding: 0 4px; font-weight: 600; }
+.result-row .field { flex: 1 1 140px; }
+.grade-num { width: 70px; }
+.location-card .location-fields { margin-top: 10px; }
+.back-link { margin-bottom: 8px; display: inline-block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .turnaround-word.yellow { color: #e0c055; }
+  :root:not([data-theme="light"]) .turnaround-word.orange { color: #f09a52; }
+}
+.span-2 { grid-column: span 2; }
+@media (max-width: 640px) { .span-2 { grid-column: auto; } }
+.back-link { align-self: flex-start; width: auto; }

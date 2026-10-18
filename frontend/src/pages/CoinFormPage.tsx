@@ -4,17 +4,21 @@ import {
   api,
   ApiError,
   type CatalogCandidate,
+  type Coin,
   type CoinFields,
+  type GradingCompany,
   type DuplicateCert,
   type GradingService,
   type LabelReading,
   type LookupResult,
   type SetOption,
+  type SubmissionSummary,
 } from "../api";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
+import { COMPANIES as GRADING_COMPANIES } from "./GradingPage";
 import { useApp, useNavCollection } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, DETAILS_PROBLEMS, FINISH_LABEL, money, parseMoney, todayISO } from "../format";
 
@@ -36,6 +40,7 @@ const EMPTY: CoinFields = {
   details: false,
   details_problem: null,
   details_pct: null,
+  location: "inventory",
   slab_soapbox: false,
   slab_ngc_fatty: false,
   slab_rattler: false,
@@ -174,6 +179,9 @@ export default function CoinFormPage() {
   const [labelError, setLabelError] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelReading | null>(null);
   const [dup, setDup] = useState<{ service: string; cert: string; duplicate: DuplicateCert } | null>(null);
+  // At Grading: which submission (an open one, or "new" for a new one with this company).
+  const [grading, setGrading] = useState<GradingPick>({ submission: "", company: "NGC", expected: "", declared: "" });
+  const [currentGrading, setCurrentGrading] = useState<Coin["grading"]>(null);
 
   useEffect(() => {
     if (editInv === null) return;
@@ -186,6 +194,8 @@ export default function CoinFormPage() {
         setCollectionId(c.collection_id);
         setMemberTypeId(c.coin_type_id);
         setInventoryNumber(c.inventory_number);
+        setCurrentGrading(c.grading);
+        if (c.grading) setGrading((g) => ({ ...g, submission: String(c.grading!.id), expected: c.grading!.expected_grade ?? "" }));
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -580,6 +590,21 @@ export default function CoinFormPage() {
       );
       return;
     }
+    if (form.location === "grading") {
+      if (!grading.submission) {
+        setError("Choose the submission this coin is going in, or start a new one.");
+        return;
+      }
+      if (sold.value !== null || form.sale_date) {
+        setError("A coin at grading can't be sold. Mark it In Inventory once it's back.");
+        return;
+      }
+    }
+    const declared = parseMoney(grading.declared);
+    if (form.location === "grading" && "error" in declared) {
+      setError(`Declared value ${declared.error}.`);
+      return;
+    }
     if (form.details && form.details_pct != null && (form.details_pct < 1 || form.details_pct > 100)) {
       setError("The Details % of straight CPG must be between 1 and 100.");
       return;
@@ -595,6 +620,15 @@ export default function CoinFormPage() {
       coin_type_id: isTypeSet ? memberTypeId : undefined,
       year: form.year ? Number(form.year) : null,
       grade: form.grade ? Number(form.grade) : null,
+      grading:
+        form.location === "grading"
+          ? {
+              submission_id: grading.submission === "new" ? null : Number(grading.submission),
+              new_company: grading.submission === "new" ? grading.company : null,
+              expected_grade: grading.expected || null,
+              declared_value: "value" in declared ? declared.value : null,
+            }
+          : null,
     };
     try {
       let coin = editInv
@@ -1072,6 +1106,14 @@ export default function CoinFormPage() {
         )}
       </section>
 
+      <LocationCard
+        location={form.location}
+        onLocation={(l) => set("location", l)}
+        pick={grading}
+        onPick={setGrading}
+        current={editInv ? currentGrading : null}
+      />
+
       {/* ---- CAC / slab / packaging / toning ---- */}
       <div className="grid-3">
         {!isSetSeries && (
@@ -1387,5 +1429,104 @@ function SetPicker({
         </select>
       )}
     </label>
+  );
+}
+
+type GradingPick = { submission: string; company: GradingCompany; expected: string; declared: string };
+
+/** In Inventory, or At Grading in a Grading Tracker submission (an open one, or a new one started here). */
+function LocationCard({
+  location,
+  onLocation,
+  pick,
+  onPick,
+  current,
+}: {
+  location: "inventory" | "grading";
+  onLocation: (l: "inventory" | "grading") => void;
+  pick: GradingPick;
+  onPick: (p: GradingPick) => void;
+  current: Coin["grading"];
+}) {
+  const [open, setOpen] = useState<SubmissionSummary[] | null>(null);
+  useEffect(() => {
+    if (location !== "grading" || open) return;
+    api
+      .submissions()
+      .then((subs) => {
+        const out = subs.filter((s) => !s.date_returned);
+        setOpen(out);
+        if (!pick.submission) onPick({ ...pick, submission: out.length ? String(out[0].id) : "new" });
+      })
+      .catch(() => setOpen([]));
+  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <section className="card form-section location-card">
+      <h2>Location</h2>
+      <div className="segmented" role="radiogroup" aria-label="Where the coin is">
+        {(
+          [
+            ["inventory", "In Inventory"],
+            ["grading", "At Grading"],
+          ] as const
+        ).map(([v, label]) => (
+          <button key={v} type="button" role="radio" aria-checked={location === v} className={`seg ${location === v ? "active" : ""}`} onClick={() => onLocation(v)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {location === "inventory" && current && (
+        <p className="muted small">
+          Back from grading: saving takes it out of submission #{current.number} without a result. To record its new grade,
+          use Record results on the submission instead.
+        </p>
+      )}
+      {location === "grading" && (
+        <div className="grid-4 location-fields">
+          <label className="field">
+            <span>Submission</span>
+            <select value={pick.submission} onChange={(e) => onPick({ ...pick, submission: e.target.value })}>
+              {open === null && <option value="">Loading…</option>}
+              {(open ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  #{s.number} {s.name ?? s.company_label}
+                  {s.tier_name ? ` · ${s.tier_name}` : ""} · {s.coin_count} coin{s.coin_count === 1 ? "" : "s"}
+                </option>
+              ))}
+              <option value="new">+ New submission…</option>
+            </select>
+          </label>
+          {pick.submission === "new" && (
+            <label className="field">
+              <span>Grading company</span>
+              <select value={pick.company} onChange={(e) => onPick({ ...pick, company: e.target.value as GradingCompany })}>
+                {GRADING_COMPANIES.map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="field">
+            <span>Expected grade (optional)</span>
+            <input value={pick.expected} onChange={(e) => onPick({ ...pick, expected: e.target.value })} placeholder="e.g. MS65" maxLength={20} />
+          </label>
+          <label className="field">
+            <span>Declared value (optional)</span>
+            <input value={pick.declared} onChange={(e) => onPick({ ...pick, declared: e.target.value })} inputMode="decimal" placeholder="0.00" />
+          </label>
+        </div>
+      )}
+      {location === "grading" && pick.submission === "new" && (
+        <p className="muted small">A new submission is started when you save; pick its tier and dates in the Grading Tracker.</p>
+      )}
+      {location === "grading" && current && pick.submission === String(current.id) && (
+        <p className="muted small">
+          In <Link to={`/grading/${current.id}`}>submission #{current.number}</Link>.
+        </p>
+      )}
+    </section>
   );
 }

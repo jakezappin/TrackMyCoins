@@ -217,11 +217,23 @@ export default function CoinDetailPage() {
           )}
         </p>
       )}
+      {coin.grading && (
+        <p className="banner grading-banner">
+          Out at {coin.grading.company_label} in{" "}
+          <Link to={`/grading/${coin.grading.id}`}>
+            submission #{coin.grading.number}
+            {coin.grading.name ? ` (${coin.grading.name})` : ""}
+          </Link>
+          {coin.grading.expected_grade ? ` · expecting ${coin.grading.expected_grade}` : ""}. When it's back, record its result on
+          the submission.
+        </p>
+      )}
       <div className="page-head">
         <div>
           <h1>
             {dateMint(coin)} {coinType?.name ?? ""} {isSet ? (setLineName(coin.variety) === "Main set" ? "" : setLineName(coin.variety)) : gradeLabel(coin)}
             {coin.is_sold && <span className="tag sold big">Sold</span>}
+            {coin.location === "grading" && <span className="tag grading big">At Grading</span>}
           </h1>
           <p className="muted">
             {coin.inventory_number} ·{" "}
@@ -533,6 +545,8 @@ export default function CoinDetailPage() {
         </>
       )}
 
+      {coin.grading_history.length > 0 && <GradingHistoryCard history={coin.grading_history} />}
+
       {!isSet && (
       <div className={`coin-row${coin.is_sold ? " single" : ""}`}>
         <AttachmentsCard inventoryNumber={coin.inventory_number} />
@@ -634,6 +648,51 @@ function SetMeltCard({ melt }: { melt: CoinDetail["set_melt"] }) {
           </p>
         </>
       )}
+    </section>
+  );
+}
+
+/** Every trip this coin has made to the graders: what it went as, what was expected, what it came back as. */
+function GradingHistoryCard({ history }: { history: CoinDetail["grading_history"] }) {
+  return (
+    <section className="card">
+      <h2>Grading History</h2>
+      <div className="table-scroll">
+        <table className="history">
+          <thead>
+            <tr>
+              <th>Submission</th>
+              <th>Sent</th>
+              <th>Sent as</th>
+              <th>Expected</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((h) => (
+              <tr key={`${h.submission_id}-${h.number}`}>
+                <td>
+                  <Link to={`/grading/${h.submission_id}`}>
+                    #{h.number} {h.company_label}
+                  </Link>
+                  <div className="muted small">
+                    {h.kind_label}
+                    {h.tier_name ? ` · ${h.tier_name}` : ""}
+                  </div>
+                </td>
+                <td>{h.date_sent ? shortDate(h.date_sent) : "—"}</td>
+                <td className="small">{h.before ?? "—"}</td>
+                <td className="small">{h.expected_grade ?? "—"}</td>
+                <td className="small">
+                  <strong>{h.outcome_label}</strong>
+                  {h.after && h.after !== h.before && <div>{h.after}</div>}
+                  {h.returned_on && <div className="muted">{shortDate(h.returned_on)}</div>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

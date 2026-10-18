@@ -52,7 +52,10 @@ def _validate(body: CoinFields, collection: Collection, coin_type: CoinType) -> 
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"Mint mark must be one of {', '.join(marks)} for {coin_type.name}",
         )
-    data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw"})
+    data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw", "grading"})
+    if body.location == "grading" and (body.sale_price is not None or body.sale_date is not None):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "A coin at grading can't be sold. Mark it In Inventory once it's back.")
     if not (series and series.is_set) and (
         bad := grades.problem(coin_type.slug, body.year, body.grade_prefix, body.grade, body.grade_plus,
                               body.strike_designation, body.variety, body.details)
@@ -123,9 +126,50 @@ def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depend
         lookup_raw=body.lookup_raw,
     )
     db.add(coin)
+    db.flush()
+    _apply_location(db, user, coin, body)
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)
+
+
+def _apply_location(db: Session, user: User, coin: Coin, body: CoinIn | CoinUpdate) -> None:
+    """In Inventory or At Grading: At Grading puts the coin in the chosen submission (or a new one); back to In
+    Inventory closes its place in the submission."""
+    from ..models import GradingSubmission, GradingSubmissionCoin
+    from .grading import add_coin, back_to_inventory, next_number
+
+    pending = db.scalar(select(GradingSubmissionCoin).where(GradingSubmissionCoin.coin_id == coin.id,
+                                                            GradingSubmissionCoin.outcome == "pending"))
+    if body.location == "inventory":
+        if pending is not None or coin.location == "grading":
+            back_to_inventory(coin, pending)
+        return
+    g = body.grading
+    if g is None or not (g.submission_id or g.new_company):
+        if pending is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                "Choose the submission this coin is going in, or start a new one.")
+        coin.location = "grading"
+        return
+    if g.submission_id:
+        sub = db.get(GradingSubmission, g.submission_id)
+        if sub is None or sub.user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Submission not found")
+    else:
+        sub = GradingSubmission(user_id=user.id, number=next_number(db, user), company=g.new_company,
+                                kind="sticker" if g.new_company == "CAC" else "grading", addons=[])
+        db.add(sub)
+        db.flush()
+    if pending is not None and pending.submission_id != sub.id:
+        db.delete(pending)  # moved to another submission before it went out
+        db.flush()
+        pending = None
+    link = add_coin(db, sub, coin, g.expected_grade, g.declared_value)
+    if g.expected_grade is not None:
+        link.expected_grade = g.expected_grade.strip() or None
+    if g.declared_value is not None:
+        link.declared_value = g.declared_value
 
 
 @router.get("/{inventory_number}", response_model=CoinDetail)
@@ -148,6 +192,7 @@ def update_coin(inventory_number: str, body: CoinUpdate, db: Session = Depends(g
     for key, value in data.items():
         setattr(coin, key, value)
     coin.collection_id = col.id
+    _apply_location(db, user, coin, body)
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)

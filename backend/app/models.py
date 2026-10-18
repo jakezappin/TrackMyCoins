@@ -300,6 +300,8 @@ class Coin(Base):
     strike_designation: Mapped[str | None] = mapped_column(String(20))  # PL, DMPL, RD, FB, DCAM, "RD CAM" ...
     cac: Mapped[bool] = mapped_column(Boolean, default=False)
     cac_sticker: Mapped[str | None] = mapped_column(String(10))  # green | gold
+    # Where the coin is: "inventory" (with the owner) or "grading" (out at a grader, in a GradingSubmission).
+    location: Mapped[str] = mapped_column(String(12), default="inventory", server_default="inventory")
     # Details grade ("AU Details – Cleaned"): genuine but with a problem, so not priced like a straight grade.
     # The grade number is optional (PCGS and NGC usually give only AU, XF...).
     details: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -504,3 +506,80 @@ class SpotPrice(Base):
     day: Mapped[date] = mapped_column(Date, index=True)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 4))
     source: Mapped[str] = mapped_column(String(20), default="live")  # live | history
+
+
+# ---- Grading Tracker: coins sent to NGC, PCGS, CAC... ------------------------------------------------------
+
+class GradingSubmission(Base):
+    """One package of coins sent to a grading company: its service tier (fees and turnaround as they were when it
+    was sent), dates, tracking, costs and the coins in it."""
+
+    __tablename__ = "grading_submissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    number: Mapped[int] = mapped_column(Integer)  # 1, 2, 3... per user
+    name: Mapped[str | None] = mapped_column(String(100))  # the owner's label, e.g. "Morgans for NGC"
+    company: Mapped[str] = mapped_column(String(10))  # NGC | PCGS | CAC | CACG | ANACS | ICG
+    kind: Mapped[str] = mapped_column(String(12), default="grading")  # grading | crossover | regrade | reholder | sticker
+    # The service tier, copied from the tier list when chosen (the owner can change any of it).
+    tier_key: Mapped[str | None] = mapped_column(String(60))
+    tier_name: Mapped[str | None] = mapped_column(String(100))
+    tier_fee: Mapped[Decimal | None] = mapped_column(Money)  # per coin
+    tier_max_value: Mapped[Decimal | None] = mapped_column(Money)  # per coin
+    turnaround_days: Mapped[int | None] = mapped_column(Integer)
+    business_days: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    addons: Mapped[list] = mapped_column(JSON, default=list)  # [{"key", "name", "fee", "per": "coin"|"order"}]
+    order_number: Mapped[str | None] = mapped_column(String(60))
+    tracking_out: Mapped[str | None] = mapped_column(String(60))
+    tracking_back: Mapped[str | None] = mapped_column(String(60))
+    date_sent: Mapped[date | None] = mapped_column(Date)
+    date_received: Mapped[date | None] = mapped_column(Date)  # by the grader: the turnaround clock starts
+    date_shipped_back: Mapped[date | None] = mapped_column(Date)
+    date_returned: Mapped[date | None] = mapped_column(Date)  # back with the owner
+    grading_paid: Mapped[Decimal | None] = mapped_column(Money)
+    shipping_paid: Mapped[Decimal | None] = mapped_column(Money)  # shipping, insurance, registered mail
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "number"),)
+    coins: Mapped[list["GradingSubmissionCoin"]] = relationship(
+        back_populates="submission", cascade="all, delete-orphan", order_by="GradingSubmissionCoin.id")
+
+
+class GradingSubmissionCoin(Base):
+    """A coin in a submission: what was expected, and (once back) what it came back as. Kept after the coin returns:
+    the coin's grading history."""
+
+    __tablename__ = "grading_submission_coins"
+    __table_args__ = (UniqueConstraint("submission_id", "coin_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    submission_id: Mapped[int] = mapped_column(ForeignKey("grading_submissions.id", ondelete="CASCADE"), index=True)
+    coin_id: Mapped[int] = mapped_column(ForeignKey("coins.id", ondelete="CASCADE"), index=True)
+    expected_grade: Mapped[str | None] = mapped_column(String(20))  # "MS65", "PR69 DCAM", "Green sticker"
+    declared_value: Mapped[Decimal | None] = mapped_column(Money)
+    # Before: the coin as sent ("Raw", "NGC MS64 #1234567-001").
+    before: Mapped[dict | None] = mapped_column(JSON)
+    # Result: pending | graded | details | no_grade | not_crossed | sticker_green | sticker_gold | no_sticker | returned
+    outcome: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    after: Mapped[dict | None] = mapped_column(JSON)  # the grade it came back with
+    returned_on: Mapped[date | None] = mapped_column(Date)
+
+    submission: Mapped[GradingSubmission] = relationship(back_populates="coins")
+    coin: Mapped["Coin"] = relationship()
+
+
+class GradingAttachment(Base):
+    """An invoice, shipping receipt, insurance or registered-mail slip kept with a submission (PDF or photo)."""
+
+    __tablename__ = "grading_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    submission_id: Mapped[int] = mapped_column(ForeignKey("grading_submissions.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="other")  # invoice | shipping | insurance | registered | other
+    file_name: Mapped[str] = mapped_column(String(80))
+    original_name: Mapped[str] = mapped_column(String(200))
+    content_type: Mapped[str] = mapped_column(String(60))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

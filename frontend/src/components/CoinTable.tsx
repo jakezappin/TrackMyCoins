@@ -175,6 +175,7 @@ export default function CoinTable({ coins, mode }: Props) {
                     </td>
                     <td className="c-tags">
                       <div className="tags">
+                        {c.location === "grading" && <span className="tag grading">At grading</span>}
                         {c.cac && <span className={`tag cac-${c.cac_sticker ?? "green"}`}>CAC</span>}
                         {toningLabel(c).length > 0 && <span className="tag toned">Toned</span>}
                         {slabLabel(c).map((s) => (

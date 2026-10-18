@@ -160,6 +160,10 @@ def coin_out(coin: Coin) -> CoinOut:
     out.value_estimate = value_estimate(coin)
     out.details_basis = details_basis(coin)
     out.details_value = market_value(coin) if coin.details else None
+    if coin.location == "grading" and (db := object_session(coin)) is not None:
+        from . import grading  # it uses this module's neighbours
+
+        out.grading = grading.current(db, coin)
     q = latest_quote(coin)
     out.latest_cpg = PriceQuoteOut.model_validate(q) if q else None
     g = latest_quote(coin, GREYSHEET)
@@ -212,7 +216,15 @@ def coin_detail(coin: Coin) -> CoinDetail:
         facts=coin_facts(coin),
         purchase_value=_purchase_value(coin),
         set_melt=_set_melt(coin),
+        grading_history=_grading_history(coin),
     )
+
+
+def _grading_history(coin: Coin) -> list[dict]:
+    from . import grading
+
+    db = object_session(coin)
+    return grading.history_for(db, coin) if db is not None else []
 
 
 def _set_melt(coin: Coin) -> dict | None:

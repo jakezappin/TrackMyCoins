@@ -11,7 +11,7 @@ from .config import check_production, get_settings
 from .db import SessionLocal
 from .models import Collection, CoinType
 from .services import bullion as bullion_service, ebay, price_archive, quota
-from .routers import attachments, auth, bullion, catalog, coins, collections, dashboard, importer, jobs, label, metals, photos, pricing, reports, shared, wants
+from .routers import attachments, auth, bullion, catalog, coins, collections, dashboard, grading, importer, jobs, label, metals, photos, pricing, reports, shared, wants
 from .series import SERIES
 
 
@@ -67,7 +67,7 @@ async def security_headers(request, call_next):
         h.setdefault("Strict-Transport-Security", "max-age=31536000")
     return response
 
-for r in (attachments, auth, bullion, catalog, collections, coins, dashboard, importer, jobs, label, metals, photos, pricing, reports, shared, wants):
+for r in (attachments, auth, bullion, catalog, collections, coins, dashboard, grading, importer, jobs, label, metals, photos, pricing, reports, shared, wants):
     app.include_router(r.router)
 app.include_router(reports.insurance_router)
 

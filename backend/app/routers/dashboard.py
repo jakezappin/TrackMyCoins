@@ -1,7 +1,7 @@
 """Dashboard: totals across all collections, recent collections and sales, and quick coin search."""
 
 import re
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
@@ -58,6 +58,8 @@ class DashboardOut(BaseModel):
     recent_sales: list[SaleCard]
     gainers: list[Mover] = []
     decliners: list[Mover] = []
+    # Grading Tracker cards: still out first (longest waiting first), then the latest ones back.
+    submissions: list[dict] = []
 
 
 MOVERS = 5
@@ -110,6 +112,10 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(current_user))
     gone = db.scalars(sold(_coins(user))).all()
     gone = sorted(gone, key=lambda c: (c.sale_date or c.updated_at.date(), c.updated_at), reverse=True)
     up, down = _movers(held)
+    from . import grading as grading_router  # its helpers order and summarize submissions
+
+    subs = grading_router.ordered(list(db.scalars(grading_router._query(user)).all()))
+    today = date.today()
 
     return DashboardOut(
         totals=Totals(
@@ -130,6 +136,7 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(current_user))
             )
             for c in gone[:20]
         ],
+        submissions=[grading_router._summary(x, today) for x in subs[:20]],
     )
 
 

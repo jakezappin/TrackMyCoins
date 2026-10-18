@@ -152,6 +152,8 @@ class CoinFields(BaseModel):
     details: bool = False
     details_problem: str | None = Field(default=None, max_length=40)
     details_pct: int | None = Field(default=None, ge=1, le=100)
+    # In the owner's hands, or out at a grading company (in a Grading Tracker submission).
+    location: Literal["inventory", "grading"] = "inventory"
 
     slab_soapbox: bool = False
     slab_ngc_fatty: bool = False
@@ -286,8 +288,18 @@ def small_json(v: dict | None, limit: int = 100_000) -> dict | None:
     return v
 
 
+class GradingChoice(BaseModel):
+    """Sent with a coin marked At Grading: which submission it's in (or a new one for this company)."""
+
+    submission_id: int | None = None
+    new_company: Literal["NGC", "PCGS", "CACG", "CAC", "ANACS", "ICG"] | None = None
+    expected_grade: str | None = Field(default=None, max_length=20)
+    declared_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
 class CoinIn(CoinFields):
     collection_id: int
+    grading: GradingChoice | None = None
     # Only for type set collections: which member series the coin belongs to.
     coin_type_id: int | None = None
     lookup_raw: dict | None = None
@@ -300,6 +312,7 @@ class CoinIn(CoinFields):
 
 class CoinUpdate(CoinFields):
     collection_id: int
+    grading: GradingChoice | None = None
     coin_type_id: int | None = None
 
 
@@ -337,6 +350,8 @@ class CoinOut(CoinFields, ORM):
     value_estimate: Decimal | None = None  # what totals use for this coin
     details_basis: str | None = None  # how a Details coin's value was worked out
     details_value: Decimal | None = None  # a Details coin's share of CPG (before premiums)
+    # The submission it's in while at grading: {"id", "number", "company", "company_label", "status"}.
+    grading: dict | None = None
     latest_greysheet: PriceQuoteOut | None = None
     photo_count: int = 0
     thumbnail_url: str | None = None
@@ -420,6 +435,7 @@ class CoinDetail(CoinOut):
     photos: list[PhotoOut]
     price_quotes: list[PriceQuoteOut]
     collection_name: str
+    grading_history: list[dict] = []  # trips to the graders, newest first
 
 
 class ValuationIn(BaseModel):

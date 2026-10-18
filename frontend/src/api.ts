@@ -201,6 +201,8 @@ export interface CoinFields {
   details_problem: string | null;
   /** This coin's % of straight CPG (null: the owner's default). */
   details_pct: number | null;
+  /** With the owner, or out at a grading company. */
+  location: "inventory" | "grading";
   slab_soapbox: boolean;
   slab_ngc_fatty: boolean;
   slab_rattler: boolean;
@@ -267,6 +269,8 @@ export interface Coin extends CoinFields {
   details_basis: string | null;
   /** A Details coin's share of CPG, before premiums. */
   details_value: string | null;
+  /** The submission it's in while at grading. */
+  grading: { id: number; number: number; company: GradingCompany; company_label: string; name: string | null; status: string; expected_grade: string | null } | null;
   latest_greysheet: PriceQuote | null;
   photo_count: number;
   thumbnail_url: string | null;
@@ -476,6 +480,8 @@ export interface CoinDetail extends Coin {
   photos: Photo[];
   price_quotes: PriceQuote[];
   collection_name: string;
+  /** Trips to the graders, newest first. */
+  grading_history: GradingHistoryEntry[];
 }
 
 export interface LookupResult {
@@ -634,6 +640,172 @@ export interface MetalsOverview {
   };
 }
 
+// ---- Grading Tracker ----
+export type GradingCompany = "NGC" | "PCGS" | "CACG" | "CAC" | "ANACS" | "ICG";
+export type GradingKind = "grading" | "crossover" | "regrade" | "reholder" | "sticker";
+export type GradingColor = "green" | "yellow" | "orange" | "red";
+
+export interface GradingTier {
+  company: GradingCompany;
+  kind: GradingKind;
+  key: string;
+  name: string;
+  fee: number | null;
+  max_value: number | null;
+  days: number | null;
+  business_days: boolean | null;
+  turnaround_text?: string | null;
+  membership?: string | null;
+  source?: string | null;
+  note?: string | null;
+}
+
+export interface GradingAddon {
+  company?: GradingCompany;
+  key: string;
+  name: string;
+  fee: number | string | null;
+  per: "coin" | "order";
+  note?: string | null;
+}
+
+export interface GradingCatalog {
+  checked: string | null;
+  tiers: GradingTier[];
+  addons: GradingAddon[];
+  order_fees: { company: GradingCompany; name: string; fee: number | null; note?: string | null }[];
+  notes: string[];
+  companies: Record<GradingCompany, string>;
+  kinds: Record<GradingKind, string>;
+  outcomes: Record<string, string>;
+  colors: { green: number; yellow: number; orange: number };
+}
+
+export interface GradingProgress {
+  status: "preparing" | "sent" | "at_grader" | "shipped_back" | "returned";
+  start: string | null;
+  elapsed: number | null;
+  target: number | null;
+  pct: number | null;
+  color: GradingColor | null;
+  due: string | null;
+  business_days: boolean;
+  clock_from: "received" | "sent" | null;
+}
+
+export interface SubmissionSummary {
+  id: number;
+  number: number;
+  name: string | null;
+  company: GradingCompany;
+  company_label: string;
+  kind: GradingKind;
+  kind_label: string;
+  tier_key: string | null;
+  tier_name: string | null;
+  coin_count: number;
+  pending_count: number;
+  date_sent: string | null;
+  date_received: string | null;
+  date_shipped_back: string | null;
+  date_returned: string | null;
+  progress: GradingProgress;
+  grading_paid: string | null;
+  shipping_paid: string | null;
+  created_at: string;
+}
+
+export interface SubmissionCoin {
+  id: number;
+  coin: {
+    inventory_number: string;
+    year: number;
+    mint_mark: string;
+    variety: string | null;
+    coin_type_name: string;
+    collection_name: string;
+    grade: string;
+    thumbnail_url: string | null;
+    is_sold: boolean;
+  };
+  expected_grade: string | null;
+  declared_value: string | null;
+  before: { label: string } | null;
+  outcome: string;
+  outcome_label: string;
+  after: { label: string } | null;
+  returned_on: string | null;
+}
+
+export interface Submission extends SubmissionSummary {
+  tier_fee: string | null;
+  tier_max_value: string | null;
+  turnaround_days: number | null;
+  business_days: boolean;
+  addons: GradingAddon[];
+  order_number: string | null;
+  tracking_out: string | null;
+  tracking_back: string | null;
+  notes: string | null;
+  coins: SubmissionCoin[];
+  fees: { per_coin: string | null; estimate: string | null };
+  over_max_value: string[];
+  attachments: Attachment[];
+  declared_total: string;
+}
+
+export interface SubmissionIn {
+  name?: string | null;
+  company: GradingCompany;
+  kind?: GradingKind;
+  tier_key?: string | null;
+  tier_name?: string | null;
+  tier_fee?: string | null;
+  tier_max_value?: string | null;
+  turnaround_days?: number | null;
+  business_days?: boolean;
+  addons?: GradingAddon[];
+  order_number?: string | null;
+  tracking_out?: string | null;
+  tracking_back?: string | null;
+  date_sent?: string | null;
+  date_received?: string | null;
+  date_shipped_back?: string | null;
+  date_returned?: string | null;
+  grading_paid?: string | null;
+  shipping_paid?: string | null;
+  notes?: string | null;
+}
+
+export interface GradingResult {
+  link_id: number;
+  outcome: string;
+  grading_service?: string | null;
+  cert_number?: string | null;
+  grade_prefix?: string | null;
+  grade?: number | null;
+  grade_plus?: boolean;
+  grade_star?: boolean;
+  strike_designation?: string | null;
+  details_problem?: string | null;
+}
+
+export interface GradingHistoryEntry {
+  submission_id: number;
+  number: number;
+  company: GradingCompany;
+  company_label: string;
+  tier_name: string | null;
+  kind_label: string;
+  date_sent: string | null;
+  returned_on: string | null;
+  expected_grade: string | null;
+  outcome: string;
+  outcome_label: string;
+  before: string | null;
+  after: string | null;
+}
+
 export type MetalRange = "1w" | "1m" | "6m" | "1y" | "5y" | "10y" | "all";
 
 export interface WantIn {
@@ -694,6 +866,8 @@ export interface DashboardData {
   recent_sales: { coin: Coin; collection_name: string; collection_type_label: string; profit: string | null }[];
   gainers: Mover[];
   decliners: Mover[];
+  /** Grading Tracker cards: still out first (longest waiting first), then the latest ones back. */
+  submissions: SubmissionSummary[];
 }
 
 export interface SearchHit {
@@ -803,6 +977,8 @@ function errorMessage(body: unknown, fallback: string): string {
 
 export interface Attachment {
   id: number;
+  /** Grading submissions: invoice | shipping | insurance | registered | other */
+  kind?: string;
   name: string;
   content_type: string;
   size: number;
@@ -810,7 +986,9 @@ export interface Attachment {
   url: string;
 }
 
-const attachmentBase = (kind: "coin" | "bullion") => (kind === "bullion" ? "/api/bullion/items" : "/api/coins");
+export type AttachmentOwner = "coin" | "bullion" | "grading";
+const attachmentBase = (kind: AttachmentOwner) =>
+  kind === "bullion" ? "/api/bullion/items" : kind === "grading" ? "/api/grading/submissions" : "/api/coins";
 
 // When the session runs out the app goes back to the login page instead of every page saying "Not logged in".
 let onUnauthorized: (() => void) | null = null;
@@ -899,6 +1077,20 @@ export const api = {
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
   metals: () => request<MetalsOverview>("GET", "/api/metals"),
+  gradingCatalog: () => request<GradingCatalog>("GET", "/api/grading/tiers"),
+  submissions: () => request<SubmissionSummary[]>("GET", "/api/grading/submissions"),
+  submission: (id: number) => request<Submission>("GET", `/api/grading/submissions/${id}`),
+  createSubmission: (b: SubmissionIn) => request<Submission>("POST", "/api/grading/submissions", b),
+  updateSubmission: (id: number, b: SubmissionIn) => request<Submission>("PUT", `/api/grading/submissions/${id}`, b),
+  deleteSubmission: (id: number) => request<void>("DELETE", `/api/grading/submissions/${id}`),
+  addSubmissionCoin: (id: number, b: { inventory_number: string; expected_grade?: string | null; declared_value?: string | null }) =>
+    request<Submission>("POST", `/api/grading/submissions/${id}/coins`, b),
+  editSubmissionCoin: (id: number, linkId: number, b: { expected_grade: string | null; declared_value: string | null }) =>
+    request<Submission>("PUT", `/api/grading/submissions/${id}/coins/${linkId}`, b),
+  removeSubmissionCoin: (id: number, linkId: number) =>
+    request<Submission>("DELETE", `/api/grading/submissions/${id}/coins/${linkId}`),
+  recordResults: (id: number, b: { date_returned?: string | null; results: GradingResult[] }) =>
+    request<Submission>("POST", `/api/grading/submissions/${id}/results`, b),
   metalHistory: (series: PreciousMetal | "ratio", range: MetalRange) =>
     request<{ date: string; value: number }[]>("GET", `/api/metals/history?series=${series}&range=${range}`),
   dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
@@ -1032,14 +1224,15 @@ export const api = {
   reorderPhotos: (inv: string, photo_ids: number[]) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/photos/order`, { photo_ids }),
   /** Receipts & documents of a coin, or (kind "bullion") of a bullion item. */
-  attachments: (inv: string, kind: "coin" | "bullion" = "coin") =>
+  attachments: (inv: string, kind: AttachmentOwner = "coin") =>
     request<Attachment[]>("GET", `${attachmentBase(kind)}/${encodeURIComponent(inv)}/attachments`),
-  uploadAttachments: (inv: string, files: File[], kind: "coin" | "bullion" = "coin") => {
+  uploadAttachments: (inv: string, files: File[], kind: AttachmentOwner = "coin", docKind?: string) => {
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));
+    if (docKind) fd.append("kind", docKind);
     return request<Attachment[]>("POST", `${attachmentBase(kind)}/${encodeURIComponent(inv)}/attachments`, fd);
   },
-  /** `url` is the attachment's own address (coin or bullion). */
+  /** `url` is the attachment's own address (coin, bullion or grading submission). */
   deleteAttachment: (url: string) => request<void>("DELETE", url),
   deletePhoto: (photoId: number) => request<void>("DELETE", `/api/photos/${photoId}`),
 

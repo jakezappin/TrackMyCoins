@@ -15,6 +15,7 @@ import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import { ValueNote } from "../components/SummaryCards";
 import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, metalFor, money, shortDate, soldPath } from "../format";
 import DownloadLink from "../components/DownloadLink";
+import SubmissionCard from "../components/SubmissionCard";
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "Not opened yet";
@@ -117,6 +118,24 @@ export default function DashboardPage() {
       </div>
 
       <ValueHistoryChart collectionId={null} refreshKey={data.totals} />
+      {data.submissions.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>Submission Tracking</h2>
+            <Link to="/grading" className="small">
+              Grading Tracker →
+            </Link>
+          </div>
+          {/* Still out first (waiting longest first), then the latest back; scrolls sideways past three. */}
+          <div className="submission-strip" role="list">
+            {data.submissions.map((s) => (
+              <div role="listitem" key={s.id}>
+                <SubmissionCard s={s} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <MoversCard gainers={data.gainers} decliners={data.decliners} />
 
       {/* Row 2: recently opened collections */}
