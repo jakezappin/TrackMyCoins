@@ -153,3 +153,29 @@ def test_import_reads_holders_and_descriptions_broadly(authed):
     assert (f["grading_service"], f["cert_number"], f["grade"], f["strike_designation"], f["cac_sticker"]) == (
         "PCGS", "12345678", 65, "DMPL", "green")
     assert read(Date="1884-O Morgan Dollar Rattler", Grade="MS64 (1234567 PCGS)")["slab_rattler"]
+
+
+def test_grade_letters_follow_the_number_and_preview_checks_grades(authed, morgan_collection):
+    """"AG2" is a Fair 2 (FR2), flagged to check; an impossible grade (MS59) is caught in the preview, not at import."""
+    from app.services.importer import row_to_fields
+
+    f, _, errors, hints = row_to_fields({"Date": "1881-S", "Type": "Morgan Dollar", "Grade": "AG2"})
+    assert (f["grade_prefix"], f["grade"], errors) == ("FR", 2, []) and "FR2" in hints["grade_fixed"]
+    rows = authed.post("/api/import/cleanup", files=_csv("Date,Type,Grade\n1881-S,Morgan Dollar,VF40\n")).json()["rows"]
+    assert rows[0]["cleaned"]["Grade"] == "XF40" and "XF40" in rows[0]["notes"][0]
+    p = authed.post("/api/import/preview", files=_csv("Date,Type,Grade\n1881-S,Morgan Dollar,MS59\n1882-S,Morgan Dollar,AG2\n")).json()
+    assert any("MS59 isn't a grade" in e for e in p["rows"][0]["errors"]) and not p["rows"][1]["errors"]
+
+
+def test_grade_messages_say_what_the_letters_and_number_are():
+    from app import grades
+
+    def msg(prefix, grade, plus=False, desg=None):
+        return grades.problem("morgan-dollars", 1881, prefix, grade, plus, desg)
+
+    assert msg("AG", 2) == "AG2 isn't a grade: AG runs 3. A 2 is FR (Fair), which runs 2."
+    assert msg("VG", 25) == "VG25 isn't a grade: VG runs 8–10 (8, 10). A 25 is VF (Very Fine), which runs 20–35."
+    assert "An 8 is VG" in msg("VF", 8)
+    assert "nearest grades are 55 and 58" in msg("AU", 56) and "tops out at 70" in msg("XF", 72)
+    assert "plus grades run from 45+ to 69+" in msg("VF", 30, plus=True)
+    assert msg("MS", 64) is None and msg("FR", 2) is None

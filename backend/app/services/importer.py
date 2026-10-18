@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from ..designations import canonical, unknown
 from ..schemas import CoinFields
+from .. import grades
 from . import details, series_match
 
 MAX_ROWS = 2000
@@ -210,6 +211,8 @@ def split_description(text: str) -> tuple[str, dict]:
     return " ".join(rest.replace(" ,", ",").split()).strip(" ,-·"), found
 
 
+GRADE_NAMES = {"PO": "Poor", "FR": "Fair", "AG": "About Good", "G": "Good", "VG": "Very Good", "F": "Fine",
+               "VF": "Very Fine", "XF": "Extremely Fine", "AU": "About Uncirculated", "MS": "Mint State"}
 SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "ICG": "ICG", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
             "RAW": "RAW", "UNGRADED": "RAW", "NONE": "RAW"}
 YES = {"yes", "y", "true", "1", "x", "✓", "green", "gold"}
@@ -427,6 +430,12 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
             prefix = {"PF": "PR", "PROOF": "PR", "UNC": "MS", "EF": "XF"}.get(prefix, prefix)
             f["grade_prefix"] = prefix
             f["grade"] = int(m.group(3)) if m.group(3) else None
+            # Letters that don't go with the number ("AG2", "VF40"): the number is what's meant.
+            right = grades.letters_for(f["grade"])
+            if prefix in grades.NUMBERS and right and right != prefix and not is_details:
+                f["grade_prefix"] = right
+                f["grade_fixed"] = (f"Grade {prefix}{f['grade']} read as {right}{f['grade']} "
+                                    f"(a {f['grade']} is {GRADE_NAMES.get(right, right)}). Check it.")
             f["grade_plus"] = bool(m.group(4))
             f["grade_star"] = bool(m.group(5))
             # Designations after the grade ("PL", "DCAM", "Ultra Cameo"); other words ("Toned") go to Notes.
@@ -519,6 +528,7 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     if grade_note:  # words after the grade that aren't a designation ("MS63 Toned")
         f["notes"] = "; ".join(x for x in (f["notes"], f"Grade note: {grade_note}") if x)
     service_guessed = f.pop("service_guessed", False)
+    grade_fixed = f.pop("grade_fixed", None)
     if sold_sheet and f["sale_price"] is None and f["sale_date"] is None:
         errors.append("Row on the Sold sheet without a sale price or date")
 
@@ -545,6 +555,8 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     hints = {k: v for k, v in (("text", hint), ("inventory", _text(vals.get("inventory_hint")))) if v}
     if service_guessed:
         hints["service_guessed"] = service_guessed
+    if grade_fixed:
+        hints["grade_fixed"] = grade_fixed
     hints.update(_placement(vals, errors, sold=bool(f.get("sale_price") or f.get("sale_date"))))
     return f, valuation, errors, hints
 

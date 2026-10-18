@@ -241,6 +241,12 @@ export default function ImportPage() {
                         {e}
                       </span>
                     ))}
+                    {/* Worked out, worth a look: a service from the cert's format, grade letters fixed to the number. */}
+                    {[r.hints?.service_guessed, r.hints?.grade_fixed].filter(Boolean).map((n) => (
+                      <span key={n} className="small warn">
+                        {n}
+                      </span>
+                    ))}
                   </div>
                 </li>
               );

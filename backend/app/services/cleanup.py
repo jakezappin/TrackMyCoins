@@ -200,8 +200,9 @@ def clean(db: Session, user_id: int, rows: list[tuple[str, int, dict]], mapping:
                 changes.append({"column": head, "before": before, "after": after})
         used |= {h for h, v in cleaned.items() if v}
         notes = []
-        if hints.get("service_guessed"):
-            notes.append(hints["service_guessed"])
+        for k in ("service_guessed", "grade_fixed"):
+            if hints.get(k):
+                notes.append(hints[k])
         out_rows.append({"sheet": sheet, "row": num, "cleaned": cleaned, "changes": changes, "problems": problems,
                          "notes": notes})
 

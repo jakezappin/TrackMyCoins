@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import grades
 from ..auth import current_user
 from ..db import get_db
 from ..models import (CatalogEntry, Coin, CoinPhoto, CoinType, Collection, CollectionCounter, GradingSubmission,
@@ -169,6 +170,10 @@ class _Router:
             return why or NO_SERIES
         if problem := series_match.date_problem(series, year, r.fields.get("mint_mark"), r.fields.get("grade_prefix")):
             return problem
+        f = r.fields
+        if bad := grades.problem(series.slug, year, f.get("grade_prefix"), f.get("grade"), bool(f.get("grade_plus")),
+                                 f.get("strike_designation"), f.get("variety"), bool(f.get("details"))):
+            return bad  # caught here, not when importing
         ct = self.types.get(series.slug)
         if ct is None:
             return NO_SERIES
