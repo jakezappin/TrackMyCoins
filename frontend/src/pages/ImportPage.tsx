@@ -46,6 +46,11 @@ export default function ImportPage() {
   const [skip, setSkip] = useState<Set<string>>(new Set());
   const [importPhotos, setImportPhotos] = useState(true);
   const [result, setResult] = useState<ImportResult | null>(null);
+  // A type set can't be imported into (each coin's series must be chosen): sort automatically instead.
+  useEffect(() => {
+    if (collectionId !== null && collections.length && !targets.some((c) => c.id === collectionId)) setCollectionId(null);
+  }, [collections, collectionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const latest = useRef(0);
 
   function reset() {
     setPreview(null);
@@ -57,12 +62,14 @@ export default function ImportPage() {
   async function run(fn: () => Promise<ImportPreview>) {
     reset();
     setBusy(true);
+    const mine = ++latest.current; // only the latest preview counts
     try {
-      setPreview(await fn());
+      const p = await fn();
+      if (mine === latest.current) setPreview(p);
     } catch (e) {
-      setError((e as Error).message);
+      if (mine === latest.current) setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (mine === latest.current) setBusy(false);
     }
   }
 
@@ -76,7 +83,8 @@ export default function ImportPage() {
     try {
       // Rows the user unticked go back marked as skipped.
       const rows: ImportRow[] = preview.rows.map((r) => (skip.has(rowKey(r)) ? { ...r, errors: [...r.errors, "Skipped"] } : r));
-      setResult(await api.importCommit(collectionId, rows, importPhotos));
+      // Into the collection the preview was made for, whatever the menu says now.
+      setResult(await api.importCommit(preview.collection_id, rows, importPhotos));
       setPreview(null);
       refresh();
     } catch (e) {
@@ -100,8 +108,11 @@ export default function ImportPage() {
           <span>Import into</span>
           <select
             value={collectionId ?? "auto"}
+            disabled={busy}
             onChange={(e) => {
               setCollectionId(e.target.value === "auto" ? null : Number(e.target.value));
+              latest.current++; // a preview still loading was for the old choice
+              setBusy(false);
               reset();
             }}
           >
@@ -300,8 +311,8 @@ function ImportReport({ result, onClose }: { result: ImportResult; onClose: () =
   }, [onClose]);
   const n = result.created.length;
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal import-report" role="dialog" aria-label="Import results" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal import-report" role="dialog" aria-modal="true" aria-label="Import results" onClick={(e) => e.stopPropagation()}>
         <h2>Import Complete</h2>
         <div className="import-counts">
           <div className="import-count ok">

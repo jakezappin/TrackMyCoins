@@ -10,6 +10,7 @@ import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import SummaryCards from "../components/SummaryCards";
 import ValueHistoryChart from "../components/ValueHistoryChart";
 import { collectionPath } from "../format";
+import DownloadLink from "../components/DownloadLink";
 
 export default function CollectionPage() {
   const { typeSlug = "", number } = useParams();
@@ -104,9 +105,9 @@ export default function CollectionPage() {
               <button type="button" onClick={() => setExporting(true)}>
                 Export to Excel…
               </button>
-              <a href={api.insuranceUrl(collection.id)} download>
+              <DownloadLink href={api.insuranceUrl(collection.id)}>
                 Insurance report (PDF)
-              </a>
+              </DownloadLink>
               <ShareCollection collection={collection} onChange={setCollection} asMenuItem />
               <hr />
               <button type="button" onClick={() => setRenaming(true)}>Rename collection</button>

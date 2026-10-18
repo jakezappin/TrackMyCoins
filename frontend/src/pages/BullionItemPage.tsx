@@ -302,8 +302,8 @@ function SellDialog({ item, onClose, onSold }: { item: BullionItem; onClose: () 
 
   const whole = byFace ? Number(part) >= Number(item.face_value) : !many || Number(part) >= item.quantity;
   return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div className="modal" role="dialog" aria-label="Sell" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => !busy && onClose()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Sell" onClick={(e) => e.stopPropagation()}>
         <h2>Sell {item.description}</h2>
         {(many || byFace) && (
           <label className="field">

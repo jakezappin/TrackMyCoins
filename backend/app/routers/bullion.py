@@ -103,7 +103,7 @@ def _collection(db: Session, user: User, collection_id: int) -> BullionCollectio
 
 def _item(db: Session, user: User, inv: str) -> BullionItem:
     item = db.scalar(
-        select(BullionItem).where(BullionItem.user_id == user.id, BullionItem.inventory_number == inv)
+        select(BullionItem).where(BullionItem.user_id == user.id, BullionItem.inventory_number == inv.strip().upper())
         .options(selectinload(BullionItem.photos), selectinload(BullionItem.collection))
     )
     if item is None:

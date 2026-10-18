@@ -7,6 +7,7 @@ import BullionImportDialog from "../components/BullionImportDialog";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import ValueHistoryChart from "../components/ValueHistoryChart";
 import { money, shortDate } from "../format";
+import DownloadLink from "../components/DownloadLink";
 
 const signed = (v: string | number | null | undefined) => {
   if (v == null) return "—";
@@ -43,7 +44,7 @@ export default function BullionCollectionPage() {
       load();
       refresh();
     } catch (e) {
-      setError((e as Error).message);
+      alert(`Couldn't rename: ${(e as Error).message}`); // the page stays as it was
     }
   }
 
@@ -54,7 +55,7 @@ export default function BullionCollectionPage() {
       await refresh();
       navigate("/dashboard");
     } catch (e) {
-      setError((e as Error).message);
+      alert(`Couldn't delete: ${(e as Error).message}`);
     }
   }
 
@@ -83,9 +84,9 @@ export default function BullionCollectionPage() {
             Import
           </button>
           {items.length > 0 && (
-            <a className="btn" href={api.bullionExportUrl(col.id)} download>
+            <DownloadLink className="btn" href={api.bullionExportUrl(col.id)}>
               Export
-            </a>
+            </DownloadLink>
           )}
           {items.length === 0 && (
             <button className="btn danger-outline" onClick={remove}>

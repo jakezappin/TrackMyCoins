@@ -168,7 +168,8 @@ def _norm(text: str) -> str:
 
 
 def _words(text: str | None) -> set[str]:
-    return set(re.findall(r"[0-9a-z/]+", (text or "").lower()))
+    # Label spellings of the 1878 tail-feather varieties: "8 TF", "7 Tail Feathers", "7TF Rev of 78".
+    return set(re.findall(r"[0-9a-z/]+", catalog.label_variety(text)))
 
 
 def _best_variety_match(rows: list["Row"], coin_variety: str | None) -> "Row | None":

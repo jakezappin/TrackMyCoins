@@ -110,7 +110,7 @@ export default function CoinFormPage() {
   const editInv = params.inv ?? null;
   const [search] = useSearchParams();
   const navigate = useNavigate();
-  const { collections, coinTypes, refresh, user } = useApp();
+  const { collections, coinTypes, refresh, user, loaded, loadError } = useApp();
 
   const [form, setForm] = useState<CoinFields>(EMPTY);
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
@@ -208,10 +208,27 @@ export default function CoinFormPage() {
   // Mint & proof sets: not graded; pick the set, keep it in OGP (or a Capital holder).
   const isSetSeries = Boolean(coinType?.is_set);
   useNavCollection("coin", collectionId);
+  const wasSet = useRef(false);
   useEffect(() => {
-    if (!isSetSeries) return;
-    autoAdjust((f) => ({ ...f, grading_service: "RAW", cert_number: null, ...(editInv ? {} : { ogp: true }) }));
+    if (isSetSeries) {
+      wasSet.current = true;
+      autoAdjust((f) => ({ ...f, grading_service: "RAW", cert_number: null, ...(editInv ? {} : { ogp: true }) }));
+    } else if (wasSet.current && !editInv) {
+      // Switched from a Mint Sets collection to a coin series: back to the usual graded-coin defaults.
+      wasSet.current = false;
+      autoAdjust((f) => ({ ...f, grading_service: EMPTY.grading_service, ogp: false, capital_holder: false }));
+    }
   }, [isSetSeries, editInv]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Another collection: keep the mint only if this series was struck there, and the series only if the type set
+  // includes it (otherwise the menus show one thing and the save sends another).
+  useEffect(() => {
+    if (!coinType) return;
+    const marks = coinType.mint_marks.length ? coinType.mint_marks : ["P"];
+    if (!marks.includes(form.mint_mark)) autoAdjust((f) => ({ ...f, mint_mark: marks[0] }));
+  }, [coinType?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (isTypeSet && memberTypeId != null && !collectionType!.member_ids.includes(memberTypeId)) setMemberTypeId(null);
+  }, [collectionType?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Packaging checkboxes that apply to this series/finish: [field, label, the field it excludes].
   const packaging: [PackKey, string, PackKey | null][] = [];
   if (coinType && GSA_SERIES.includes(coinType.slug)) {
@@ -529,6 +546,13 @@ export default function CoinFormPage() {
     setFindMsg(`Picked ${c.name}${c.variety ? ` (${c.variety})` : ""}`);
   }
 
+  // Back where the user came from, or (opened directly, e.g. from the NGC bookmark) to the coin or its collection.
+  function cancel() {
+    if (location.key !== "default") return navigate(-1);
+    if (editInv) return navigate(coinPath(editInv));
+    navigate(collection ? collectionPath(collection) : "/dashboard");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (submitting.current) return; // a double tap must not create the coin twice
@@ -605,7 +629,10 @@ export default function CoinFormPage() {
     }
   }
 
-  if (loading) return <div className="page muted">Loading…</div>;
+  if (loading || !loaded) return <div className="page muted">Loading…</div>;
+  // The coin couldn't be loaded: say so, rather than offering an empty form that would save over it.
+  if (editInv && !inventoryNumber && error) return <div className="page error">{error}</div>;
+  if (loadError && !collections.length) return <div className="page error">Couldn't load your collections: {loadError}</div>;
   if (!collections.length)
     return (
       <div className="page">
@@ -631,7 +658,7 @@ export default function CoinFormPage() {
       <div className="page-head">
         <h1>{editInv ? `Edit ${inventoryNumber}` : isSetSeries ? "Add Set" : "Add Coin"}</h1>
         <div className="row">
-          <button type="button" className="btn" onClick={() => navigate(-1)}>
+          <button type="button" className="btn" onClick={cancel}>
             Cancel
           </button>
           <button className="btn btn-primary" disabled={saving}>
@@ -1219,7 +1246,7 @@ export default function CoinFormPage() {
           </button>
         )}
         <div className="row">
-          <button type="button" className="btn" onClick={() => navigate(-1)}>
+          <button type="button" className="btn" onClick={cancel}>
             Cancel
           </button>
           <button className="btn btn-primary" disabled={saving}>

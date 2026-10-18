@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { api, ApiError, type BullionCollection, type CoinType, type Collection, type User } from "./api";
+import { api, ApiError, setUnauthorizedHandler, type BullionCollection, type CoinType, type Collection, type User } from "./api";
 import Layout from "./components/Layout";
 import CoinDetailPage from "./pages/CoinDetailPage";
 import CoinFormPage from "./pages/CoinFormPage";
@@ -32,6 +32,10 @@ interface AppState {
   setNavCollection: (c: NavCollection | null) => void;
   /** Re-fetch collections (and their totals) after anything changes. */
   refresh: () => Promise<void>;
+  /** Collections have been fetched at least once (until then, empty lists mean "not loaded yet"). */
+  loaded: boolean;
+  /** Why the collections couldn't be loaded, if they couldn't. */
+  loadError: string | null;
 }
 
 export type NavCollection = { kind: "coin" | "bullion"; id: number };
@@ -53,6 +57,13 @@ export function useApp(): AppState {
   return ctx;
 }
 
+/** A page starts fresh at each address: nothing (form fields, errors, a slow earlier request) carries over from
+ * the coin, collection or series shown before, as it would if React reused the page between addresses. */
+function Fresh({ children }: { children: React.ReactNode }) {
+  const loc = useLocation();
+  return <Fragment key={loc.pathname + loc.search}>{children}</Fragment>;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
@@ -60,6 +71,25 @@ export default function App() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [bullionCollections, setBullionCollections] = useState<BullionCollection[]>([]);
   const [navCollection, setNavCollection] = useState<NavCollection | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Escape closes the dialog on top, the same as clicking outside it (which a dialog ignores while it's saving).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const backdrops = document.querySelectorAll<HTMLElement>(".modal-backdrop");
+      backdrops[backdrops.length - 1]?.click();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Session ran out: back to the login page (which returns here after signing in).
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   useEffect(() => {
     api
@@ -72,10 +102,17 @@ export default function App() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [types, cols, bullion] = await Promise.all([api.coinTypes(), api.collections(), api.bullionCollections()]);
-    setCoinTypes(types);
-    setCollections(cols);
-    setBullionCollections(bullion);
+    try {
+      const [types, cols, bullion] = await Promise.all([api.coinTypes(), api.collections(), api.bullionCollections()]);
+      setCoinTypes(types);
+      setCollections(cols);
+      setBullionCollections(bullion);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    } finally {
+      setLoaded(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -84,13 +121,14 @@ export default function App() {
       setCoinTypes([]);
       setCollections([]);
       setBullionCollections([]);
+      setLoaded(false);
     }
   }, [user, refresh]);
 
   if (checking) return <div className="center-screen muted">Loading…</div>;
 
   return (
-    <AppContext.Provider value={{ user, setUser, coinTypes, collections, bullionCollections, navCollection, setNavCollection, refresh }}>
+    <AppContext.Provider value={{ user, setUser, coinTypes, collections, bullionCollections, navCollection, setNavCollection, refresh, loaded, loadError }}>
       <Routes>
         <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
         <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
@@ -101,18 +139,18 @@ export default function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/wants" element={<WantListPage />} />
-          <Route path="/collections/:typeSlug/:number/upgrades" element={<UpgradesPage />} />
+          <Route path="/collections/:typeSlug/:number/upgrades" element={<Fresh><UpgradesPage /></Fresh>} />
           {NGC_BOOKMARK_ENABLED && <Route path="/ngc-button" element={<NgcButtonPage />} />}
-          <Route path="/collections/:typeSlug/sold" element={<SoldPage />} />
-          <Route path="/collections/:typeSlug/:number" element={<CollectionPage />} />
-          <Route path="/collections/:typeSlug/:number/status" element={<StatusPage />} />
-          <Route path="/coins/new" element={<CoinFormPage />} />
-          <Route path="/coins/:inv" element={<CoinDetailPage />} />
-          <Route path="/coins/:inv/edit" element={<CoinFormPage />} />
-          <Route path="/bullion/:id" element={<BullionCollectionPage />} />
-          <Route path="/bullion/items/new" element={<BullionFormPage />} />
-          <Route path="/bullion/items/:inv" element={<BullionItemPage />} />
-          <Route path="/bullion/items/:inv/edit" element={<BullionFormPage />} />
+          <Route path="/collections/:typeSlug/sold" element={<Fresh><SoldPage /></Fresh>} />
+          <Route path="/collections/:typeSlug/:number" element={<Fresh><CollectionPage /></Fresh>} />
+          <Route path="/collections/:typeSlug/:number/status" element={<Fresh><StatusPage /></Fresh>} />
+          <Route path="/coins/new" element={<Fresh><CoinFormPage /></Fresh>} />
+          <Route path="/coins/:inv" element={<Fresh><CoinDetailPage /></Fresh>} />
+          <Route path="/coins/:inv/edit" element={<Fresh><CoinFormPage /></Fresh>} />
+          <Route path="/bullion/:id" element={<Fresh><BullionCollectionPage /></Fresh>} />
+          <Route path="/bullion/items/new" element={<Fresh><BullionFormPage /></Fresh>} />
+          <Route path="/bullion/items/:inv" element={<Fresh><BullionItemPage /></Fresh>} />
+          <Route path="/bullion/items/:inv/edit" element={<Fresh><BullionFormPage /></Fresh>} />
         </Route>
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

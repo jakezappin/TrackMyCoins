@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from .designations import canonical
+from .designations import canonical, unknown
 from .urls import absolute_url
 
 GradingService = Literal["PCGS", "NGC", "ANACS", "CACG", "RAW"]
@@ -252,7 +252,13 @@ class CoinFields(BaseModel):
     @field_validator("strike_designation", mode="before")
     @classmethod
     def _designation(cls, v):
-        return canonical(v) if isinstance(v, str) else v
+        if isinstance(v, str):
+            bad = unknown(v)
+            if bad:
+                raise ValueError(f"Unknown designation “{' '.join(bad)}”. Use PL, DMPL, RD, RB, BN, CAM, DCAM, FB, FBL, "
+                                 "FS, FH or FT (Cameo, Red, Full Torch... are understood too).")
+            return canonical(v)
+        return v
 
     @field_validator("mint_mark", "grade_prefix", mode="before")
     @classmethod
@@ -271,11 +277,25 @@ class CoinFields(BaseModel):
         return v
 
 
+def small_json(v: dict | None, limit: int = 100_000) -> dict | None:
+    """A lookup result sent back by the browser: kept, but never megabytes of it."""
+    import json
+
+    if v is not None and len(json.dumps(v, default=str)) > limit:
+        raise ValueError("The lookup data sent with this coin is too large.")
+    return v
+
+
 class CoinIn(CoinFields):
     collection_id: int
     # Only for type set collections: which member series the coin belongs to.
     coin_type_id: int | None = None
     lookup_raw: dict | None = None
+
+    @field_validator("lookup_raw")
+    @classmethod
+    def _small_lookup(cls, v):
+        return small_json(v)
 
 
 class CoinUpdate(CoinFields):

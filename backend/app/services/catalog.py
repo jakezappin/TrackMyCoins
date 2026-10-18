@@ -261,6 +261,16 @@ def _is_silver(variety: str | None) -> bool:
 _OVER_RE = re.compile(r"(?<!\d\s)\b\d{1,4}/\d{1,2}\b|\b[A-Z]{1,2}/[A-Z]{1,2}\b", re.I)
 
 
+def label_variety(text: str | None) -> str:
+    """A variety as labels print it, in the catalog's words: "8 TF" -> "8tf", "7TF Rev of 78" ->
+    "7tf reverse of 1878", "7 Tail Feathers" -> "7tf"."""
+    t = (text or "").lower()
+    t = re.sub(r"tail\s*feathers?", "tf", t)
+    t = re.sub(r"\b(\d(?:/\d)?)\s+tf\b", r"\1tf", t)
+    t = re.sub(r"\brev\b\.?", "reverse", t)
+    return re.sub(r"\bof\s*'?(\d{2})\b", r"of 18\1", t)
+
+
 def _variety_hits(entries, variety: str, year: int, mint_mark: str) -> list:
     """Entries whose variety contains what the user typed. Tolerates the date and mint mark being typed too
     ("1880/79-CC", "1880-CC 80/79") and extra words ("1880/79 VAM-4")."""
@@ -268,6 +278,14 @@ def _variety_hits(entries, variety: str, year: int, mint_mark: str) -> list:
     hits = [e for e in entries if e.variety and v in e.variety.lower()]
     if hits:
         return hits
+    tf = label_variety(v)
+    if tf != v:
+        # "7TF Rev of 78": every word in the catalog's variety ("7TF Reverse of 1878").
+        words = set(re.findall(r"[0-9a-z/]+", tf))
+        hits = [e for e in entries if e.variety and set(re.findall(r"[0-9a-z/]+", e.variety.lower())) <= words]
+        if hits:
+            hits.sort(key=lambda e: -len(e.variety))
+            return [h for h in hits if len(h.variety) == len(hits[0].variety)]
     # Drop a leading date ("1882-", "1880-CC ") and a trailing mint mark ("1880/79-CC"), then retry.
     mm = re.escape(mint_mark.lower())
     cleaned = re.sub(rf"^{year}(?:\s*-\s*{mm}(?![/a-z]))?(?=[\s,-]|$)[\s,-]*", "", v)

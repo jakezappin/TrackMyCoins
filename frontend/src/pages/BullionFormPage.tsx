@@ -27,7 +27,7 @@ export default function BullionFormPage() {
   const { inv } = useParams();
   const [search] = useSearchParams();
   const navigate = useNavigate();
-  const { bullionCollections, refresh } = useApp();
+  const { bullionCollections, refresh, loaded } = useApp();
   const [meta, setMeta] = useState<BullionMeta | null>(null);
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
   const [form, setForm] = useState(EMPTY);
@@ -37,6 +37,8 @@ export default function BullionFormPage() {
   const [customPurity, setCustomPurity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Editing or copying: the form waits for the item instead of showing defaults that saving would write over it.
+  const [loadingItem, setLoadingItem] = useState(Boolean(inv ?? search.get("from")));
 
   useEffect(() => {
     api.bullionMeta().then(setMeta).catch((e) => setError((e as Error).message));
@@ -60,7 +62,8 @@ export default function BullionFormPage() {
           notes: copy ? null : i.notes,
         });
       })
-      .catch((e) => setError((e as Error).message));
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setLoadingItem(false));
   }, [inv, from]);
   useEffect(() => {
     if (collectionId === null && bullionCollections.length) setCollectionId(bullionCollections[0].id);
@@ -150,6 +153,8 @@ export default function BullionFormPage() {
     }
   }
 
+  if (!loaded || loadingItem) return <div className="page muted">Loading…</div>;
+  if (inv && error && !form.description) return <div className="page error">{error}</div>;
   if (!bullionCollections.length)
     return (
       <div className="page">

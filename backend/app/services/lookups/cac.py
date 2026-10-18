@@ -25,18 +25,40 @@ def check_sticker(cert: str) -> dict:
     if r.status_code != 200:
         raise LookupError(f"CAC lookup failed ({r.status_code})")
 
-    soup = BeautifulSoup(r.text, "html.parser")
+    return parse_page(r.text, url)
+
+
+# The color counts only next to the sticker: "Gold CAC sticker", "Green bean", "Sticker: Gold". A bare "Gold"
+# elsewhere (the site menu's "Gold coins", a $20 gold piece's description) says nothing about the sticker.
+_NEAR_TEXT = [
+    re.compile(r"\b(gold|green)\s+(?:cac\s+)?(?:sticker|bean|label)\b"),
+    re.compile(r"\b(?:sticker|bean|label)\s*(?:colou?r|type)?\s*[:\-]?\s*(gold|green)\b"),
+]
+_NEAR_MARKUP = re.compile(r"(gold|green)[-_ ]?(?:sticker|bean|label)|(?:sticker|bean|label)[-_ ]?(gold|green)")
+
+
+def parse_page(html: str, url: str = "") -> dict:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["nav", "header", "footer", "script", "style", "noscript"]):
+        tag.decompose()  # menus and page chrome mention "Gold" and "Green" for other reasons
     main = soup.find("main") or soup.body or soup
     text = " ".join(main.get_text(" ").split())
     lowered = text.lower()
 
     sticker = None
-    # Look for the sticker color in text and in image/class names.
-    markup = r.text.lower()
-    if re.search(r"\bgold\b", lowered) or re.search(r"gold[-_ ]?(sticker|bean|label)", markup):
-        sticker = "gold"
-    elif re.search(r"\bgreen\b", lowered) or re.search(r"green[-_ ]?(sticker|bean|label)", markup):
-        sticker = "green"
+    for pattern in _NEAR_TEXT:
+        m = pattern.search(lowered)
+        if m:
+            sticker = m.group(1)
+            break
+    if sticker is None:
+        # Image names and classes inside the result: <img src="/img/gold-sticker.png">, class="green-bean".
+        for el in main.find_all(True):
+            attrs = " ".join(str(v) for k, v in el.attrs.items() if k in ("src", "class", "alt", "title", "id")).lower()
+            m = _NEAR_MARKUP.search(attrs)
+            if m:
+                sticker = m.group(1) or m.group(2)
+                break
 
     not_found = any(p in lowered for p in ("not found", "no results", "not been approved", "did not"))
     return {"cac": sticker is not None or not not_found, "sticker": sticker, "verify_url": url, "text": text[:2000]}

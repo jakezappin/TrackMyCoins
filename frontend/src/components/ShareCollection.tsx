@@ -49,8 +49,8 @@ export default function ShareCollection({
         {asMenuItem ? (shared ? "Sharing… (on)" : "Share…") : shared ? "Shared" : "Share"}
       </button>
       {open && createPortal(
-        <div className="modal-backdrop" onClick={() => !busy && setOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => !busy && setOpen(false)}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <h2>Share “{collection.name}”</h2>
             <p className="muted small">
               Anyone with the link can view this collection without logging in: each coin's date, grade, certification,

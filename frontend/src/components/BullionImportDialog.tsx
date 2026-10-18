@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { api, type BullionImportRow } from "../api";
 import { ozLabel, purityLabel } from "../bullionFormat";
 import { money } from "../format";
+import DownloadLink from "./DownloadLink";
 
 /** Import bullion from a CSV / Excel file into a collection: pick a file, check the rows, import. */
 export default function BullionImportDialog({ collectionId, onClose, onDone }: { collectionId: number; onClose: () => void; onDone: () => void }) {
@@ -40,8 +41,8 @@ export default function BullionImportDialog({ collectionId, onClose, onDone }: {
   }
 
   return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div className="modal import-report" role="dialog" aria-label="Import bullion" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => !busy && onClose()}>
+      <div className="modal import-report" role="dialog" aria-modal="true" aria-label="Import bullion" onClick={(e) => e.stopPropagation()}>
         <h2>Import Bullion</h2>
         {result ? (
           <>
@@ -58,7 +59,7 @@ export default function BullionImportDialog({ collectionId, onClose, onDone }: {
             {result.skipped.length > 0 && (
               <ul className="import-report-bad">
                 {result.skipped.map((s) => (
-                  <li key={s.row}>
+                  <li key={`${(s as { sheet?: string }).sheet ?? ""}-${s.row}`}>
                     <strong>{s.description || "Unreadable row"}</strong> <span className="muted small">row {s.row}</span>
                     {s.errors.map((e) => (
                       <div key={e} className="small error">
@@ -86,9 +87,9 @@ export default function BullionImportDialog({ collectionId, onClose, onDone }: {
               <button type="button" className="btn btn-primary" disabled={busy} onClick={() => file.current?.click()}>
                 {busy && !rows ? "Reading…" : rows ? "Choose another file" : "Choose file"}
               </button>
-              <a className="btn" href={api.bullionTemplateUrl} download>
+              <DownloadLink className="btn" href={api.bullionTemplateUrl}>
                 Download template
-              </a>
+              </DownloadLink>
               <input
                 ref={file}
                 type="file"

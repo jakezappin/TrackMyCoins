@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,6 +11,8 @@ from ..db import get_db
 from ..config import get_settings
 from ..models import PriceRefreshRun, User
 from ..services import jobs
+
+_starting = threading.Lock()
 
 router = APIRouter(prefix="/api", tags=["jobs"])
 
@@ -55,21 +58,22 @@ def refresh_prices(body: RefreshIn, db: Session = Depends(get_db), user: User = 
     scope = jobs.collection_scope(db, user.id, body.collection_id)
     if scope is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Collection not found")
-    running = jobs.running_for(user.id)
-    if running:
-        return running.public()
-    a = allowance(db, user.id)
-    if not a["left"]:
-        when = a["next_available_at"].astimezone(timezone.utc)
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            f"Prices can be refreshed {a['limit']} times a week. The next refresh is available "
-            f"{when:%a %b} {when.day} at {when:%-I:%M %p} UTC.",
-        )
-    run = PriceRefreshRun(user_id=user.id, scope=scope[:200])
-    db.add(run)
-    db.commit()
-    return jobs.start_refresh(user.id, body.collection_id, scope, body.include_pcgs, run_id=run.id).public()
+    with _starting:  # two quick clicks: one run, counted once
+        running = jobs.running_for(user.id)
+        if running:
+            return running.public()
+        a = allowance(db, user.id)
+        if not a["left"]:
+            when = a["next_available_at"].astimezone(timezone.utc)
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"Prices can be refreshed {a['limit']} times a week. The next refresh is available "
+                f"{when:%a %b} {when.day} at {when:%-I:%M %p} UTC.",
+            )
+        run = PriceRefreshRun(user_id=user.id, scope=scope[:200])
+        db.add(run)
+        db.commit()
+        return jobs.start_refresh(user.id, body.collection_id, scope, body.include_pcgs, run_id=run.id).public()
 
 
 @router.get("/jobs/current")

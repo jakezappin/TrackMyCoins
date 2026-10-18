@@ -35,8 +35,10 @@ export function money(v: string | number | null | undefined): string {
 
 export function shortDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  // Plain dates (YYYY-MM-DD) are shown as-is in local time.
-  const d = iso.length === 10 ? new Date(iso + "T00:00:00") : new Date(iso);
+  // Plain dates (YYYY-MM-DD) are shown as-is in local time. Server times are UTC; one sent without a zone
+  // ("2026-10-17T03:12:06") would otherwise be read as local time and show the next day in the evening.
+  const zoned = /[zZ]|[+-]\d\d:?\d\d$/.test(iso);
+  const d = iso.length === 10 ? new Date(iso + "T00:00:00") : new Date(zoned ? iso : iso.replace(" ", "T") + "Z");
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -133,11 +135,18 @@ export function todayISO(): string {
 export function parseMoney(text: string | number | null | undefined): { value: string | null } | { error: string } {
   const raw = String(text ?? "").trim();
   if (!raw) return { value: null };
-  const cleaned = raw.replace(/[$,\s]/g, "");
-  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) {
+  const noDollar = raw.replace(/[$\s]/g, "");
+  // Commas only as thousands separators: "1,250.50" yes, "1,25" (a European 1.25?) no.
+  if (noDollar.includes(",") && !/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(noDollar)) {
+    return { error: "isn't a dollar amount (use 1,250.50 or 1250.50)" };
+  }
+  const cleaned = noDollar.replace(/,/g, "");
+  if (!/^(\d+\.?\d{0,2}|\.\d{1,2})$/.test(cleaned)) {
     return { error: /^-/.test(cleaned) ? "can't be negative" : "isn't a dollar amount (e.g. 1,250 or 1250.50)" };
   }
-  return { value: Number(cleaned).toFixed(2) };
+  // Built from the digits, not via Number(), so large amounts aren't rounded.
+  const [whole, frac = ""] = cleaned.split(".");
+  return { value: `${(whole || "0").replace(/^0+(?=\d)/, "")}.${frac.padEnd(2, "0")}` };
 }
 
 /** Only http(s) links from outside data (auction houses, eBay) are rendered; anything else (e.g. javascript:) isn't. */

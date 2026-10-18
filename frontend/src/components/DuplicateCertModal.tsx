@@ -16,7 +16,7 @@ export default function DuplicateCertModal({ service, cert, duplicate, onClose, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <h2>Already In Your Collection</h2>
         <p>

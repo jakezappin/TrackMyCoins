@@ -4,6 +4,7 @@ import { api, type Coin, type Collection, type CollectionStatus, type StatusMode
 import AddWant from "../components/AddWant";
 import { useApp } from "../App";
 import { coinPath, collectionPath, dateMint, serviceLabel, gradeLabel, money, toningLabel } from "../format";
+import DownloadLink from "../components/DownloadLink";
 
 type Filter = "all" | "missing" | "owned";
 
@@ -140,9 +141,9 @@ export default function StatusPage() {
           {!isSetSeries && <Link className="btn" to={`${collectionPath(collection)}/upgrades`}>
             Upgrade Finder
           </Link>}
-          <a className="btn" href={api.exportUrl(collection.id)} download>
+          <DownloadLink className="btn" href={api.exportUrl(collection.id)}>
             Export
-          </a>
+          </DownloadLink>
         </div>
       </div>
 

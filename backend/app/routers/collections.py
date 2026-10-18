@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from ..auth import current_user
@@ -120,7 +121,10 @@ def list_coin_types(db: Session = Depends(get_db), _: User = Depends(current_use
 
 @router.get("/coin-types/{slug}/sold", response_model=list[CoinOut])
 def sold_coins(slug: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    q = sold(_coin_query(user).where(Coin.coin_type_id == _type_by_slug(db, slug).id))
+    ct = _type_by_slug(db, slug)
+    # A type set's coins belong to their own series (a $20 Liberty in the Gold Type Set), so go by collection.
+    in_type = Coin.collection_id.in_(select(Collection.id).where(Collection.user_id == user.id, Collection.coin_type_id == ct.id))
+    q = sold(_coin_query(user).where(in_type))
     return [coin_out(c) for c in db.scalars(q).all()]
 
 
@@ -150,7 +154,11 @@ def create_collection(body: CollectionIn, db: Session = Depends(get_db), user: U
         number=next_collection_number(db, user.id, coin_type, body.finish),
     )
     db.add(col)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:  # created at the same moment elsewhere
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "You already have a collection with that name")
     return _with_summary(db, col)
 
 
@@ -188,8 +196,16 @@ def rename_collection(
     collection_id: int, body: CollectionRename, db: Session = Depends(get_db), user: User = Depends(current_user)
 ):
     col = get_owned_collection(db, user, collection_id)
-    col.name = body.name.strip()
-    db.commit()
+    name = body.name.strip()
+    taken = db.scalar(select(Collection).where(Collection.user_id == user.id, Collection.name == name, Collection.id != col.id))
+    if taken:
+        raise HTTPException(status.HTTP_409_CONFLICT, "You already have a collection with that name")
+    col.name = name
+    try:
+        db.commit()
+    except IntegrityError:  # renamed at the same moment elsewhere
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "You already have a collection with that name")
     return _with_summary(db, col)
 
 

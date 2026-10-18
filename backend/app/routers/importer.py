@@ -2,14 +2,14 @@
 
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
 from ..models import CatalogEntry, Coin, CoinPhoto, CoinType, Collection, CollectionCounter, User
-from ..schemas import CoinFields, ImportValuation
+from ..schemas import CoinFields, ImportValuation, small_json
 from ..series import BY_SLUG, FINISHES, Series
 from ..services import importer, lookups, quota, series_match
 from ..services import photos as store
@@ -30,9 +30,14 @@ class ImportRow(BaseModel):
     errors: list[str] = []
     description: str = ""
     lookup_raw: dict | None = None
-    photo_urls: list[str] = []
-    hints: dict = {}  # what says which series the coin is (Type column, words after the date, inventory #)
+    photo_urls: list[str] = Field(default=[], max_length=10)
+    hints: dict[str, str | None] = {}  # what says which series the coin is (Type column, words after the date, inventory #)
     target: str | None = None  # the collection it will go into (preview)
+
+    @field_validator("fields", "valuation", "lookup_raw")
+    @classmethod
+    def _not_huge(cls, v):
+        return small_json(v)
     target_new: bool = False  # ... which will be created
 
 
@@ -139,6 +144,10 @@ class _Router:
 
     def target(self, r: ImportRow) -> tuple[Collection, CoinType] | str:
         """(collection, its coin type) for a row, or why it can't be placed."""
+        try:
+            CoinFields(**r.fields)  # a sent-back row with a year of "abc" is refused here, not a server error
+        except ValidationError as e:
+            return "; ".join(err["msg"].removeprefix("Value error, ") for err in e.errors())
         series, why = self.series_of(r)
         year = r.fields.get("year")
         if self.fixed is not None:

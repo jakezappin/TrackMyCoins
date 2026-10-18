@@ -26,12 +26,16 @@ _token: dict = {"value": None, "expires": 0.0}
 _cache: dict[str, tuple[float, dict]] = {}
 
 SERVICE_WORDS = {"PCGS": ["PCGS"], "NGC": ["NGC"], "ANACS": ["ANACS"], "CACG": ["CACG", "CAC GRADING"]}
-# Titles that aren't a straight graded example of the coin.
+# Titles that aren't a graded example of the coin at all.
 EXCLUDE = re.compile(
-    r"\b(details?|genuine|cleaned|damaged|holed|replica|copy|tribute|lot of|lots?|rolls?|sets?|\d+\s*coins?|"
+    r"\b(replica|copy|tribute|lot of|lots?|rolls?|sets?|\d+\s*coins?|"
     r"(?:\d+\s*)?pcs|pieces|bags?|uncertified|raw)\b",
     re.I,
 )
+# Problem coins: refused for a straight-graded coin, required for a Details one.
+PROBLEM = re.compile(r"\b(details?|genuine|cleaned|damaged|holed|scratched|environmental|tooled|bent)\b", re.I)
+# NGC's names for the same designations: UCAM is PCGS's DCAM, DPL is DMPL.
+SAME = {"UCAM": "DCAM", "DPL": "DMPL"}
 DESIGNATIONS = ["DMPL", "DPL", "PL", "DCAM", "UCAM", "CAM", "RD", "RB", "BN", "FB", "FBL", "FS", "FH", "FT"]
 
 
@@ -89,6 +93,8 @@ def _matches(c: Coin, title: str) -> bool:
     t = title.upper()
     if EXCLUDE.search(title):
         return False
+    if bool(PROBLEM.search(title)) != bool(getattr(c, "details", False)):
+        return False
     # Date and mint: "1881-S", "1881 S", "1881S"; a P coin must not show another mint mark.
     if c.mint_mark == "P":
         if not re.search(rf"\b{c.year}\b(?!\s*-?\s*(?:CC|[DSOW])\b)", t):
@@ -102,11 +108,13 @@ def _matches(c: Coin, title: str) -> bool:
     if c.grade:
         prefix = (c.grade_prefix or "").upper()
         prefixes = {"PR": "(?:PR|PF)"}.get(prefix, re.escape(prefix)) if prefix else "[A-Z]{0,3}"
-        if not re.search(rf"\b{prefixes}\s*-?\s*{c.grade}(?!\d)", t):
+        # MS64 and MS64+ are priced apart: a plus coin needs the "+", a plain one must not have it.
+        plus = r"\s*\+" if c.grade_plus else r"(?!\s*\+)"
+        if not re.search(rf"\b{prefixes}\s*-?\s*{c.grade}(?!\d){plus}", t):
             return False
     # Strike designations change the price a lot: require the coin's, refuse others.
-    wanted = set((c.strike_designation or "").upper().split())
-    found = {d for d in DESIGNATIONS if re.search(rf"\b{d}\b", t)}
+    wanted = {SAME.get(w, w) for w in (c.strike_designation or "").upper().split()}
+    found = {SAME.get(d, d) for d in DESIGNATIONS if re.search(rf"\b{d}\b", t)}
     if wanted - found:
         return False
     extra = found - wanted

@@ -60,14 +60,16 @@ def signup(body: SignupIn, request: Request, response: Response, db: Session = D
 
 @router.post("/login", response_model=UserOut)
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
-    keys = (f"email:{body.email.lower()}", f"ip:{_client_ip(request)}")
+    # Lock out an email only from the address guessing at it, so nobody can lock someone else out.
+    ip = _client_ip(request)
+    keys = (f"email:{body.email.lower()}|{ip}", f"ip:{ip}")
     if login_limiter.blocked(*keys):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed attempts. Try again in 15 minutes.")
     user = db.scalar(select(User).where(func.lower(User.email) == body.email.lower()))
     if user is None or not verify_password(user.password_hash, body.password):
         login_limiter.fail(*keys)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
-    login_limiter.reset(f"email:{body.email.lower()}")
+    login_limiter.reset(keys[0])
     set_session(response, user)
     return user
 
@@ -106,8 +108,12 @@ def update_preferences(body: Preferences, db: Session = Depends(get_db), user: U
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_password(body: PasswordChange, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def change_password(
+    body: PasswordChange, response: Response, db: Session = Depends(get_db), user: User = Depends(current_user)
+):
     if not verify_password(user.password_hash, body.current_password):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Current password is incorrect")
     user.password_hash = hash_password(body.new_password)
     db.commit()
+    # Every other device's session ends with the old password; this one carries on.
+    set_session(response, user)

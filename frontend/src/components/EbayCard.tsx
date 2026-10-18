@@ -22,7 +22,7 @@ export default function EbayCard({ inv }: { inv: string }) {
   useEffect(() => {
     ebayEnabled().then(setOn);
   }, []);
-  return on ? <EbayListingsCard inv={inv} /> : null;
+  return on ? <EbayListingsCard key={inv} inv={inv} /> : null; // a new coin starts with no listings
 }
 
 function EbayListingsCard({ inv }: { inv: string }) {

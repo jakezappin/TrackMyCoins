@@ -63,7 +63,9 @@ def parse_purity(v) -> Decimal | None:
                     n = n / 100  # percent: 90, 99.9
                 elif 100 < n < 1000:
                     n = n / 1000  # millesimal: 925, 999
-                elif 1000 <= n <= 10000:
+                elif n == 1000:
+                    n = Decimal(1)  # 1000 fine: pure
+                elif 1000 < n <= 10000:
                     n = n / 10000  # 9999
                 else:
                     return None  # 2, 5...: not a purity
@@ -123,9 +125,12 @@ def row_to_item(raw: dict) -> tuple[dict, list[str]]:
     f["weight_unit"] = unit
     if face is None:
         try:
-            f["quantity"] = int(Decimal(str(_text(vals.get("quantity")) or "1")))
+            q = Decimal(str(_text(vals.get("quantity")) or "1").replace(",", ""))
+            if q != q.to_integral_value() or q < 1:
+                raise InvalidOperation
+            f["quantity"] = int(q)
         except InvalidOperation:
-            errors.append(f"Quantity isn't a number: {vals.get('quantity')}")
+            errors.append(f"Quantity must be a whole number of pieces, 1 or more: {vals.get('quantity')}")
             f["quantity"] = 1
     pack = (_text(vals.get("packaging")) or "").lower()
     f["packaging"] = next((p for p in svc.PACKAGING if p in pack), "tube" if f.get("quantity", 1) > 1 and "roll" not in pack else "single")

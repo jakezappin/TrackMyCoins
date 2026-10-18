@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..auth import current_user
 from ..db import get_db
 from ..models import Coin, CoinType, Collection, User
+from .. import grades
 from ..series import BY_SLUG, type_set_members
 from ..schemas import CoinDetail, CoinFields, CoinIn, CoinUpdate
 from ..services.coins import coin_detail, duplicate_info, find_duplicate_cert, next_inventory_number
@@ -52,6 +53,11 @@ def _validate(body: CoinFields, collection: Collection, coin_type: CoinType) -> 
             f"Mint mark must be one of {', '.join(marks)} for {coin_type.name}",
         )
     data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw"})
+    if not (series and series.is_set) and (
+        bad := grades.problem(coin_type.slug, body.year, body.grade_prefix, body.grade, body.grade_plus,
+                              body.strike_designation, body.variety, body.details)
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, bad)
     if series and series.is_set:
         # Mint & proof sets aren't graded: no service, cert, grade, CAC or slab.
         data.update(grading_service="RAW", cert_number=None, grade_prefix=None, grade=None, grade_plus=False,
@@ -188,8 +194,11 @@ def move_coin(inventory_number: str, body: MoveIn, db: Session = Depends(get_db)
     target = get_owned_collection(db, user, body.collection_id)
     if target.id not in {c.id for c in _move_targets(db, user, coin)}:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"A {coin.coin_type.name} can't go in {target.name}.")
-    # Same rules as saving the coin there (e.g. proofs only in proof collections).
-    _validate(CoinFields.model_validate(coin, from_attributes=True), target, coin.coin_type)
+    # Same rules as saving the coin there (e.g. proofs only in proof collections), and the same tidying (a coin
+    # moved into a proof collection gets its PR prefix).
+    data = _validate(CoinFields.model_validate(coin, from_attributes=True), target, coin.coin_type)
+    for k, v in data.items():
+        setattr(coin, k, v)
     coin.collection_id = target.id
     db.commit()
     db.refresh(coin)

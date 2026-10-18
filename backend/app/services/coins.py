@@ -42,7 +42,8 @@ def next_collection_number(db: Session, user_id: int, coin_type: CoinType, finis
 
 
 def _cert_key(cert: str | None) -> str:
-    return re.sub(r"[^0-9A-Z]", "", (cert or "").upper())
+    # "012345678" and "12345678" are the same cert.
+    return re.sub(r"[^0-9A-Z]", "", (cert or "").upper()).lstrip("0")
 
 
 def find_duplicate_cert(

@@ -1,13 +1,15 @@
+import html
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from .config import check_production, get_settings
 from .db import SessionLocal
-from .models import CoinType
+from .models import Collection, CoinType
 from .services import bullion as bullion_service, ebay, price_archive, quota
 from .routers import attachments, auth, bullion, catalog, coins, collections, dashboard, importer, jobs, label, photos, pricing, reports, shared, wants
 from .series import SERIES
@@ -51,6 +53,20 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Coin App", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "DENY")  # no framing (clickjacking on delete / share buttons)
+    # Share links carry their token in the address: don't pass it on to other sites.
+    h.setdefault("Referrer-Policy", "no-referrer" if request.url.path.startswith(("/shared", "/api/shared")) else "same-origin")
+    if get_settings().cookie_secure:
+        h.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
 for r in (attachments, auth, bullion, catalog, collections, coins, dashboard, importer, jobs, label, photos, pricing, reports, shared, wants):
     app.include_router(r.router)
 app.include_router(reports.insurance_router)
@@ -94,5 +110,25 @@ if (_dist / "index.html").exists():
         file = (_dist / path).resolve()
         if path and file.is_file() and file.is_relative_to(_dist.resolve()):
             return FileResponse(file)
+        if path.startswith("shared/"):
+            return _shared_page(path.split("/", 1)[1])
         # Client-side routes (/coins/MOR-00005, /collections/...) all load the app.
         return FileResponse(_dist / "index.html", headers={"Cache-Control": "no-cache"})
+
+    def _shared_page(token: str):
+        """The app page, titled with the collection's name, so a shared link unfurls as more than "TrackMyCoins"
+        in messages and social posts."""
+        page = (_dist / "index.html").read_text()
+        with SessionLocal() as db:
+            col = db.scalar(select(Collection).where(Collection.share_token == token.strip("/"))) if token else None
+            if col is not None:
+                title = html.escape(f"{col.name} · TrackMyCoins")
+                desc = html.escape(f"A {col.coin_type.name} collection shared from TrackMyCoins.")
+                tags = (f'<title>{title}</title>\n    <meta property="og:title" content="{title}" />\n'
+                        f'    <meta property="og:description" content="{desc}" />\n'
+                        f'    <meta property="og:type" content="website" />\n'
+                        f'    <meta name="twitter:card" content="summary" />')
+                page = re.sub(r"<title>.*?</title>", lambda _m: tags, page, count=1)
+                page = re.sub(r'<meta name="description" content="[^"]*" />',
+                              lambda _m: f'<meta name="description" content="{desc}" />', page, count=1)
+        return HTMLResponse(page, headers={"Cache-Control": "no-cache"})

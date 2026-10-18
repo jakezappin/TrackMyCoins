@@ -374,6 +374,10 @@ def _candidates(text: str, year: int | None) -> list[Series]:
             named = [s for s in named if best(s) == top]
         return named
     if face is not None:
+        # A design named for a year it wasn't struck ("1939 Buffalo Nickel") is a wrong date, not another 5c.
+        if any(FACE.get(s.slug) == face and any(_has(t, k) for k in KEYWORDS.get(s.slug, ()))
+               for s in SERIES if not s.is_type_set):
+            return []
         return [s for s in usable if FACE.get(s.slug) == face]
     return []
 

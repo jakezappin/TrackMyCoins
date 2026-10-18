@@ -41,8 +41,8 @@ export default function MoveCoin({ coin, onMoved }: { coin: CoinDetail; onMoved:
       </button>
       {open &&
         createPortal(
-          <div className="modal-backdrop" onClick={() => !busy && setOpen(false)}>
-            <div className="modal" role="dialog" aria-label="Move coin" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => !busy && setOpen(false)}>
+            <div className="modal" role="dialog" aria-modal="true" aria-label="Move coin" onClick={(e) => e.stopPropagation()}>
               <h2>Move {coin.inventory_number}</h2>
               <p className="muted small">
                 From <strong>{coin.collection_name}</strong> to another of your collections. Its inventory number,

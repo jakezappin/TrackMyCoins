@@ -161,6 +161,12 @@ function WantForm({ want, onClose, onSaved }: { want: WantItem | null; onClose: 
   const mints = type?.mint_marks.length ? type.mint_marks : ["P"];
   useEffect(() => {
     if (!mints.includes(mint)) setMint(mints[0]);
+    // ...and the finish only if it has one (Morgans have no Proof list), with a grade prefix to match.
+    const codes = type?.finishes.map((f) => f.code) ?? ["MS"];
+    const next = codes.includes(finish) ? finish : (codes[0] as Finish);
+    if (next !== finish) setFinish(next);
+    if (next !== "MS" && prefix !== "PR") setPrefix("PR");
+    if (next === "MS" && prefix === "PR") setPrefix("MS");
   }, [typeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
@@ -195,8 +201,8 @@ function WantForm({ want, onClose, onSaved }: { want: WantItem | null; onClose: 
   }
 
   return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div className="modal want-modal" role="dialog" aria-label={want ? "Edit want" : "Add to want list"} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => !busy && onClose()}>
+      <div className="modal want-modal" role="dialog" aria-modal="true" aria-label={want ? "Edit want" : "Add to want list"} onClick={(e) => e.stopPropagation()}>
         <h2>{want ? "Edit Want" : "Add To Want List"}</h2>
         <label className="field">
           <span>Series</span>

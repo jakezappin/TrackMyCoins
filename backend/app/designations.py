@@ -7,14 +7,33 @@ A designation is an optional copper color (RD/RB/BN) followed by strike/surface 
 import re
 
 COLORS = ("RD", "RB", "BN")
-OTHERS = ("DMPL", "DPL", "PL", "DCAM", "UCAM", "CAM", "FBL", "FB", "FS", "FH", "BM")
-_ALIASES = {"UCAM": "DCAM", "DPL": "DMPL", "5FS": "FS", "6FS": "FS"}
+OTHERS = ("DMPL", "DPL", "PL", "DCAM", "UCAM", "CAM", "FBL", "FB", "FS", "FH", "FT", "BM")
+_ALIASES = {"UCAM": "DCAM", "DPL": "DMPL", "5FS": "FS", "6FS": "FS", "CAMEO": "CAM", "RED": "RD", "BROWN": "BN"}
+# Spelled-out designations, longest first so "Deep Cameo" isn't read as "Cameo".
+_PHRASES = [
+    (r"DEEP\s*MIRROR\s*PROOF\s*-?\s*LIKE", "DMPL"), (r"PROOF\s*-?\s*LIKE", "PL"),
+    (r"(?:DEEP|ULTRA)\s*CAMEO", "DCAM"), (r"RED\s*(?:AND|&|/|-)?\s*BROWN", "RB"),
+    (r"FULL\s*BANDS?\s*LINES?|FULL\s*BELL\s*LINES?", "FBL"), (r"FULL\s*BANDS?", "FB"), (r"FULL\s*STEPS?", "FS"),
+    (r"FULL\s*HEAD", "FH"), (r"FULL\s*TORCH", "FT"),
+]
+
+
+def _words(text: str) -> list[str]:
+    up = text.upper()
+    for pattern, code in _PHRASES:
+        up = re.sub(pattern, f" {code} ", up)
+    return [_ALIASES.get(w, w) for w in re.findall(r"[0-9A-Z]+", up)]
+
+
+def unknown(text: str | None) -> list[str]:
+    """Words in a typed designation that aren't one (so they're reported, not silently dropped)."""
+    return [w for w in _words(text or "") if w not in COLORS + OTHERS]
 
 
 def canonical(text: str | None) -> str | None:
     if not text:
         return None
-    words = [_ALIASES.get(w, w) for w in re.findall(r"[0-9A-Z]+", text.upper())]
+    words = _words(text)
     color = next((c for c in COLORS if c in words), None)
     others = [o for o in OTHERS if o in words]
     out = ([color] if color else []) + others

@@ -120,8 +120,8 @@ function CoinModal({ c, typeName, showValue, onClose }: { c: SharedCoin; typeNam
   const toning = toningLabel(c);
   const slabs = slabLabel(c);
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal shared-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`${dateMint(c)} ${typeName}`}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal shared-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} aria-label={`${dateMint(c)} ${typeName}`}>
         <div className="row-end">
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             ✕

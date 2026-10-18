@@ -1,3 +1,5 @@
+import hashlib
+
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -24,8 +26,13 @@ def verify_password(password_hash: str, password: str) -> bool:
         return False
 
 
+def _fingerprint(user: User) -> str:
+    """Changes with the password, so a password change signs out every other device."""
+    return hashlib.sha256(user.password_hash.encode()).hexdigest()[:16]
+
+
 def set_session(response: Response, user: User) -> None:
-    token = _serializer.dumps({"uid": user.id})
+    token = _serializer.dumps({"uid": user.id, "pv": _fingerprint(user)})
     response.set_cookie(
         settings.session_cookie,
         token,
@@ -50,6 +57,6 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     except (BadSignature, SignatureExpired):
         raise unauthorized
     user = db.get(User, data.get("uid"))
-    if user is None:
+    if user is None or data.get("pv") != _fingerprint(user):
         raise unauthorized
     return user

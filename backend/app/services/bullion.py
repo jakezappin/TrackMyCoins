@@ -242,7 +242,7 @@ def summary(items: list[BullionItem], metal_of, spots_now: dict[str, Decimal | N
     oz: dict[str, Decimal] = {}
     oz_costed: dict[str, Decimal] = {}
     cost_by: dict[str, Decimal] = {}
-    value_now = value_costed = cost = Decimal(0)
+    value_now = value_costed = cost = cost_priced = Decimal(0)
     unpriced = no_cost = 0
     for i in held:
         m = metal_of(i)
@@ -263,10 +263,11 @@ def summary(items: list[BullionItem], metal_of, spots_now: dict[str, Decimal | N
         oz_costed[m] = oz_costed.get(m, Decimal(0)) + o
         if v is not None:
             value_costed += v
+            cost_priced += paid  # the change compares like with like: items with both a cost and a value
     sold = [i for i in items if is_sold(i)]
     realized_items = [i for i in sold if i.sale_price is not None and i.price_paid is not None]
     realized = sum((_d(i.sale_price) - _d(i.price_paid) for i in realized_items), Decimal(0))
-    change = value_costed - cost
+    change = value_costed - cost_priced
     return {
         "count": len(held),
         "oz": {m: str(v.quantize(Decimal("0.0001"))) for m, v in oz.items()},
@@ -275,7 +276,7 @@ def summary(items: list[BullionItem], metal_of, spots_now: dict[str, Decimal | N
         "value": str(value_now.quantize(CENTS)),
         "cost": str(cost.quantize(CENTS)),
         "change": str(change.quantize(CENTS)),
-        "change_pct": round(float(change / cost) * 100, 1) if cost else None,
+        "change_pct": round(float(change / cost_priced) * 100, 1) if cost_priced else None,
         "unpriced": unpriced,
         "no_cost": no_cost,
         "sold_count": len(sold),
@@ -293,7 +294,8 @@ def history(db: Session, items: list[BullionItem], metal_of) -> list[dict]:
     series = {m: SpotSeries.load(db, m) for m in {metal_of(i) for i in items}}
     today = datetime.now(timezone.utc).date()
     live = {m: live_spot(m) for m in series}
-    spans = [(i, started(i), i.sale_date) for i in items]
+    # Sold without a date: held until today (the summary already leaves it out).
+    spans = [(i, started(i), i.sale_date or (today if i.sale_price is not None else None)) for i in items]
     days = {today} | {s for _, s, _ in spans} | {e for _, _, e in spans if e}
     first = min(s for _, s, _ in spans)
     m = first.replace(day=1)

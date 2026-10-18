@@ -71,7 +71,15 @@ def _movers(coins) -> tuple[list[Mover], list[Mover]]:
         if not cpg:
             continue
         latest = cpg[0]
-        prev = next((q for q in cpg[1:] if q.value != latest.value), None)
+        # The market's move only: compare prices for the same grade (a regrade or a new CAC sticker changes the
+        # grade priced, not the market).
+        prev = None
+        for q in cpg[1:]:
+            if q.grade_used != latest.grade_used:
+                break
+            if q.value != latest.value:
+                prev = q
+                break
         if prev is None or not prev.value:
             continue
         change = latest.value - prev.value

@@ -37,9 +37,16 @@ def fineness(composition: str | None) -> dict[str, float]:
         out[metal] = float(pct) / 100
     if out:
         return out if all(0 < v <= 1 for v in out.values()) else {}
-    m = _FINE.search(text)  # ".999 Silver", "999 Fine Silver"
+    m = _FINE.search(text)  # ".999 Silver", ".9999 Fine Gold"
     if m and m.group(1):
         return {m.group(3).lower(): float("0." + m.group(1))}
+    # "999 Fine Silver", "Silver .999", "Gold 9999"
+    m = re.search(r"\b(\d{3,4})\s*(?:fine\s+)?(gold|silver|platinum|palladium)\b", text, re.I) or \
+        re.search(r"\b(gold|silver|platinum|palladium)\s*,?\s*\.?(\d{3,4})\b", text, re.I)
+    if m:
+        digits, metal = (m.group(1), m.group(2)) if m.group(1).isdigit() else (m.group(2), m.group(1))
+        share = int(digits) / (10 ** len(digits))
+        return {metal.lower(): share} if 0 < share <= 1 else {}
     return {}
 
 
@@ -64,6 +71,11 @@ def spot(metal: str) -> tuple[float | None, str | None]:
             return hit[1], hit[2]
     price, updated = _fetch_spot(metal)
     with _lock:
+        last = _spot.get(metal)
+        if price is None and last and last[1] is not None:
+            # Keep the last good price rather than blanking every value; try again after FAIL_SECONDS.
+            _spot[metal] = (time.time() - CACHE_SECONDS + FAIL_SECONDS, last[1], last[2])
+            return last[1], last[2]
         _spot[metal] = (time.time(), price, updated)
     return price, updated
 

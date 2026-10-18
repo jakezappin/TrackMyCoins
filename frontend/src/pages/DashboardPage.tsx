@@ -14,6 +14,7 @@ import { NGC_BOOKMARK_ENABLED } from "../ngcButton";
 import RefreshPrices, { RefreshSlot } from "../components/RefreshPrices";
 import { ValueNote } from "../components/SummaryCards";
 import { coinPath, collectionPath, dateMint, FINISH_LABEL, gradeLabel, metalFor, money, shortDate, soldPath } from "../format";
+import DownloadLink from "../components/DownloadLink";
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "Not opened yet";
@@ -36,11 +37,22 @@ export default function DashboardPage() {
 
   // Refetch when collections change (e.g. one was created or a coin's totals changed).
   useEffect(() => {
-    api.dashboard().then(setData).catch((e) => setError(e.message));
+    let live = true;
+    api
+      .dashboard()
+      .then((d) => {
+        if (!live) return;
+        setData(d);
+        setError(null);
+      })
+      .catch((e) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
   }, [collections]);
   const { refresh, bullionCollections } = useApp();
 
-  if (error) return <div className="page error">{error}</div>;
+  if (error && !data) return <div className="page error">{error}</div>;
   if (!data) return <div className="page muted">Loading…</div>;
 
   const t = data.totals;
@@ -64,9 +76,9 @@ export default function DashboardPage() {
             <MoreMenu>
               <Link to="/import">Import coins</Link>
               {NGC_BOOKMARK_ENABLED && <Link to="/ngc-button">NGC one-tap button</Link>}
-              <a href={api.insuranceUrl(null)} download>
+              <DownloadLink href={api.insuranceUrl(null)}>
                 Insurance report (PDF)
-              </a>
+              </DownloadLink>
             </MoreMenu>
           </span>
           <button className="btn btn-primary act-add" onClick={() => setCreating(true)}>

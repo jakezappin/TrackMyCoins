@@ -755,6 +755,34 @@ export interface Attachment {
 
 const attachmentBase = (kind: "coin" | "bullion") => (kind === "bullion" ? "/api/bullion/items" : "/api/coins");
 
+// When the session runs out the app goes back to the login page instead of every page saying "Not logged in".
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn;
+}
+// Where a 401 is an ordinary answer (wrong password, not signed in yet), not an expired session.
+const AUTH_ANSWERS = ["/api/auth/login", "/api/auth/me", "/api/auth/signup", "/api/auth/password"];
+
+function checkSession(path: string, status: number) {
+  if (status === 401 && !AUTH_ANSWERS.some((p) => path.startsWith(p))) onUnauthorized?.();
+}
+
+const TIMEOUT_MS = 60_000;
+const UPLOAD_TIMEOUT_MS = 5 * 60_000; // imports and photo uploads can take a while on a phone connection
+
+async function send(path: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(path, { ...init, signal: ctrl.signal });
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new ApiError(0, "The server took too long to answer. Check your connection and try again.");
+    throw new ApiError(0, "Couldn't reach the server. Check your connection and try again.", e);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: "same-origin", headers: {} };
   if (body instanceof FormData) {
@@ -763,11 +791,35 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     init.body = JSON.stringify(body);
     (init.headers as Record<string, string>)["Content-Type"] = "application/json";
   }
-  const res = await fetch(path, init);
+  const res = await send(path, init, body instanceof FormData || path.includes("/import") ? UPLOAD_TIMEOUT_MS : TIMEOUT_MS);
+  checkSession(path, res.status);
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, errorMessage(data, `${res.status} ${res.statusText}`), data?.detail);
   return data as T;
+}
+
+/** Download a report or export: an error comes back as a message, never saved as the file. */
+export async function downloadFile(url: string, fallbackName = "download"): Promise<void> {
+  const res = await send(url, { credentials: "same-origin" }, UPLOAD_TIMEOUT_MS);
+  checkSession(url, res.status);
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new ApiError(res.status, errorMessage(data, `${res.status} ${res.statusText}`), data?.detail);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  const name = star ? decodeURIComponent(star[1]) : plain ? plain[1] : fallbackName;
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(href), 10_000);
 }
 
 export const api = {
@@ -952,7 +1004,7 @@ export const api = {
   designations: (coinTypeId: number, finish: Finish) =>
     request<string[]>("GET", `/api/coin-types/${coinTypeId}/designations?finish=${finish}`),
   catalogSync: (coinTypeId: number) =>
-    request<{ count: number; synced_at: string | null; nodes: string[] }>(
+    request<{ count: number; synced_at: string | null; nodes: number[] }>(
       "POST",
       `/api/coin-types/${coinTypeId}/catalog/sync`,
     ),

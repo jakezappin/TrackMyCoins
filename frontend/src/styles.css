@@ -133,7 +133,7 @@ h3 {
   gap: 14px;
 }
 .center-screen {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -262,7 +262,7 @@ input[type="checkbox"] {
 .shell {
   display: grid;
   grid-template-columns: 260px 1fr;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 .topbar {
   display: none;
@@ -287,7 +287,7 @@ input[type="checkbox"] {
   padding: 18px 12px;
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
 }
 .sidebar .brand {
@@ -663,6 +663,9 @@ table {
   padding: 22px;
   width: 100%;
   max-width: 440px;
+  /* A dialog taller than the screen (a phone keyboard open, landscape) scrolls instead of losing its buttons. */
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1435,7 +1438,7 @@ table {
   --lp-gold-2: #c99a35;
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 .lp-hero {
   position: relative;
@@ -2310,7 +2313,7 @@ table {
   color: var(--text);
 }
 .shared {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -2385,7 +2388,7 @@ table {
 }
 .shared-modal {
   max-width: 560px;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   overflow: auto;
 }
 .shared-modal h2 {
@@ -2589,7 +2592,7 @@ table {
 /* ---- Export column picker ---------------------------------------------------- */
 .export-modal {
   max-width: 640px;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
 }
 .export-quick {
   gap: 14px;
@@ -3139,7 +3142,7 @@ table {
 .import-target { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .import-dest { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 10px; }
 .import-dest-item { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
-.import-report { max-width: 560px; width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.import-report { max-width: 560px; width: calc(100vw - 32px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 .import-report h3 { margin: 16px 0 6px; font-size: 0.95rem; }
 .import-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
 .import-count { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; }

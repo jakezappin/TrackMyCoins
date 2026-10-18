@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, type RefreshJob } from "../api";
+import { api, ApiError, type RefreshJob } from "../api";
 
 interface Props {
   /** null = every collection */
@@ -34,18 +34,35 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
     };
   }, []);
 
+  // Poll while it runs. A failed check retries (backing off); a job the server no longer knows (it restarted)
+  // ends the wait instead of leaving the button stuck on "Refreshing…".
+  const misses = useRef(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!job || job.status !== "running") return;
+    const delay = Math.min(1000 * 2 ** misses.current, 15000);
     timer.current = window.setTimeout(async () => {
       try {
         const j = await api.job(job.id);
+        misses.current = 0;
+        setError(null);
         setJob(j);
         if (j.status !== "running") onDone();
       } catch (e) {
-        setError((e as Error).message);
+        if (e instanceof ApiError && e.status === 404) {
+          setJob({ ...job, status: "failed", messages: [...job.messages, "The server restarted; this refresh stopped."] });
+          onDone();
+          return;
+        }
+        misses.current += 1;
+        setError(`${(e as Error).message} Still trying…`);
+        setTick((t) => t + 1); // poll again
       }
-    }, 1000);
-  }, [job, onDone]);
+    }, delay);
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    };
+  }, [job, onDone, tick]);
 
   async function start() {
     setAsking(false);
@@ -74,8 +91,8 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
       </button>
 
       {asking && (
-        <div className="modal-backdrop" onClick={() => setAsking(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setAsking(false)}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <h2>Refresh Prices</h2>
             <p className="muted">
               Gets the latest CPG value for {collectionId == null ? "every coin you own" : "every coin in this collection"}{" "}

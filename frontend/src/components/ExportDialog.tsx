@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, type ExportColumn } from "../api";
+import { api, downloadFile, type ExportColumn } from "../api";
 
 const GROUPS: [string, string[]][] = [
   ["Coin", ["Inventory #", "Date", "Year", "Mint", "Variety", "VAM", "PCGS #"]],
@@ -70,19 +70,15 @@ export default function ExportDialog({ collectionId, onClose }: { collectionId: 
       // Remembering the choice is only a convenience.
     }
     const qs = ordered.length === columns.length ? "" : "?" + ordered.map((n) => `columns=${encodeURIComponent(n)}`).join("&");
-    const a = document.createElement("a");
-    a.href = api.exportUrl(collectionId) + qs;
-    a.download = "";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    onClose();
+    downloadFile(api.exportUrl(collectionId) + qs)
+      .then(onClose)
+      .catch((err) => window.alert(`Couldn't download: ${(err as Error).message}`));
   }
 
   const all = columns?.map((c) => c.name) ?? [];
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal export-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Export to Excel">
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal export-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} aria-label="Export to Excel">
         <h2>Export To Excel</h2>
         <p className="muted small">
           Choose the columns for the Coins and Sold sheets. The Summary and Checklist sheets are always included.

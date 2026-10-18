@@ -59,6 +59,11 @@ export default function QuickSearch() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The term the hits are for, and an Enter pressed before they arrived (a scanner or paste types and hits Enter
+  // at once): it opens the first hit for what was typed, never one left from the previous search.
+  const hitsFor = useRef("");
+  const enterPending = useRef(false);
+
   // Debounced search as you type.
   useEffect(() => {
     const term = q.trim();
@@ -73,9 +78,15 @@ export default function QuickSearch() {
       Promise.all([api.searchCoins(term), api.searchBullion(term).catch(() => [] as BullionSearchHit[])])
         .then(([coins, bullion]) => {
           if (cancelled) return;
-          setHits([...coins.map((h) => fromCoin(h, metalFor(coinTypes, h.coin.coin_type_id))), ...bullion.map(fromBullion)]);
+          const found = [...coins.map((h) => fromCoin(h, metalFor(coinTypes, h.coin.coin_type_id))), ...bullion.map(fromBullion)];
+          hitsFor.current = term;
+          setHits(found);
           setActive(0);
           setOpen(true);
+          if (enterPending.current) {
+            enterPending.current = false;
+            go(found[0]);
+          }
         })
         .catch(() => !cancelled && setHits([]))
         .finally(() => !cancelled && setLoading(false));
@@ -87,6 +98,7 @@ export default function QuickSearch() {
   }, [q]);
 
   function go(hit: Hit | undefined) {
+    enterPending.current = false;
     if (!hit) return;
     setOpen(false);
     setQ("");
@@ -103,7 +115,8 @@ export default function QuickSearch() {
       setActive((a) => Math.max(a - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      go(hits[active]);
+      if (hitsFor.current === q.trim()) go(hits[active]);
+      else enterPending.current = true; // results for this term are still on their way
     } else if (e.key === "Escape") {
       setOpen(false);
       inputRef.current?.blur();
@@ -125,6 +138,7 @@ export default function QuickSearch() {
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => hits.length && setOpen(true)}
           onKeyDown={onKeyDown}
+          maxLength={100}
           placeholder="Find a coin or bullion: inventory #, cert, 1881-S, Buffalo, notes…"
           role="combobox"
           aria-expanded={showList}

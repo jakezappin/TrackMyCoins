@@ -100,20 +100,35 @@ export const PRESETS: Record<Metal, Preset[]> = {
   ],
 };
 
-/** "92.5%", ".925", "925", "0.925" -> "0.925"; null if it isn't a purity. */
+/** "92.5%", ".925", "925", "0.925", "9999", "1000", "22k" -> a share of 1 (same rules as the server's import);
+ * null if it isn't a purity (a bare "2" is refused, not read as 20%). */
 export function parsePurity(text: string): string | null {
-  const t = text.trim().replace(/\s|fine/gi, "");
+  const t = text.trim().toLowerCase().replace(/\s|fine/g, "");
   if (!t) return null;
+  const karat = /^(\d{1,2})(k|kt|karat|carat|ct)$/.exec(t);
+  if (karat) {
+    const k = Number(karat[1]);
+    const known: Record<number, string> = { 24: "0.999", 22: "0.9167", 18: "0.75", 14: "0.585", 10: "0.417" };
+    return known[k] ?? (k > 0 && k <= 24 ? String(+(k / 24).toFixed(4)) : null);
+  }
+  if (!/^\d*\.?\d+%?$/.test(t)) return null;
   let n = t.endsWith("%") ? Number(t.slice(0, -1)) / 100 : Number(t);
   if (!Number.isFinite(n) || n <= 0) return null;
-  while (n > 1) n /= n >= 100 ? 1000 : n >= 10 ? 100 : 10;
-  return n > 0 && n <= 1 ? String(+n.toFixed(5)) : null;
+  if (!t.endsWith("%") && n > 1) {
+    if (n >= 10 && n <= 100) n /= 100; // percent: 90, 99.9
+    else if (n > 100 && n < 1000) n /= 1000; // millesimal: 925, 999
+    else if (n === 1000) n = 1;
+    else if (n > 1000 && n <= 10000) n /= 10000; // 9999
+    else return null;
+  }
+  const out = +n.toFixed(5);
+  return out > 0 && out <= 1 ? String(out) : null;
 }
 
 /** "2 yr 3 mo" / "5 mo" / "12 days" */
 export function heldLabel(days: number): string {
   if (days < 31) return `${days} day${days === 1 ? "" : "s"}`;
-  const months = Math.floor(days / 30.44);
+  const months = Math.floor((days + 1) / 30.44); // 365 days is 1 yr, not 11 mo
   const y = Math.floor(months / 12);
   const m = months % 12;
   return [y && `${y} yr`, m && `${m} mo`].filter(Boolean).join(" ") || "1 mo";

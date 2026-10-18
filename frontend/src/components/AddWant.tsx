@@ -67,8 +67,8 @@ export default function AddWant(props: {
       </button>
       {open &&
         createPortal(
-          <div className="modal-backdrop" onClick={() => !busy && setOpen(false)}>
-            <div className="modal" role="dialog" aria-label="Add to want list" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => !busy && setOpen(false)}>
+            <div className="modal" role="dialog" aria-modal="true" aria-label="Add to want list" onClick={(e) => e.stopPropagation()}>
               <h2>Add To Want List</h2>
               <p className="strong">{props.label}</p>
               <div className="row">

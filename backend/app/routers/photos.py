@@ -40,8 +40,9 @@ async def upload_photos(
     _check_room(len(coin.photos), len(files))
     order = len(coin.photos)
     saved: list[str] = []
+    limit = get_settings().max_photo_bytes
     for f in files:
-        data = await f.read()
+        data = await f.read(limit + 1)  # never more than the limit in memory; save_bytes refuses the extra byte
         try:
             name, ctype = store.save_bytes(coin.id, data, f.content_type or "")
         except store.PhotoError as e:
