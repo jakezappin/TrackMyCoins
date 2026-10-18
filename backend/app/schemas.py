@@ -72,6 +72,7 @@ class CoinTypeOut(ORM):
     finishes: list[FinishOut]
     metal: str = "silver"  # "gold" | "silver", for placeholder artwork
     is_type_set: bool = False
+    is_set: bool = False  # a mint or proof set series: ungraded, priced in OGP
     member_ids: list[int] = []  # type sets: the series their coins can come from
 
 
@@ -151,6 +152,7 @@ class CoinFields(BaseModel):
     ike_blue_pack: bool = False
     ike_brown_pack: bool = False
     ogp: bool = False  # Original Government Packaging
+    capital_holder: bool = False  # mint & proof sets
 
     toning_obverse: bool = False
     toning_reverse: bool = False
@@ -361,6 +363,7 @@ class PurchaseValue(BaseModel):
 
 class CoinDetail(CoinOut):
     purchase_value: PurchaseValue | None = None
+    set_melt: dict | None = None  # mint & proof sets: {'oz', 'spot', 'value', 'as_of'}
     pcgs_market: PcgsMarket | None = None
     facts: CoinFacts | None = None
     photos: list[PhotoOut]
@@ -459,6 +462,7 @@ class SharedCoin(BaseModel):
     ike_blue_pack: bool
     ike_brown_pack: bool
     ogp: bool = False
+    capital_holder: bool = False
     toning_obverse: bool
     toning_reverse: bool
     toning_dual: bool

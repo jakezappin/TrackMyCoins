@@ -28,6 +28,8 @@ export interface CoinType {
   finishes: FinishInfo[];
   metal: "gold" | "silver";
   is_type_set: boolean;
+  /** A mint or proof set series: ungraded, priced in OGP */
+  is_set?: boolean;
   member_ids: number[]; // type sets: series their coins can come from
 }
 
@@ -200,6 +202,8 @@ export interface CoinFields {
   ike_brown_pack: boolean;
   /** Original Government Packaging */
   ogp: boolean;
+  /** Mint & proof sets: in a Capital Plastics holder */
+  capital_holder: boolean;
   toning_obverse: boolean;
   toning_reverse: boolean;
   toning_dual: boolean;
@@ -321,6 +325,19 @@ export type GradePrices =
       has_cac: boolean;
     };
 
+/** One mint or proof set from the catalog (the coin form's Set picker). */
+export interface SetOption {
+  gsid: number;
+  year: number;
+  mint_mark: string;
+  variety: string | null;
+  pcgs_number: string | null;
+  name: string; // checklist line: "" for the year's main set
+  label: string;
+  extra: boolean;
+  silver_oz: number | null;
+}
+
 export interface PriceData {
   cpg_prices: number;
   cpg_issues: number;
@@ -345,6 +362,8 @@ export interface PurchaseValue {
 
 export interface CoinDetail extends Coin {
   purchase_value: PurchaseValue | null;
+  /** Mint & proof sets: silver content and melt value */
+  set_melt: { oz: number; spot: number | null; value: number | null; as_of: string | null } | null;
   facts: CoinFacts | null;
   pcgs_market: PcgsMarket | null;
   photos: Photo[];
@@ -393,6 +412,8 @@ export interface CollectionStatus {
   filled: number;
   rows: StatusRow[];
   others: Coin[];
+  /** Mint & proof sets: specialty sets, listed but not counted */
+  extras?: StatusRow[];
 }
 
 export interface CatalogCandidate {
@@ -728,6 +749,8 @@ export const api = {
   priceWant: (id: number) => request<WantItem>("POST", `/api/wants/${id}/price`),
   upgrades: (collectionId: number) => request<Upgrades>("GET", `/api/collections/${collectionId}/upgrades`),
   priceData: () => request<PriceData>("GET", "/api/price-data"),
+  sets: (coinTypeId: number, year?: number) =>
+    request<SetOption[]>("GET", `/api/coin-types/${coinTypeId}/sets${year ? `?year=${year}` : ""}`),
   fillPurchaseValue: (inv: string) =>
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/purchase-value`),
   moveTargets: (inv: string) =>

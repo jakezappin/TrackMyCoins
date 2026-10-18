@@ -17,11 +17,17 @@ function savedMode(collectionId: number): StatusMode {
   }
 }
 
-function CoinChip({ coin }: { coin: Coin }) {
+function CoinChip({ coin, isSet = false }: { coin: Coin; isSet?: boolean }) {
   return (
     <Link to={coinPath(coin.inventory_number)} className="status-coin" title={coin.inventory_number}>
-      <span className="status-grade">{gradeLabel(coin)}</span>
-      <span className="muted small">{serviceLabel(coin.grading_service)}</span>
+      {isSet ? (
+        <span className="status-grade">{coin.ogp ? "OGP" : coin.capital_holder ? "Capital Holder" : "Owned"}</span>
+      ) : (
+        <>
+          <span className="status-grade">{gradeLabel(coin)}</span>
+          <span className="muted small">{serviceLabel(coin.grading_service)}</span>
+        </>
+      )}
       {coin.cac && <span className={`tag cac-${coin.cac_sticker ?? "green"}`}>CAC</span>}
       {toningLabel(coin).length > 0 && <span className="tag toned">Toned</span>}
       {coin.latest_cpg?.value && <span className="muted small">{money(coin.latest_cpg.value)}</span>}
@@ -83,6 +89,7 @@ export default function StatusPage() {
   }, [status, filter]);
 
   // Owned dates suggest the next grade up (someone looking to upgrade); missing ones just the finish.
+  const isSetSeries = Boolean(coinTypes.find((t) => t.id === collection?.coin_type_id)?.is_set);
   const canWant =
     !!collection && mode === "full" && !coinTypes.find((t) => t.id === collection.coin_type_id)?.is_type_set;
 
@@ -112,9 +119,9 @@ export default function StatusPage() {
           </p>
         </div>
         <div className="row">
-          <Link className="btn" to={`${collectionPath(collection)}/upgrades`}>
+          {!isSetSeries && <Link className="btn" to={`${collectionPath(collection)}/upgrades`}>
             Upgrade Finder
-          </Link>
+          </Link>}
           <a className="btn" href={api.exportUrl(collection.id)} download>
             Export
           </a>
@@ -185,7 +192,7 @@ export default function StatusPage() {
                 <span className="status-date">{r.label}</span>
                 <span className="status-coins">
                   {r.coins.length ? (
-                    r.coins.map((c) => <CoinChip key={c.id} coin={c} />)
+                    r.coins.map((c) => <CoinChip key={c.id} coin={c} isSet={isSetSeries} />)
                   ) : (
                     <span className="tag missing-tag">Missing</span>
                   )}
@@ -197,7 +204,7 @@ export default function StatusPage() {
                       year={r.year}
                       mintMark={r.mint_mark}
                       variety={r.variety}
-                      {...wantTarget(r.coins[0], collection.finish === "MS" ? "MS" : "PR")}
+                      {...(isSetSeries ? { noGrade: true } : wantTarget(r.coins[0], collection.finish === "MS" ? "MS" : "PR"))}
                       label={`${r.label} ${collection.collection_type_label}`}
                     />
                   </span>
@@ -207,6 +214,43 @@ export default function StatusPage() {
           </ul>
         )}
       </div>
+
+      {status.extras && status.extras.length > 0 && (
+        <div className="card">
+          <h2>Other Sets</h2>
+          <p className="muted small">
+            Specialty sets issued alongside the year's main set (Prestige, Premier, quarters-only and the like). Add them
+            if you collect them; they don't count toward completion.
+          </p>
+          <ul className="status-list" style={listStyle}>
+            {status.extras.map((r) => (
+              <li key={`x-${r.label}`} className={`status-row ${r.coins.length ? "have" : "missing"}`}>
+                <span className="status-mark" aria-label={r.coins.length ? "Owned" : "Not owned"}>
+                  {r.coins.length ? "✓" : ""}
+                </span>
+                <span className="status-date">{r.label}</span>
+                <span className="status-coins">
+                  {r.coins.map((c) => (
+                    <CoinChip key={c.id} coin={c} isSet />
+                  ))}
+                </span>
+                {canWant && (
+                  <span className="status-want">
+                    <AddWant
+                      collectionId={collection.id}
+                      year={r.year}
+                      mintMark={r.mint_mark}
+                      variety={r.variety}
+                      noGrade
+                      label={`${r.label} ${collection.collection_type_label}`}
+                    />
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {status.others.length > 0 && (
         <div className="card">

@@ -91,7 +91,8 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
         for coin_id in ids:
             coin = db.get(Coin, coin_id)
             job.current = _label(coin)
-            if not coin.grade:
+            is_set = greysheet.is_set(coin)  # mint & proof sets: CPG in OGP, no grade, no PCGS data
+            if not coin.grade and not is_set:
                 job.skipped += 1
                 job.messages.append(f"{job.current}: skipped, no numeric grade")
                 job.done += 1
@@ -108,7 +109,7 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                 job.messages.append(f"{job.current}: CPG: {e}")
             except httpx.HTTPError as e:
                 job.messages.append(f"{job.current}: CPG: Greysheet error ({e.__class__.__name__})")
-            if pcgs_ok:
+            if pcgs_ok and not is_set:
                 try:
                     called |= price_refresh.refresh_pcgs(db, coin)
                     changed = True

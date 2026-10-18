@@ -51,7 +51,7 @@ type ToningFields = Pick<CoinFields, "toning_obverse" | "toning_reverse" | "toni
 type SlabFields = Pick<
   CoinFields,
   | "slab_soapbox" | "slab_ngc_fatty" | "slab_rattler" | "slab_ogh" | "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack"
-  | "ike_brown_pack" | "ogp"
+  | "ike_brown_pack" | "ogp" | "capital_holder"
 >;
 
 export function gradeLabel(c: GradeFields): string {
@@ -85,6 +85,7 @@ export function slabLabel(c: SlabFields): string[] {
   if (c.ike_blue_pack) s.push("Blue Pack");
   if (c.ike_brown_pack) s.push("Brown Pack");
   if (c.ogp) s.push("OGP");
+  if (c.capital_holder) s.push("Capital Holder");
   return s;
 }
 
@@ -122,4 +123,12 @@ export function safeUrl(url: string | null | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** A mint or proof set's name from its catalog variety: "Main set" for the year's regular set ("Silver Proof Set"),
+ * else the variation or specialty set ("Box Packaging", "Prestige Proof Set"). */
+export function setLineName(variety: string | null): string {
+  if (!variety) return "Main set";
+  const rest = variety.replace(/^(?:\d+c |\$\d+ )?(?:Clad |Silver )?(?:Proof Set|Uncirculated Set|Special Mint Set)(?:,\s*|$)/i, "");
+  return rest === variety ? variety : rest || "Main set";
 }

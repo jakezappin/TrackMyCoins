@@ -22,6 +22,7 @@ import {
   gradeLabel,
   money,
   profit,
+  setLineName,
   shortDate,
   slabLabel,
   soldPath,
@@ -184,6 +185,8 @@ export default function CoinDetailPage() {
   const pl = profit(coin);
   const toning = toningLabel(coin);
   const slabs = slabLabel(coin);
+  const coinType = coinTypes.find((t) => t.id === coin.coin_type_id);
+  const isSet = Boolean(coinType?.is_set); // mint & proof sets: ungraded, in OGP
 
   return (
     <div className="page coin-page">
@@ -212,11 +215,12 @@ export default function CoinDetailPage() {
       <div className="page-head">
         <div>
           <h1>
-            {dateMint(coin)} {coinTypes.find((t) => t.id === coin.coin_type_id)?.name ?? ""} {gradeLabel(coin)}
+            {dateMint(coin)} {coinType?.name ?? ""} {isSet ? (setLineName(coin.variety) === "Main set" ? "" : setLineName(coin.variety)) : gradeLabel(coin)}
             {coin.is_sold && <span className="tag sold big">Sold</span>}
           </h1>
           <p className="muted">
-            {coin.inventory_number} · {coin.grading_service === "RAW" ? "Raw (ungraded)" : coin.grading_service}
+            {coin.inventory_number} ·{" "}
+            {isSet ? slabs.join(", ") || "Out of OGP" : coin.grading_service === "RAW" ? "Raw (ungraded)" : coin.grading_service}
             {coin.cert_number && ` #${coin.cert_number}`}
             {coin.vam && ` · ${coin.vam}`}
           </p>
@@ -318,6 +322,18 @@ export default function CoinDetailPage() {
 
         <section className="card details-card">
           <h2>Details</h2>
+          {isSet ? (
+            <dl className="facts">
+              <dt>Set</dt>
+              <dd>{coin.variety ?? "—"}</dd>
+              <dt>Packaging</dt>
+              <dd>{slabs.length ? slabs.join(", ") : "Out of OGP"}</dd>
+              <dt>Toning</dt>
+              <dd>{toning.length ? toning.join(", ") : "—"}</dd>
+              <dt>PCGS #</dt>
+              <dd>{coin.pcgs_number ?? "—"}</dd>
+            </dl>
+          ) : (
           <dl className="facts">
             <dt>Grade</dt>
             <dd>{gradeLabel(coin)}</dd>
@@ -349,6 +365,7 @@ export default function CoinDetailPage() {
             <dt>PCGS #</dt>
             <dd>{coin.pcgs_number ?? "—"}</dd>
           </dl>
+          )}
 
           <h3 className="details-sub">Purchase</h3>
           <dl className="facts">
@@ -465,6 +482,13 @@ export default function CoinDetailPage() {
         </section>
       </div>
 
+      {isSet ? (
+        <div className="coin-row">
+          <SetMeltCard melt={coin.set_melt} />
+          <AttachmentsCard inventoryNumber={coin.inventory_number} />
+        </div>
+      ) : (
+        <>
       <PcgsMarketCard
         market={coin.pcgs_market}
         cpgValue={coin.latest_cpg?.value ?? null}
@@ -492,10 +516,15 @@ export default function CoinDetailPage() {
         />
       </div>
 
+        </>
+      )}
+
+      {!isSet && (
       <div className={`coin-row${coin.is_sold ? " single" : ""}`}>
         <AttachmentsCard inventoryNumber={coin.inventory_number} />
         {!coin.is_sold && <EbayCard inv={coin.inventory_number} />}
       </div>
+      )}
     </div>
   );
 }
@@ -568,5 +597,27 @@ function CoinSummary({ coin }: { coin: CoinDetail }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Mint & proof sets: silver content times today's spot price. */
+function SetMeltCard({ melt }: { melt: CoinDetail["set_melt"] }) {
+  return (
+    <section className="card">
+      <h2>Melt Value</h2>
+      {!melt ? (
+        <p className="muted small">Silver content isn't known for this set.</p>
+      ) : melt.oz === 0 ? (
+        <p className="muted">Clad set: no precious metal, so melt is about face value.</p>
+      ) : (
+        <>
+          <div className="big-number">{melt.value != null ? money(melt.value) : "—"}</div>
+          <p className="muted small">
+            {melt.oz.toFixed(4)} oz silver{melt.spot != null && ` × ${money(melt.spot)} spot`}
+            {melt.as_of && ` · ${shortDate(melt.as_of)}`}
+          </p>
+        </>
+      )}
+    </section>
   );
 }

@@ -153,7 +153,7 @@ export default function ValueHistoryChart({
       {!geo || points.length < 2 || !hasValue ? (
         <p className="muted small">
           {one
-            ? "The chart fills in once this coin has a price. Use Get CPG Price below."
+            ? "The chart fills in once there's a price history. Use Get CPG Price below."
             : "The chart fills in as you add coins and record prices. Use Refresh prices to get CPG values for every coin."}
         </p>
       ) : (

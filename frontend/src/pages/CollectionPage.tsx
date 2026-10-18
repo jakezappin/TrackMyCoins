@@ -13,7 +13,7 @@ import { collectionPath } from "../format";
 
 export default function CollectionPage() {
   const { typeSlug = "", number } = useParams();
-  const { refresh } = useApp();
+  const { refresh, coinTypes } = useApp();
   const navigate = useNavigate();
   const [collection, setCollection] = useState<Collection | null>(null);
   const [coins, setCoins] = useState<Coin[] | null>(null);
@@ -97,7 +97,9 @@ export default function CollectionPage() {
           </Link>
           <span className="act-more">
             <MoreMenu>
-              <Link to={`${collectionPath(collection)}/upgrades`}>Upgrade Finder</Link>
+              {!coinTypes.find((t) => t.id === collection.coin_type_id)?.is_set && (
+                <Link to={`${collectionPath(collection)}/upgrades`}>Upgrade Finder</Link>
+              )}
               <Link to={`/import?collection=${collection.id}`}>Import coins</Link>
               <button type="button" onClick={() => setExporting(true)}>
                 Export to Excel…

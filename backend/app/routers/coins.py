@@ -52,6 +52,11 @@ def _validate(body: CoinFields, collection: Collection, coin_type: CoinType) -> 
             f"Mint mark must be one of {', '.join(marks)} for {coin_type.name}",
         )
     data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw"})
+    if series and series.is_set:
+        # Mint & proof sets aren't graded: no service, cert, grade, CAC or slab.
+        data.update(grading_service="RAW", cert_number=None, grade_prefix=None, grade=None, grade_plus=False,
+                    grade_star=False, strike_designation=None, cac=False, cac_sticker=None, slab_soapbox=False,
+                    slab_ngc_fatty=False, slab_rattler=False, slab_ogh=False)
     # Proof collections hold proofs; business-strike collections don't.
     if collection.finish in ("PR", "SPR"):
         if data["grade_prefix"] in (None, "PF"):

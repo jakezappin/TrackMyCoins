@@ -13,6 +13,7 @@ import httpx
 from ..config import get_settings
 from ..designations import from_greysheet_name, with_designation
 from ..models import Coin
+from ..series import BY_SLUG
 
 PROD_URL = "https://cpgpublicapiv2.greysheet.com/api"
 SANDBOX_URL = "https://cpgpublicapiv2beta.greysheet.com/api"
@@ -65,8 +66,18 @@ def get(c: httpx.Client, path: str, **params) -> list[dict]:
     return data
 
 
+def is_set(coin: Coin) -> bool:
+    ct = getattr(coin, "coin_type", None)
+    s = BY_SLUG.get(ct.slug) if ct else None
+    return bool(s and s.is_set)
+
+
 def _pick(items: list[dict], coin: Coin) -> dict | None:
-    """Choose the price row for the coin's grade, preferring a CAC row for CAC coins."""
+    """Choose the price row for the coin's grade, preferring a CAC row for CAC coins. Mint and proof sets have
+    one price, at Greysheet's "OGP" grade."""
+    if is_set(coin):
+        rows = [i for i in items if not i.get("IsCac") and _money(i.get("CpgVal")) is not None]
+        return next((i for i in rows if str(i.get("GradeLabel") or "").upper().startswith("OGP")), rows[0] if rows else None)
     rows = [i for i in items if str(i.get("Grade")) == str(coin.grade)]
     if not rows:
         return None
@@ -81,6 +92,8 @@ def _pick(items: list[dict], coin: Coin) -> dict | None:
 
 
 def require_grade(coin: Coin) -> None:
+    if is_set(coin):
+        return  # priced in OGP, no grade
     if not coin.grade:
         if coin.grading_service == "RAW":
             raise PricingError("CPG prices are by numeric grade. Give this raw coin a number (e.g. AU55) to look one up.")

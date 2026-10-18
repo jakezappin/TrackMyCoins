@@ -240,7 +240,8 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     pack = (_text(vals.get("packaging")) or "").lower() + " " + slab
     f.update(gsa_hard_pack="hard" in pack, gsa_soft_pack="soft" in pack, ike_blue_pack="blue" in pack,
              ike_brown_pack="brown" in pack,
-             ogp=bool(re.search(r"\bogp\b|original (government|mint) packag", pack)) or (_text(vals.get("ogp")) or "").lower() in YES)
+             ogp=bool(re.search(r"\bogp\b|original (government|mint) packag", pack)) or (_text(vals.get("ogp")) or "").lower() in YES,
+             capital_holder="capital" in pack)
     toning = (_text(vals.get("toning")) or "").lower()
     f.update(toning_obverse="obv" in toning, toning_reverse="rev" in toning, toning_dual="dual" in toning,
              toning_rainbow="rainbow" in toning)

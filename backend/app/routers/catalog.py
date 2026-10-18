@@ -4,6 +4,7 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
@@ -101,3 +102,27 @@ def catalog_match(
         best=CandidateOut(**r.best.__dict__) if r.best else None,
         message=r.message,
     )
+
+
+@router.get("/coin-types/{coin_type_id}/sets")
+def catalog_sets(coin_type_id: int, year: int | None = None, db: Session = Depends(get_db), _: User = Depends(current_user)):
+    """Mint & proof set series: every set the catalog lists (optionally for one year), for the form's picker.
+    `name` is the checklist line ("" for the year's main set); `variety`/`pcgs_number` are what the item stores."""
+    from ..models import CatalogEntry
+    from ..services import checklist, set_melt
+
+    ct = _coin_type(db, coin_type_id)
+    _ensure_synced(db, ct)
+    q = select(CatalogEntry).where(CatalogEntry.coin_type_id == ct.id)
+    if year is not None:
+        q = q.where(CatalogEntry.year == year)
+    out = []
+    for e in db.scalars(q.order_by(CatalogEntry.year, CatalogEntry.id)):
+        line = checklist.set_line_name(ct.slug, e.variety)
+        out.append({
+            "gsid": e.gsid, "year": e.year, "mint_mark": e.mint_mark, "variety": e.variety, "pcgs_number": e.pcgs_number,
+            "name": line or "", "label": f"{e.year}{'' if e.mint_mark == 'P' else '-' + e.mint_mark} {line or 'Main set'}",
+            "extra": bool(checklist.EXTRA_SETS.get(ct.slug) and e.variety and checklist.EXTRA_SETS[ct.slug].search(e.variety)),
+            "silver_oz": set_melt.silver_oz(ct.slug, e.year, e.variety),
+        })
+    return out

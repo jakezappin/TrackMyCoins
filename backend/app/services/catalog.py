@@ -80,6 +80,8 @@ def parse_collectible(d: dict) -> dict | None:
     if "[TYPE]" in name.upper() or d.get("IsSet") is True or d.get("IsType") is True:
         return None
     coin_date = _clean(d.get("CoinDate")) or ""
+    # Sets: "1776~2026-S-S" (mint repeated) and "1976-P,D" (coins from two mints): keep the first mint.
+    coin_date = re.sub(r"-([A-Z]{1,2})(?:-\1|,[A-Z]{1,2})$", r"-\1", coin_date)
     for dual, issued in _DUAL_ISSUED.items():
         if coin_date.startswith(dual):
             coin_date = issued + coin_date[len(dual):]
@@ -106,7 +108,7 @@ def parse_collectible(d: dict) -> dict | None:
         tags = " ".join(x for x in (_clean(d.get("Variety")), _clean(d.get("Variety2"))) if x).upper()
         if strike == "SMS" and "SMS" not in tags:
             finish_note = "SMS"
-        elif strike == "SP" and not any(w in tags for w in ("SATIN", "SPECIMEN", "SMS")):
+        elif strike == "SP" and not any(w in tags for w in ("SATIN", "SPECIMEN", "SMS", "SPECIAL MINT")):
             finish_note = "Specimen"
         strike = "MS"
     if m.group("over"):
@@ -122,6 +124,8 @@ def parse_collectible(d: dict) -> dict | None:
     for v in (m.group("extra"), _clean(d.get("Variety")), _clean(d.get("Variety2"))):
         # "Morgan, Liberty Bell Privy" (the modern dollars): the series name isn't part of the variety.
         v = re.sub(r"^(?:S\$1 )?(?:Morgan|Peace)(?:, |$)", "", v or "").strip() or None
+        # Sets: the coin count isn't part of the name ("Proof Set, 5 Coins" -> "Proof Set").
+        v = re.sub(r"(?:^|,\s*)\d+ Coins$", "", v or "").strip(" ,") or None
         if v and v.upper() not in _IGNORED_VARIETIES:
             parts.append(v)
     if finish_note:
@@ -173,6 +177,8 @@ def sync(db: Session, coin_type: CoinType) -> SyncResult:
             if (series.only and not re.search(series.only, name)) or (series.skip and re.search(series.skip, name)):
                 continue
         if parsed:
+            if series is not None and series.is_set:
+                parsed["strike"] = "MS"  # proof sets too: a set collection has one finish
             rows.setdefault(parsed["gsid"], {**parsed, "node_id": nid})
     if not rows:
         raise PricingError(f"Greysheet returned no {coin_type.name} items")

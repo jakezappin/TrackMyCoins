@@ -9,6 +9,7 @@ import {
   type GradingService,
   type LabelReading,
   type LookupResult,
+  type SetOption,
 } from "../api";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
@@ -41,6 +42,7 @@ const EMPTY: CoinFields = {
   ike_blue_pack: false,
   ike_brown_pack: false,
   ogp: false,
+  capital_holder: false,
   toning_obverse: false,
   toning_reverse: false,
   toning_dual: false,
@@ -76,7 +78,7 @@ const OGP_SERIES = [
   "gold-eagles-25",
   "gold-eagles-50",
 ];
-type PackKey = "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_pack" | "ogp";
+type PackKey = "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack" | "ike_brown_pack" | "ogp" | "capital_holder";
 const VARIETY_HINTS: Record<string, string> = {
   "classic-commemoratives": "e.g. Alabama, Boone",
   "washington-quarters": "Design from 1999 on, e.g. Delaware, Yellowstone",
@@ -192,6 +194,12 @@ export default function CoinFormPage() {
   const finish = collection?.finish ?? "MS";
   const isProof = finish !== "MS";
   const isRaw = form.grading_service === "RAW";
+  // Mint & proof sets: not graded; pick the set, keep it in OGP (or a Capital holder).
+  const isSetSeries = Boolean(coinType?.is_set);
+  useEffect(() => {
+    if (!isSetSeries) return;
+    setForm((f) => ({ ...f, grading_service: "RAW", cert_number: null, ...(editInv ? {} : { ogp: true }) }));
+  }, [isSetSeries, editInv]);
   // Packaging checkboxes that apply to this series/finish: [field, label, the field it excludes].
   const packaging: [PackKey, string, PackKey | null][] = [];
   if (coinType && GSA_SERIES.includes(coinType.slug)) {
@@ -202,7 +210,9 @@ export default function CoinFormPage() {
   }
   // Still in its Original Government Packaging: modern commemoratives, modern Morgans and Peace dollars, Silver and
   // Gold Eagles, and Blue / Brown Pack Ikes.
-  if (
+  if (isSetSeries) {
+    packaging.push(["ogp", "OGP (original government packaging)", null], ["capital_holder", "Capital Holder", null]);
+  } else if (
     (coinType && OGP_SERIES.includes(coinType.slug)) ||
     (coinType?.slug === "ike-dollars" && (form.ike_blue_pack || form.ike_brown_pack || form.ogp))
   ) {
@@ -596,13 +606,13 @@ export default function CoinFormPage() {
   return (
     <form className="page coin-form" onSubmit={submit}>
       <div className="page-head">
-        <h1>{editInv ? `Edit ${inventoryNumber}` : "Add Coin"}</h1>
+        <h1>{editInv ? `Edit ${inventoryNumber}` : isSetSeries ? "Add Set" : "Add Coin"}</h1>
         <div className="row">
           <button type="button" className="btn" onClick={() => navigate(-1)}>
             Cancel
           </button>
           <button className="btn btn-primary" disabled={saving}>
-            {saving ? "Saving…" : "Save coin"}
+            {saving ? "Saving…" : isSetSeries ? "Save set" : "Save coin"}
           </button>
         </div>
       </div>
@@ -626,6 +636,7 @@ export default function CoinFormPage() {
       )}
 
       {/* ---- Lookup ---- */}
+      {!isSetSeries && (
       <section className="card form-section lookup">
         <div className="section-head">
           <h2>Grading Service</h2>
@@ -806,10 +817,11 @@ export default function CoinFormPage() {
           </div>
         )}
       </section>
+      )}
 
       {/* ---- Coin ---- */}
       <section className="card form-section">
-        <h2>Coin</h2>
+        <h2>{isSetSeries ? "Set" : "Coin"}</h2>
         <div className="grid-4">
           <label className="field">
             <span>Collection</span>
@@ -848,6 +860,16 @@ export default function CoinFormPage() {
             <span>Year</span>
             <input type="number" min={1700} max={new Date().getFullYear() + 1} step={1} required {...text("year")} />
           </label>
+          {isSetSeries && coinType ? (
+            <SetPicker
+              coinTypeId={coinType.id}
+              year={Number(form.year) || null}
+              mintMark={form.mint_mark}
+              variety={form.variety}
+              onPick={(o) => setForm((f) => ({ ...f, mint_mark: o.mint_mark, variety: o.variety, pcgs_number: o.pcgs_number }))}
+            />
+          ) : (
+            <>
           <label className="field">
             <span>Mint</span>
             <select {...text("mint_mark")} required>
@@ -866,6 +888,8 @@ export default function CoinFormPage() {
               maxLength={150}
             />
           </label>
+            </>
+          )}
         </div>
         {coinType && VAM_SERIES.includes(coinType.slug) && (
           <div className="grid-4">
@@ -875,6 +899,8 @@ export default function CoinFormPage() {
             </label>
           </div>
         )}
+        {!isSetSeries && (
+          <>
         <div className="grid-4">
           <label className="field">
             <span>{isRaw ? "Grade (optional)" : "Grade"}</span>
@@ -938,10 +964,13 @@ export default function CoinFormPage() {
             ))}
           </div>
         )}
+          </>
+        )}
       </section>
 
       {/* ---- CAC / slab / packaging / toning ---- */}
       <div className="grid-3">
+        {!isSetSeries && (
         <section className={`card form-section ${isRaw ? "not-applicable" : ""}`}>
           <h2>CAC</h2>
           <div className="checks col">
@@ -971,8 +1000,10 @@ export default function CoinFormPage() {
             {isRaw && <p className="muted small">Not applicable to raw coins</p>}
           </div>
         </section>
+        )}
         <section className="card form-section">
-          <h2>Collector Slab</h2>
+          <h2>{isSetSeries ? "Packaging" : "Collector Slab"}</h2>
+          {!isSetSeries && (
           <div className={`checks col ${isRaw ? "not-applicable" : ""}`}>
             {(
               [
@@ -988,9 +1019,10 @@ export default function CoinFormPage() {
             ))}
             {isRaw && <p className="muted small">Not applicable to raw coins</p>}
           </div>
+          )}
           {packaging.length > 0 && (
             <>
-              <h3 className="subhead">Packaging</h3>
+              {!isSetSeries && <h3 className="subhead">Packaging</h3>}
               <div className="checks col">
                 {packaging.map(([key, label, other]) => (
                   <label key={key}>
@@ -1113,7 +1145,7 @@ export default function CoinFormPage() {
             Cancel
           </button>
           <button className="btn btn-primary" disabled={saving}>
-            {saving ? "Saving…" : "Save coin"}
+            {saving ? "Saving…" : isSetSeries ? "Save set" : "Save coin"}
           </button>
         </div>
       </div>
@@ -1185,4 +1217,70 @@ function pickCollection(
     if (!best || score > best.score) best = { id: c.id, score };
   }
   return best?.id ?? null;
+}
+
+/** Mint & proof sets: choose which of the year's sets this is (main set, a variation, or a specialty set). */
+function SetPicker({
+  coinTypeId,
+  year,
+  mintMark,
+  variety,
+  onPick,
+}: {
+  coinTypeId: number;
+  year: number | null;
+  mintMark: string;
+  variety: string | null;
+  onPick: (o: SetOption) => void;
+}) {
+  const [options, setOptions] = useState<SetOption[] | null>(null);
+  useEffect(() => {
+    if (!year || year < 1900) {
+      setOptions(null);
+      return;
+    }
+    let live = true;
+    api
+      .sets(coinTypeId, year)
+      .then((o) => live && setOptions(o))
+      .catch(() => live && setOptions([]));
+    return () => {
+      live = false;
+    };
+  }, [coinTypeId, year]);
+  const key = (o: { mint_mark: string; variety: string | null }) => `${o.mint_mark}|${o.variety ?? ""}`;
+  const current = `${mintMark}|${variety ?? ""}`;
+  // A new item: start on the year's main set.
+  useEffect(() => {
+    if (options?.length && !options.some((o) => key(o) === current)) onPick(options.find((o) => !o.name) ?? options[0]);
+  }, [options]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <label className="field grow-2">
+      <span>Set</span>
+      {options === null ? (
+        <select disabled>
+          <option>Enter the year first</option>
+        </select>
+      ) : options.length === 0 ? (
+        <select disabled>
+          <option>No sets that year</option>
+        </select>
+      ) : (
+        <select
+          value={current}
+          onChange={(e) => {
+            const o = options.find((x) => key(x) === e.target.value);
+            if (o) onPick(o);
+          }}
+        >
+          {options.map((o) => (
+            <option key={o.gsid} value={key(o)}>
+              {o.label}
+              {o.extra ? " (other set)" : ""}
+            </option>
+          ))}
+        </select>
+      )}
+    </label>
+  );
 }

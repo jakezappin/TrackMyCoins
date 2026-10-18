@@ -98,6 +98,7 @@ def list_coin_types(db: Session = Depends(get_db), _: User = Depends(current_use
             mint_marks=t.mint_marks,
             metal=BY_SLUG[t.slug].metal if t.slug in BY_SLUG else "silver",
             is_type_set=t.slug in BY_SLUG and BY_SLUG[t.slug].is_type_set,
+            is_set=t.slug in BY_SLUG and BY_SLUG[t.slug].is_set,
             member_ids=[
                 id_by_slug[m.slug]
                 for m in (type_set_members(BY_SLUG[t.slug]) if t.slug in BY_SLUG and BY_SLUG[t.slug].is_type_set else [])

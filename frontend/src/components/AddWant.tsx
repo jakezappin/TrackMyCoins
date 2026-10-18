@@ -15,6 +15,8 @@ export default function AddWant(props: {
   gradePrefix?: string | null;
   maxPrice?: string | null;
   label: string;
+  /** Mint & proof sets: no target grade */
+  noGrade?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
@@ -38,8 +40,8 @@ export default function AddWant(props: {
         year: props.year,
         mint_mark: props.mintMark,
         variety: props.variety,
-        grade_prefix: grade ? prefix : null,
-        grade: grade ? Number(grade) : null,
+        grade_prefix: grade && !props.noGrade ? prefix : null,
+        grade: grade && !props.noGrade ? Number(grade) : null,
         max_price: price.value,
       });
       setDone(true);
@@ -64,6 +66,7 @@ export default function AddWant(props: {
               <h2>Add To Want List</h2>
               <p className="strong">{props.label}</p>
               <div className="row">
+                {!props.noGrade && (
                 <label className="field">
                   <span>Target grade</span>
                   <div className="row tight">
@@ -75,6 +78,7 @@ export default function AddWant(props: {
                     <input type="number" min={1} max={70} step={1} value={grade} onChange={(e) => setGrade(e.target.value)} placeholder="65" />
                   </div>
                 </label>
+                )}
                 <label className="field">
                   <span>Max price (optional)</span>
                   <input type="text" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} placeholder="0.00" />

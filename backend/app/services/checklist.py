@@ -59,6 +59,29 @@ def _silver_eagle_issue(variety: str) -> str | None:
     return ", ".join(kept) or None
 
 
+# Mint & proof sets: the year's main set is the line ("1992-S"); variations keep their name ("1955 Box
+# Packaging", "1936 Brilliant Finish"). Specialty sets (Prestige, Premier, quarters-only...) are listed under
+# "Other sets", outside the count.
+_SET_BASE = re.compile(r"^(?:\d+c |\$\d+ )?(?:Clad |Silver )?(?:Proof Set|Uncirculated Set|Special Mint Set)(?:,\s*|$)", re.I)
+EXTRA_SETS = {
+    "us-proof-sets": re.compile(r"Prestige|Quarters|Presidential|Innovation|Limited Edition|Bicentennial", re.I),
+    "us-silver-proof-sets": re.compile(r"Premier|Limited Edition|Quarters|Silver Reverse Proof Set|Innovation", re.I),
+    "us-mint-sets": re.compile(r"Presidential|America the Beautiful|\(ATB\)|40% Silver|Enhanced", re.I),
+}
+
+
+def _set_issue(variety: str) -> str | None:
+    return _SET_BASE.sub("", variety).strip(" ,") or None
+
+
+def set_line_name(slug: str, variety: str | None) -> str | None:
+    """The checklist name of a set: None for the year's main set, else the variation or specialty set."""
+    if not variety:
+        return None
+    extra = EXTRA_SETS.get(slug)
+    return variety if extra and extra.search(variety) else _set_issue(variety)
+
+
 # Where to check off by issue instead of just year + mint: series -> [(applies(year, mint), issue name from variety)].
 ISSUE_RULES = {
     "classic-commemoratives": [(lambda y, m: True, _variety_with_overdate)],
@@ -71,6 +94,9 @@ ISSUE_RULES = {
     "america-250": [(lambda y, m: True, _full)],
     "american-silver-eagles": [(lambda y, m: True, _silver_eagle_issue)],
     # 2021 CC and O privies, Enhanced Uncirculated, Diamond Field, Reverse Proofs: lines of their own.
+    "us-mint-sets": [(lambda y, m: True, lambda v: set_line_name("us-mint-sets", v))],
+    "us-proof-sets": [(lambda y, m: True, lambda v: set_line_name("us-proof-sets", v))],
+    "us-silver-proof-sets": [(lambda y, m: True, lambda v: set_line_name("us-silver-proof-sets", v))],
     "modern-morgan-dollars": [(lambda y, m: True, _full)],
     "modern-peace-dollars": [(lambda y, m: True, _full)],
     # 8TF, 7TF Reverse of 1878, 7TF Reverse of 1879, 7/8TF Strong, 7/8TF Weak are collected as separate coins.
@@ -99,6 +125,7 @@ class Row:
     type_row: bool = False  # a type-set line: one design, any date
     label_text: str | None = None  # fixed label (mixed-series type sets)
     series_id: int | None = None  # mixed-series type sets: the series that owns this line
+    extra: bool = False  # a specialty set: listed, not counted
 
     @property
     def label(self) -> str:
@@ -115,6 +142,7 @@ class Row:
 class Checklist:
     rows: list[Row]
     others: list[Coin]  # owned coins that don't match any catalog date/mint
+    extras: list[Row] = field(default_factory=list)  # specialty sets: listed, not counted
 
     @property
     def filled(self) -> int:
@@ -251,6 +279,8 @@ def build(db: Session, col: Collection, mode: str = "full") -> Checklist:
             key,
             Row(key=key, year=e.year, mint_mark=e.mint_mark, variety=variety, order=e.id, type_row=type_set),
         )
+        if slug in EXTRA_SETS and e.variety and EXTRA_SETS[slug].search(e.variety):
+            row.extra = True
         row.order = min(row.order, e.id)
         row.year = min(row.year, e.year)
         row.years.add(e.year)
@@ -277,7 +307,9 @@ def build(db: Session, col: Collection, mode: str = "full") -> Checklist:
             if any(r.variety for r in candidates):
                 # Several issues that date: the coin's variety says which one (e.g. "Delaware", "8TF").
                 hit = _best_variety_match(candidates, coin.variety)
-                candidates = [hit] if hit else []
+                plain = [r for r in candidates if not r.variety]
+                # Nothing more specific matches: the date's plain line (a year's main set, say).
+                candidates = [hit] if hit else plain if len(plain) == 1 else []
             row = candidates[0] if len(candidates) == 1 else None
         (row.coins if row else others).append(coin)
 
@@ -295,7 +327,7 @@ def build(db: Session, col: Collection, mode: str = "full") -> Checklist:
         return (r.year, position, MINT_ORDER.get(r.mint_mark, 9))
 
     ordered = sorted(rows.values(), key=sort_key)
-    return Checklist(rows=ordered, others=others)
+    return Checklist(rows=[r for r in ordered if not r.extra], others=others, extras=[r for r in ordered if r.extra])
 
 
 # Conventional order within a year: Philadelphia first, then branch mints.

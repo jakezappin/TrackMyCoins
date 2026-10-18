@@ -23,6 +23,7 @@ CATEGORIES = [
     "Gold",
     "American Eagles",
     "Commemoratives",
+    "Mint & Proof Sets",
     "Type Sets",
 ]
 
@@ -45,12 +46,19 @@ class Series:
     # `only` and not `skip` (regexes).
     only: str | None = None
     skip: str | None = None
+    # "set": U.S. Mint packaged sets (mint sets, proof sets) — kept in the Mint's packaging, not graded, priced
+    # at Greysheet's single "OGP" grade, one checklist line per year.
+    kind: str = "coin"
     finishes: tuple[str, ...] = field(init=False)
 
     def __post_init__(self):
         f = (["MS"] if self.ms_nodes or self.type_rows else []) + (["PR"] if self.pr_nodes else [])
         f += ["SPR"] if self.silver_proofs else []
         object.__setattr__(self, "finishes", tuple(f))
+
+    @property
+    def is_set(self) -> bool:
+        return self.kind == "set"
 
     @property
     def is_type_set(self) -> bool:
@@ -63,7 +71,7 @@ class Series:
         return "gold" if gold else "silver"
 
 
-C, N, D, Q, H, DOL, GOLD, ASE, COM, TYPESETS = CATEGORIES
+C, N, D, Q, H, DOL, GOLD, ASE, COM, SETS, TYPESETS = CATEGORIES
 GOLD_MINTS = ("P", "C", "D", "O", "S", "CC")  # C = Charlotte, D = Dahlonega (to 1861) or Denver
 SERIES: list[Series] = [
     # Cents
@@ -178,6 +186,14 @@ SERIES: list[Series] = [
     # half and the dollar; proofs (clad and silver) and the Liberty Bell silver and gold issues.
     Series("america-250", "America 250 (2026)", "America 250 (2026)", "A250", COM, ("P", "D", "S", "W"),
            (16071, 16037, 16073, 16278), (16072, 16038, 16074, 16066), silver_proofs=True),
+    # U.S. Mint packaged sets, one line per year (Greysheet's multi-year bundles are left out). Proof sets
+    # are split into clad (and pre-1965 silver) Proof Sets and Silver Proof Sets (1976 3-coin, 1992 on).
+    Series("us-mint-sets", "U.S. Mint Set", "U.S. Mint Sets", "UMS", SETS, ("P", "D", "S", "W"), (9551, 9694),
+           skip=r"Items\)|Collection \d", kind="set"),
+    Series("us-proof-sets", "U.S. Proof Set", "U.S. Proof Sets", "UPS", SETS, ("P", "S", "W"), (9020,),
+           skip=r"\bSilver\b|Items\)|Collection \d", kind="set"),
+    Series("us-silver-proof-sets", "U.S. Silver Proof Set", "U.S. Silver Proof Sets", "USPS", SETS,
+           ("P", "S", "W"), (9020,), only=r"\bSilver\b", skip=r"Items\)|Collection \d", kind="set"),
 ]
 
 # Mixed-series type sets. Each line is one design; a coin fills it when its catalog entry comes from that node.

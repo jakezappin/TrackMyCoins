@@ -43,6 +43,7 @@ class StatusOut(BaseModel):
     filled: int
     rows: list[StatusRow]
     others: list[CoinOut]
+    extras: list[StatusRow] = []  # specialty sets (mint & proof sets): listed, not counted
 
 
 def _build(db: Session, col: Collection, mode: str = "full") -> checklist.Checklist:
@@ -76,6 +77,10 @@ def collection_status(
             for r in cl.rows
         ],
         others=[coin_out(c) for c in cl.others],
+        extras=[
+            StatusRow(label=r.label, year=r.year, mint_mark=r.mint_mark, variety=r.variety, coins=[coin_out(c) for c in r.coins])
+            for r in cl.extras
+        ],
     )
 
 
@@ -140,7 +145,7 @@ COIN_COLUMNS = [
                                             (c.slab_rattler, "Rattler"), (c.slab_ogh, "OGH")])),
     ("Packaging", 14, lambda c: _join([(c.gsa_hard_pack, "GSA Hard Pack"), (c.gsa_soft_pack, "GSA Soft Pack"),
                                        (c.ike_blue_pack, "Blue Pack"), (c.ike_brown_pack, "Brown Pack"),
-                                       (c.ogp, "OGP")])),
+                                       (c.ogp, "OGP"), (c.capital_holder, "Capital Holder")])),
     ("Toning", 14, lambda c: _join([(c.toning_obverse, "Obverse"), (c.toning_reverse, "Reverse"),
                                     (c.toning_dual, "Dual"), (c.toning_rainbow, "Rainbow")])),
     ("PCGS #", 9, lambda c: c.pcgs_number),

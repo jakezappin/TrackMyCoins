@@ -312,6 +312,8 @@ class Coin(Base):
     ike_brown_pack: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Still in its Original Government Packaging (modern commemoratives, Blue/Brown Pack Ikes).
     ogp: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Mint & proof sets: coins moved to (or kept alongside) a Capital Plastics holder.
+    capital_holder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     # Toning
     toning_obverse: Mapped[bool] = mapped_column(Boolean, default=False)

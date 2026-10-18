@@ -183,7 +183,16 @@ def coin_detail(coin: Coin) -> CoinDetail:
         pcgs_market=coin.pcgs_market,
         facts=coin_facts(coin),
         purchase_value=_purchase_value(coin),
+        set_melt=_set_melt(coin),
     )
+
+
+def _set_melt(coin: Coin) -> dict | None:
+    from ..series import BY_SLUG
+    from . import set_melt
+
+    s = BY_SLUG.get(coin.coin_type.slug)
+    return set_melt.melt(s.slug, coin.year, coin.variety) if s and s.is_set else None
 
 
 def _purchase_value(coin: Coin) -> PurchaseValue | None:

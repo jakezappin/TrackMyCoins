@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { Coin } from "../api";
 import CoinPlaceholder from "./CoinPlaceholder";
 import { useApp } from "../App";
-import { coinPath, dateMint, metalFor, serviceLabel, gradeLabel, money, profit, shortDate, slabLabel, toningLabel } from "../format";
+import { coinPath, dateMint, metalFor, serviceLabel, gradeLabel, money, profit, setLineName, shortDate, slabLabel, toningLabel } from "../format";
 
 type SortKey = "inventory" | "date" | "grade" | "paid" | "cpg" | "sold";
 
@@ -22,6 +22,8 @@ export default function CoinTable({ coins, mode }: Props) {
     dir: mode === "sold" ? -1 : 1,
   });
 
+  // Mint & proof sets aren't graded: their "grade" column shows which set.
+  const setTypeIds = useMemo(() => new Set(coinTypes.filter((t) => t.is_set).map((t) => t.id)), [coinTypes]);
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = coins.filter((c) => {
@@ -166,9 +168,9 @@ export default function CoinTable({ coins, mode }: Props) {
                       {dateMint(c)}
                       {c.vam && <span className="sub"> {c.vam}</span>}
                     </td>
-                    <td className="c-grade">{gradeLabel(c)}</td>
+                    <td className="c-grade">{setTypeIds.has(c.coin_type_id) ? setLineName(c.variety) : gradeLabel(c)}</td>
                     <td className="c-svc">
-                      {serviceLabel(c.grading_service)}
+                      {setTypeIds.has(c.coin_type_id) ? "—" : serviceLabel(c.grading_service)}
                       {c.cert_number && <span className="sub mono"> {c.cert_number}</span>}
                     </td>
                     <td className="c-tags">
