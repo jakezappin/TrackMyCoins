@@ -160,7 +160,10 @@ export default function CoinFormPage() {
   const [baseline, setBaseline] = useState<string | null>(editInv ? null : JSON.stringify(EMPTY));
   const leaving = useRef(false);
   const submitting = useRef(false);
-  const dirty = baseline !== null && (JSON.stringify(form) !== baseline || files.length > 0 || importUrls.length > 0);
+  // Choices kept outside `form` (collection, an error coin's value, the At Grading submission) count as edits too.
+  const [touchedExtra, setTouchedExtra] = useState(false);
+  const dirty =
+    baseline !== null && (JSON.stringify(form) !== baseline || files.length > 0 || importUrls.length > 0 || touchedExtra);
   /** A change the form makes itself (a proof collection's PR prefix, a set's OGP): if nothing has been typed yet,
    * it doesn't count as an unsaved edit. */
   const autoAdjust = (fn: (f: CoinFields) => CoinFields) =>
@@ -204,6 +207,7 @@ export default function CoinFormPage() {
         const fields = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, c[k as keyof CoinFields]])) as unknown as CoinFields;
         setForm(fields);
         setBaseline(JSON.stringify(fields));
+        restoreExpiredDraft(fields);
         setCollectionId(c.collection_id);
         setMemberTypeId(c.coin_type_id);
         setInventoryNumber(c.inventory_number);
@@ -573,6 +577,24 @@ export default function CoinFormPage() {
     setFindMsg(`Picked ${c.name}${c.variety ? ` (${c.variety})` : ""}`);
   }
 
+  // A save that met an expired session kept the form (keepExpiredDraft); put it back once, with a note.
+  const [restored, setRestored] = useState(false);
+  function restoreExpiredDraft(loaded: CoinFields | null) {
+    const d = takeExpiredDraft(location.pathname);
+    if (!d) return;
+    setForm({ ...(loaded ?? EMPTY), ...d.form });
+    if (d.collectionId != null) setCollectionId(d.collectionId);
+    setMemberTypeId(d.memberTypeId);
+    setErrorValue(d.errorValue ?? "");
+    if (d.grading) setGrading(d.grading);
+    setNewCollection(d.newCollection ?? null);
+    setTouchedExtra(true);
+    setRestored(true);
+  }
+  useEffect(() => {
+    if (!editInv) restoreExpiredDraft(null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** A coin picked in the search: its collection (or a new one), date, mint, variety, designation and PCGS #. */
   function pickFromCatalog(h: CatalogHit) {
     if (h.collection_id) {
@@ -706,6 +728,9 @@ export default function CoinFormPage() {
     } catch (err) {
       if (err instanceof ApiError && err.duplicate) {
         setDup({ service: form.grading_service, cert: form.cert_number ?? "", duplicate: err.duplicate });
+      } else if (err instanceof ApiError && err.status === 401) {
+        // Signed out while saving: keep what was entered, to put back after signing in again.
+        keepExpiredDraft(location.pathname, { form, collectionId, memberTypeId, errorValue, grading, newCollection });
       } else {
         setError((err as Error).message);
       }
@@ -740,6 +765,9 @@ export default function CoinFormPage() {
 
   return (
     <form className="page coin-form" onSubmit={submit}>
+      {restored && (
+        <p className="notice small">You were signed out while saving. What you'd entered is back; check it and save again.</p>
+      )}
       <div className="page-head">
         <h1>{editInv ? `Edit ${inventoryNumber}` : isSetSeries ? "Add Set" : "Add Coin"}</h1>
         <div className="row">
@@ -973,6 +1001,7 @@ export default function CoinFormPage() {
                 if (e.target.value === "new") return;
                 setNewCollection(null);
                 setCollectionId(Number(e.target.value));
+                setTouchedExtra(true);
               }}
             >
               {newCollection && !collectionId && <option value="new">New: {newCollection.label} (made when you save)</option>}
@@ -1188,7 +1217,15 @@ export default function CoinFormPage() {
               </label>
               <label className="field">
                 <span>Estimated value ($)</span>
-                <input value={errorValue} onChange={(e) => setErrorValue(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                <input
+                  value={errorValue}
+                  onChange={(e) => {
+                    setErrorValue(e.target.value);
+                    setTouchedExtra(true);
+                  }}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                />
               </label>
             </>
           )}
@@ -1311,7 +1348,10 @@ export default function CoinFormPage() {
         location={form.location}
         onLocation={(l) => set("location", l)}
         pick={grading}
-        onPick={setGrading}
+        onPick={(p) => {
+          setGrading(p);
+          setTouchedExtra(true);
+        }}
         current={editInv ? currentGrading : null}
       />
 
@@ -1650,4 +1690,34 @@ function LocationCard({
       )}
     </section>
   );
+}
+
+// ---- Keeping a coin form across an expired session ----
+const EXPIRED_KEY = (path: string) => `tmc-unsaved-coin:${path}`;
+type ExpiredDraft = {
+  form: CoinFields;
+  collectionId: number | null;
+  memberTypeId: number | null;
+  errorValue: string;
+  grading: GradingPick | null;
+  newCollection: { coin_type_id: number; finish: Finish; label: string } | null;
+};
+
+function keepExpiredDraft(path: string, d: ExpiredDraft) {
+  try {
+    sessionStorage.setItem(EXPIRED_KEY(path), JSON.stringify({ ...d, savedAt: Date.now() }));
+  } catch {
+    // No storage: nothing to keep.
+  }
+}
+
+function takeExpiredDraft(path: string): ExpiredDraft | null {
+  try {
+    const raw = sessionStorage.getItem(EXPIRED_KEY(path));
+    sessionStorage.removeItem(EXPIRED_KEY(path));
+    const d = raw ? JSON.parse(raw) : null;
+    return d && Date.now() - d.savedAt < 60 * 60 * 1000 ? (d as ExpiredDraft) : null;
+  } catch {
+    return null;
+  }
 }

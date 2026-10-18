@@ -40,7 +40,8 @@ export default function StorageSpotPage() {
   }
 
   async function remove() {
-    if (!confirm(`Delete ${spot!.name}? Its ${n} item${n === 1 ? "" : "s"} stay in your collections, just not stored anywhere.`)) return;
+    const what = n === 0 ? "" : n === 1 ? " The item in it stays in your collection, just not stored anywhere." : ` The ${n} items in it stay in your collections, just not stored anywhere.`;
+    if (!confirm(`Delete ${spot!.name}?${what}`)) return;
     try {
       await api.deleteStorageSpot(spot!.id);
       navigate("/storage");

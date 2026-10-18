@@ -12,6 +12,10 @@ export default function CoinSearch({ onPick }: { onPick: (h: CatalogHit) => void
   const [picked, setPicked] = useState<string | null>(null);
   const listId = useId();
   const box = useRef<HTMLDivElement>(null);
+  // The term the hits are for, and an Enter pressed before they arrived: it picks the best match for what was
+  // typed, never one left from the previous search (and never submits the coin form).
+  const hitsFor = useRef("");
+  const enterPending = useRef(false);
 
   useEffect(() => {
     const term = q.trim();
@@ -26,9 +30,14 @@ export default function CoinSearch({ onPick }: { onPick: (h: CatalogHit) => void
         .catalogSearch(term)
         .then((h) => {
           if (!live) return;
+          hitsFor.current = term;
           setHits(h);
           setActive(0);
           setOpen(true);
+          if (enterPending.current) {
+            enterPending.current = false;
+            pick(h[0]);
+          }
         })
         .catch(() => live && setHits([]))
         .finally(() => live && setLoading(false));
@@ -49,6 +58,7 @@ export default function CoinSearch({ onPick }: { onPick: (h: CatalogHit) => void
   }, []);
 
   function pick(h: CatalogHit | undefined) {
+    enterPending.current = false;
     if (!h) return;
     onPick(h);
     setPicked(`${h.label}${h.detail ? ` · ${h.detail}` : ""}`);
@@ -74,9 +84,10 @@ export default function CoinSearch({ onPick }: { onPick: (h: CatalogHit) => void
             } else if (e.key === "ArrowUp") {
               e.preventDefault();
               setActive((a) => Math.max(a - 1, 0));
-            } else if (e.key === "Enter" && showList) {
-              e.preventDefault();
-              pick(hits[active]);
+            } else if (e.key === "Enter") {
+              e.preventDefault(); // Enter here never submits the coin form
+              if (hitsFor.current === q.trim()) pick(hits[active]);
+              else if (q.trim().length >= 3) enterPending.current = true;
             } else if (e.key === "Escape") {
               setOpen(false);
             }

@@ -83,9 +83,7 @@ def search(db: Session, user_id: int, q: str, limit: int = 12) -> list[dict]:
         stmt = stmt.where(CatalogEntry.coin_type_id.in_(p.series_ids))
     if p.mint:
         stmt = stmt.where(CatalogEntry.mint_mark == p.mint)
-    rows = db.execute(stmt.limit(3000)).all()
-    if p.year is None and len(rows) > 400:
-        rows = rows[:400]
+    rows = db.execute(stmt.limit(5000)).all()  # scored below, so a match isn't cut off before it's ranked
 
     def score(e: CatalogEntry) -> tuple:
         variety_words = set(_WORD.findall(catalog.label_variety(e.variety))) if e.variety else set()

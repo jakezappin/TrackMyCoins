@@ -52,7 +52,7 @@ def fineness(composition: str | None) -> dict[str, float]:
 
 def _fetch_spot(metal: str) -> tuple[float | None, str | None]:
     try:
-        r = httpx.get(SPOT_URL.format(symbol=SYMBOLS[metal]), timeout=5)
+        r = httpx.get(SPOT_URL.format(symbol=SYMBOLS[metal]), timeout=4)
         r.raise_for_status()
         body = r.json()
         price = float(body["price"])
@@ -78,6 +78,14 @@ def spot(metal: str) -> tuple[float | None, str | None]:
             return last[1], last[2]
         _spot[metal] = (time.time(), price, updated)
     return price, updated
+
+
+def spots(metals: list[str]) -> dict[str, tuple[float | None, str | None]]:
+    """Several metals at once: fetched side by side, so a down price service costs one timeout, not one per metal."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=len(metals) or 1) as pool:
+        return dict(zip(metals, pool.map(spot, metals)))
 
 
 def melt(weight_g: float | None, composition: str | None) -> dict | None:

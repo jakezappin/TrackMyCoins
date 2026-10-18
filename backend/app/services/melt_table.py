@@ -5,6 +5,7 @@ Mint's standards: a 90% silver dime is 2.50 g, a Morgan dollar 26.73 g, a $20 Do
 Each entry also says which of the app's series and dates it covers, so a user's coins can be counted.
 """
 
+import re
 from dataclasses import dataclass, field
 
 TROY_OZ_G = 31.1034768
@@ -28,6 +29,7 @@ class Rule:
     last: int = 9999
     finishes: tuple[str, ...] = ()  # empty: any
     mints: tuple[str, ...] = ()  # empty: any
+    variety: str | None = None  # a regex the coin's variety must match (case-insensitive)
 
 
 @dataclass(frozen=True)
@@ -53,13 +55,17 @@ ENTRIES: list[Entry] = [
     Entry("quarter-90", "90% Silver", "Quarter (Barber, Standing Liberty, Washington)", "1892–1964", 0.25, "silver",
           _oz(6.25, 0.9), S90,
           (Rule("barber-quarters"), Rule("standing-liberty-quarters"), Rule("washington-quarters", 0, 1964),
+           Rule("classic-commemoratives", variety=r"\bisabella\b"),
            Rule("washington-quarters", 1992, 2018, ("SPR",)))),
     Entry("half-90", "90% Silver", "Half Dollar (Barber, Walking Liberty, Franklin, 1964 Kennedy)", "1892–1964", 0.50,
           "silver", _oz(12.50, 0.9), S90,
           (Rule("seated-liberty-half-dollars", 1873), Rule("barber-half-dollars"), Rule("kennedy-half-dollars", 1964, 1964),
-           Rule("kennedy-half-dollars", 1992, 2018, ("SPR",)), Rule("classic-commemoratives"))),
+           Rule("kennedy-half-dollars", 1992, 2018, ("SPR",)),
+           # Classic commemoratives are halves, except the Isabella quarter, Lafayette dollar and Norse medal.
+           Rule("classic-commemoratives", variety=r"^(?!.*\b(isabella|lafayette|norse)\b)"))),
     Entry("dollar-90", "90% Silver", "Morgan & Peace Dollar", "1878–1935", 1.00, "silver", _oz(26.73, 0.9), S90,
           (Rule("morgan-dollars"), Rule("peace-dollars"), Rule("seated-liberty-dollars"),
+           Rule("classic-commemoratives", variety=r"\blafayette\b"),
            Rule("modern-commemorative-dollars", 0, 2018))),
     Entry("trade-dollar", "90% Silver", "Trade Dollar", "1873–1885", 1.00, "silver", _oz(27.22, 0.9), S90,
           (Rule("trade-dollars"),)),
@@ -69,7 +75,9 @@ ENTRIES: list[Entry] = [
           (Rule("three-cent-silver", 1854),)),
     # ---- Lower silver ----
     Entry("war-nickel", "40% & 35% Silver", "Jefferson \"War\" Nickel", "1942–1945", 0.05, "silver", _oz(5.00, 0.35),
-          "35% silver", (Rule("jefferson-nickels", 1943, 1945), Rule("jefferson-nickels", 1942, 1942, mints=("S",)))),
+          "35% silver", (Rule("jefferson-nickels", 1943, 1945), Rule("jefferson-nickels", 1942, 1942, mints=("S",)),
+                         # 1942-P: the silver Type 2 (large P over Monticello), not the Type 1 copper-nickel.
+                         Rule("jefferson-nickels", 1942, 1942, variety=r"silver|type\s*2"))),
     Entry("kennedy-40", "40% & 35% Silver", "Kennedy Half Dollar", "1965–1970", 0.50, "silver", _oz(11.50, 0.4),
           "40% silver", (Rule("kennedy-half-dollars", 1965, 1970),)),
     Entry("ike-40", "40% & 35% Silver", "Eisenhower Dollar (S, silver)", "1971–1976", 1.00, "silver", _oz(24.59, 0.4),
@@ -128,11 +136,12 @@ BY_KEY = {e.key: e for e in ENTRIES}
 JUNK_OZ_PER_DOLLAR = round(_oz(2.50, 0.9) * 10, 5)
 
 
-def entry_for(slug: str, year: int, finish: str = "MS", mint: str = "P") -> Entry | None:
+def entry_for(slug: str, year: int, finish: str = "MS", mint: str = "P", variety: str | None = None) -> Entry | None:
     """The metal-content entry for a coin of the app's series, or None (clad, base metal or unknown)."""
     for e in ENTRIES:
         for r in e.rules:
             if (r.slug == slug and r.first <= year <= r.last and (not r.finishes or finish in r.finishes)
-                    and (not r.mints or mint in r.mints)):
+                    and (not r.mints or mint in r.mints)
+                    and (r.variety is None or re.search(r.variety, variety or "", re.I))):
                 return e
     return None

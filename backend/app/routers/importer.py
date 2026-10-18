@@ -324,6 +324,8 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
     per_collection: dict[int, dict] = {}
     for r, target, ct in placed:
         data = _validate(CoinFields(**r.fields), target, ct)
+        # Storage and At Grading aren't import columns (yet); never trust them from the rows sent back.
+        data.update(storage_id=None, storage_position=None, location="inventory")
         coin = Coin(**data, user_id=user.id, coin_type_id=ct.id, collection_id=target.id,
                     inventory_number=next_inventory_number(db, user.id, ct), lookup_raw=r.lookup_raw)
         v = ImportValuation(**r.valuation)

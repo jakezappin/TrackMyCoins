@@ -199,6 +199,17 @@ def add_coin(db: Session, s: GradingSubmission, coin: Coin, expected: str | None
                             f"{coin.inventory_number} is already at grading in submission #{busy.submission.number}.")
     if busy is not None:
         return busy
+    old = next((x for x in s.coins if x.coin_id == coin.id), None)
+    if old is not None:
+        # It was in this submission before (the return date was cleared): open its place again.
+        old.outcome, old.after, old.returned_on = "pending", None, None
+        old.before = grading.snapshot(coin)
+        if expected is not None:
+            old.expected_grade = expected
+        if declared is not None:
+            old.declared_value = declared
+        coin.location = "grading"
+        return old
     link = GradingSubmissionCoin(submission_id=s.id, coin_id=coin.id, expected_grade=expected, declared_value=declared,
                                  before=grading.snapshot(coin))
     db.add(link)
@@ -332,15 +343,26 @@ def record_results(sub_id: int, body: ResultsIn, db: Session = Depends(get_db), 
         if link is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"Coin {r.link_id} isn't in this submission")
         coin = link.coin
+        # A result for an older trip mustn't undo a newer one: only the coin's latest trip changes the coin.
+        latest = db.scalar(select(GradingSubmissionCoin).where(GradingSubmissionCoin.coin_id == coin.id)
+                           .order_by(GradingSubmissionCoin.id.desc()).limit(1))
+        current = latest is None or latest.id == link.id
+        if not current:
+            link.outcome, link.returned_on = r.outcome, returned_on
+            continue
         if r.outcome in ("graded", "details"):
             fields = CoinFields.model_validate(coin, from_attributes=True).model_dump()
+            service = r.grading_service or (s.company if s.company not in ("CAC",) else coin.grading_service)
+            # No new cert typed: a coin back in its own service's holder (a regrade) keeps its cert; one that
+            # changed service has none yet (the old one belonged to the old holder).
+            cert = r.cert_number or (coin.cert_number if service == coin.grading_service else None)
             fields.update(
-                grading_service=r.grading_service or (s.company if s.company not in ("CAC",) else coin.grading_service),
-                cert_number=r.cert_number, grade_prefix=r.grade_prefix, grade=r.grade, grade_plus=r.grade_plus,
+                grading_service=service,
+                cert_number=cert, grade_prefix=r.grade_prefix, grade=r.grade, grade_plus=r.grade_plus,
                 grade_star=r.grade_star, strike_designation=r.strike_designation,
                 details=r.outcome == "details", details_problem=r.details_problem if r.outcome == "details" else None,
             )
-            if fields["grading_service"] != coin.grading_service or r.cert_number != coin.cert_number:
+            if service != coin.grading_service or cert != coin.cert_number:
                 fields.update(cac=False, cac_sticker=None)  # a new slab has no sticker
             try:
                 body_fields = CoinFields(**fields)

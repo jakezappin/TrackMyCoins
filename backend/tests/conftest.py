@@ -75,8 +75,9 @@ def fresh_rate_limits():
     """Every test starts with clean login/sign-up counters (tests sign up many accounts from one address)."""
     from app.routers import auth
 
-    for lim in (auth.login_limiter, auth.signup_limiter, auth.signup_counter):
+    for lim in (auth.login_limiter, auth.signup_limiter, auth.signup_counter, auth.account_failures):
         lim._hits.clear()
+    auth.account_pacer._last.clear()
 
 
 @pytest.fixture(autouse=True)

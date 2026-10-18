@@ -102,7 +102,14 @@ export default function SubmissionPage() {
   async function remove() {
     if (!sub) return;
     const n = sub.coins.filter((c) => c.outcome === "pending").length;
-    if (!confirm(`Delete submission ${submissionTitle(sub)}?${n ? ` Its ${n} coin${n === 1 ? "" : "s"} go back to In Inventory.` : ""}`)) return;
+    const done = sub.coins.length - n;
+    const parts = [
+      n ? `${n === 1 ? "The coin still out goes" : `The ${n} coins still out go`} back to In Inventory.` : "",
+      done
+        ? `The grading results recorded here (${done} coin${done === 1 ? "" : "s"}) will be removed from ${done === 1 ? "its" : "their"} grading history.`
+        : "",
+    ].filter(Boolean);
+    if (!confirm(`Delete submission ${submissionTitle(sub)}?${parts.length ? `\n\n${parts.join(" ")}` : ""}`)) return;
     try {
       await api.deleteSubmission(sub.id);
       navigate("/grading");
@@ -171,9 +178,11 @@ function DetailsForm({ sub, catalog, onSaved }: { sub: Submission; catalog: Grad
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // A new copy of the submission (a coin added or removed, or this form saved): take its details, but keep
+  // edits that haven't been saved yet.
   useEffect(() => {
     const f = toForm(sub);
-    setForm(f);
+    setForm((cur) => (JSON.stringify(cur) === baseline.current ? f : cur));
     baseline.current = JSON.stringify(f);
   }, [sub]);
   const dirty = JSON.stringify(form) !== baseline.current;
@@ -291,7 +300,19 @@ function DetailsForm({ sub, catalog, onSaved }: { sub: Submission; catalog: Grad
             onChange={(e) => {
               const c = e.target.value as Form["company"];
               setSaved(false);
-              setForm((f) => ({ ...f, company: c, kind: c === "CAC" ? "sticker" : f.kind === "sticker" ? "grading" : f.kind, tier_key: "", addons: [] }));
+              // Another company: the old tier's name, fee, limit and turnaround don't apply.
+              setForm((f) => ({
+                ...f,
+                company: c,
+                kind: c === "CAC" ? "sticker" : f.kind === "sticker" ? "grading" : f.kind,
+                tier_key: "",
+                tier_name: "",
+                tier_fee: "",
+                tier_max_value: "",
+                turnaround_days: "",
+                business_days: true,
+                addons: [],
+              }));
             }}
           >
             {COMPANIES.map(([k, label]) => (

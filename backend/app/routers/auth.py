@@ -9,11 +9,14 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import User
 from ..schemas import LoginIn, PasswordChange, Preferences, ProfileUpdate, SignupIn, UserOut
-from ..services.ratelimit import FailureLimiter
+from ..services.ratelimit import FailureLimiter, Pacer
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 settings = get_settings()
 login_limiter = FailureLimiter(settings.login_max_failures, settings.login_window_seconds)
+# Many failures on one account from anywhere: no lockout, but one try every few seconds.
+account_failures = FailureLimiter(20, settings.login_window_seconds)
+account_pacer = Pacer(10)
 signup_limiter = FailureLimiter(settings.signup_max_failures, settings.login_window_seconds)
 signup_counter = FailureLimiter(settings.signups_per_ip, 60 * 60)
 
@@ -65,11 +68,18 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     keys = (f"email:{body.email.lower()}|{ip}", f"ip:{ip}")
     if login_limiter.blocked(*keys):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed attempts. Try again in 15 minutes.")
+    account = f"account:{body.email.lower()}"
+    if account_failures.blocked(account) and (wait := account_pacer.wait(account)) > 0:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
+                            f"Too many sign-in attempts on this account. Try again in {int(wait) + 1} seconds.")
     user = db.scalar(select(User).where(func.lower(User.email) == body.email.lower()))
     if user is None or not verify_password(user.password_hash, body.password):
         login_limiter.fail(*keys)
+        account_failures.fail(account)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
     login_limiter.reset(keys[0])
+    account_failures.reset(account)
+    account_pacer.reset(account)
     set_session(response, user)
     return user
 

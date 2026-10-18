@@ -139,7 +139,7 @@ def _holdings(db: Session, user: User, prices: dict[str, float | None]) -> dict:
         selectinload(Coin.coin_type), selectinload(Coin.collection))).all()
     for c in coins:
         slug, finish = c.coin_type.slug, c.collection.finish
-        e = melt_table.entry_for(slug, c.year, finish, c.mint_mark)
+        e = melt_table.entry_for(slug, c.year, finish, c.mint_mark, c.variety)
         if e is not None and e.metal in PRECIOUS:
             oz_coins[e.metal] = oz_coins.get(e.metal, 0.0) + e.amount
             counted += 1
@@ -162,6 +162,7 @@ def _holdings(db: Session, user: User, prices: dict[str, float | None]) -> dict:
 @router.get("")
 def overview(db: Session = Depends(get_db), user: User = Depends(current_user)):
     today = _today()
+    metals.spots([*PRECIOUS, "copper"])  # warm the price cache in parallel (a down service: one timeout, not five)
     series = {m: _series(db, m) for m in PRECIOUS}
     cards = [_spot_card(m, series[m], today) for m in PRECIOUS]
     prices = {c["metal"]: c["price"] for c in cards}
@@ -192,7 +193,8 @@ def history(
     if series == "ratio":
         gold, silver = _series(db, "gold"), dict(_series(db, "silver"))
         points = [(d, g / silver[d]) for d, g in gold if d >= since and silver.get(d)]
-        g, s = metals.spot("gold")[0], metals.spot("silver")[0]
+        both = metals.spots(["gold", "silver"])
+        g, s = both["gold"][0], both["silver"][0]
         live = g / s if g and s else None
     else:
         points = [(d, p) for d, p in _series(db, series) if d >= since]

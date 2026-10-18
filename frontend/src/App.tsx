@@ -90,6 +90,28 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Dialogs take keyboard focus when they open (first field or button, unless one asked for it) and hand it back
+  // to where it was when they close.
+  useEffect(() => {
+    const returnTo = new Map<Element, HTMLElement | null>();
+    const focusables = 'input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])';
+    const obs = new MutationObserver(() => {
+      document.querySelectorAll<HTMLElement>(".modal").forEach((m) => {
+        if (returnTo.has(m)) return;
+        returnTo.set(m, document.activeElement as HTMLElement | null);
+        if (!m.contains(document.activeElement)) m.querySelector<HTMLElement>(focusables)?.focus();
+      });
+      for (const [m, prev] of returnTo) {
+        if (!document.body.contains(m)) {
+          returnTo.delete(m);
+          if (prev && document.body.contains(prev)) prev.focus();
+        }
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, []);
+
   // Session ran out: back to the login page (which returns here after signing in).
   useEffect(() => {
     setUnauthorizedHandler(() => setUser(null));
