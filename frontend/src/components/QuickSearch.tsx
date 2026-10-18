@@ -1,18 +1,47 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type SearchHit } from "../api";
+import { api, type BullionSearchHit, type SearchHit } from "../api";
 import { useApp } from "../App";
+import { METAL_LABEL, ozLabel } from "../bullionFormat";
 import { coinPath, dateMint, gradeLabel, metalFor, serviceLabel } from "../format";
 import CoinPlaceholder from "./CoinPlaceholder";
 
-/** Search the user's coins and jump straight to one. Press "/" anywhere to focus. */
+/** One line in the results: a coin or a bullion item. */
+type Hit = { key: string; href: string; thumb: string | null; metal: "gold" | "silver"; title: string; sub: string; sold: boolean };
+
+const fromCoin = (h: SearchHit, metal: "gold" | "silver"): Hit => ({
+  key: `c${h.coin.id}`,
+  href: coinPath(h.coin.inventory_number),
+  thumb: h.coin.thumbnail_url,
+  metal,
+  title: `${dateMint(h.coin)} ${h.type_name} ${gradeLabel(h.coin)}`,
+  sub: [
+    h.coin.inventory_number,
+    `${serviceLabel(h.coin.grading_service)}${h.coin.cert_number ? ` ${h.coin.cert_number}` : ""}`,
+    h.collection_name,
+    h.coin.variety,
+  ].filter(Boolean).join(" · "),
+  sold: h.coin.is_sold,
+});
+
+const fromBullion = (b: BullionSearchHit): Hit => ({
+  key: `b${b.inventory_number}`,
+  href: `/bullion/items/${b.inventory_number}`,
+  thumb: b.thumbnail_url,
+  metal: b.metal === "gold" ? "gold" : "silver",
+  title: b.description,
+  sub: `${b.inventory_number} · ${ozLabel(b.oz)} ${METAL_LABEL[b.metal].toLowerCase()} · ${b.collection_name}`,
+  sold: b.is_sold,
+});
+
+/** Search the user's coins and bullion and jump straight to one. Press "/" anywhere to focus. */
 export default function QuickSearch() {
   const navigate = useNavigate();
   const { coinTypes } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [hits, setHits] = useState<Hit[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -41,11 +70,10 @@ export default function QuickSearch() {
     setLoading(true);
     let cancelled = false;
     const t = setTimeout(() => {
-      api
-        .searchCoins(term)
-        .then((h) => {
+      Promise.all([api.searchCoins(term), api.searchBullion(term).catch(() => [] as BullionSearchHit[])])
+        .then(([coins, bullion]) => {
           if (cancelled) return;
-          setHits(h);
+          setHits([...coins.map((h) => fromCoin(h, metalFor(coinTypes, h.coin.coin_type_id))), ...bullion.map(fromBullion)]);
           setActive(0);
           setOpen(true);
         })
@@ -58,11 +86,11 @@ export default function QuickSearch() {
     };
   }, [q]);
 
-  function go(hit: SearchHit | undefined) {
+  function go(hit: Hit | undefined) {
     if (!hit) return;
     setOpen(false);
     setQ("");
-    navigate(coinPath(hit.coin.inventory_number));
+    navigate(hit.href);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -97,22 +125,22 @@ export default function QuickSearch() {
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => hits.length && setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder="Find a coin: inventory #, cert, 1881-S, Boone, notes…"
+          placeholder="Find a coin or bullion: inventory #, cert, 1881-S, Buffalo, notes…"
           role="combobox"
           aria-expanded={showList}
           aria-controls={listId}
           aria-autocomplete="list"
-          aria-label="Search your coins"
+          aria-label="Search your coins and bullion"
         />
       </div>
       {showList && (
         <ul className="qs-list" id={listId} role="listbox">
           {hits.length === 0 ? (
-            <li className="qs-empty muted">{loading ? "Searching…" : `No coins match “${q.trim()}”`}</li>
+            <li className="qs-empty muted">{loading ? "Searching…" : `Nothing matches “${q.trim()}”`}</li>
           ) : (
             hits.map((h, i) => (
               <li
-                key={h.coin.id}
+                key={h.key}
                 role="option"
                 aria-selected={i === active}
                 className={`qs-hit ${i === active ? "active" : ""}`}
@@ -120,22 +148,12 @@ export default function QuickSearch() {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => go(h)}
               >
-                {h.coin.thumbnail_url ? (
-                  <img src={h.coin.thumbnail_url} alt="" className="qs-thumb" />
-                ) : (
-                  <CoinPlaceholder className="qs-thumb ph" metal={metalFor(coinTypes, h.coin.coin_type_id)} />
-                )}
+                {h.thumb ? <img src={h.thumb} alt="" className="qs-thumb" /> : <CoinPlaceholder className="qs-thumb ph" metal={h.metal} />}
                 <span className="qs-main">
-                  <strong>
-                    {dateMint(h.coin)} {h.type_name} {gradeLabel(h.coin)}
-                  </strong>
-                  <span className="muted small">
-                    {h.coin.inventory_number} · {serviceLabel(h.coin.grading_service)}
-                    {h.coin.cert_number ? ` ${h.coin.cert_number}` : ""} · {h.collection_name}
-                    {h.coin.variety ? ` · ${h.coin.variety}` : ""}
-                  </span>
+                  <strong>{h.title}</strong>
+                  <span className="muted small">{h.sub}</span>
                 </span>
-                {h.coin.is_sold && <span className="tag sold">Sold</span>}
+                {h.sold && <span className="tag sold">Sold</span>}
               </li>
             ))
           )}

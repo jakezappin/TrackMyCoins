@@ -74,18 +74,19 @@ SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "CACG": "CACG", "CAC
 YES = {"yes", "y", "true", "1", "x", "✓", "green", "gold"}
 
 
-def read_rows(filename: str, data: bytes) -> list[tuple[str, int, dict]]:
-    """[(sheet, row number, {header: value})] from a CSV or Excel file."""
+def read_rows(filename: str, data: bytes, sheets: tuple[str, ...] = ("Coins", "Sold")) -> list[tuple[str, int, dict]]:
+    """[(sheet, row number, {header: value})] from a CSV or Excel file. In a workbook, the named sheets (our own
+    export's) are read if there; otherwise the first sheet."""
     name = filename.lower()
     if name.endswith((".xlsx", ".xlsm")):
         try:
             wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
         except Exception as e:
             raise ImportError_("Couldn't open that Excel file.") from e
-        # Our export: coins on hand in "Coins", sold coins in "Sold". Otherwise the first sheet.
-        sheets = [s for s in ("Coins", "Sold") if s in wb.sheetnames] or [wb.sheetnames[0]]
+        # Our export: on hand in "Coins" (or "Bullion"), sold in "Sold". Otherwise the first sheet.
+        wanted = [s for s in sheets if s in wb.sheetnames] or [wb.sheetnames[0]]
         out = []
-        for sheet in sheets:
+        for sheet in wanted:
             rows = wb[sheet].iter_rows(values_only=True)
             header = next(rows, None)
             if not header:

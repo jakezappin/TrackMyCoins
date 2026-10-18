@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type BullionCollection, type BullionItem } from "../api";
 import { useApp } from "../App";
-import { METAL_LABEL, ozLabel, purityLabel, quantityLabel, weightLabel } from "../bullionFormat";
+import { METAL_LABEL, ozLabel, purityLabel, quantityLabel, termLabel, weightLabel } from "../bullionFormat";
+import BullionImportDialog from "../components/BullionImportDialog";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import ValueHistoryChart from "../components/ValueHistoryChart";
 import { money, shortDate } from "../format";
@@ -21,6 +22,7 @@ export default function BullionCollectionPage() {
   const navigate = useNavigate();
   const [col, setCol] = useState<BullionCollection | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(() => {
     api.bullionCollection(Number(id)).then(setCol).catch((e) => setError((e as Error).message));
@@ -72,6 +74,14 @@ export default function BullionCollectionPage() {
           <button className="btn" onClick={rename}>
             Rename
           </button>
+          <button className="btn" onClick={() => setImporting(true)}>
+            Import
+          </button>
+          {items.length > 0 && (
+            <a className="btn" href={api.bullionExportUrl(col.id)} download>
+              Export
+            </a>
+          )}
           {items.length === 0 && (
             <button className="btn danger-outline" onClick={remove}>
               Delete
@@ -94,6 +104,7 @@ export default function BullionCollectionPage() {
           <div className="stat-value">{money(s.cost)}</div>
           <div className="stat-note">
             {s.count} item{s.count === 1 ? "" : "s"} on hand
+            {s.sold_count > 0 && ` · realized ${signed(s.realized)}`}
           </div>
         </div>
         <div className="card stat">
@@ -105,7 +116,7 @@ export default function BullionCollectionPage() {
           <div className="stat-label">Pure {METAL_LABEL[col.metal]}</div>
           <div className="stat-value">{ozLabel(s.oz[col.metal] ?? 0)}</div>
           <div className="stat-note">
-            {s.sold_count > 0 ? `Sold ${s.sold_count} · realized ${signed(s.realized)}` : "Troy ounces"}
+            {s.avg_cost_oz[col.metal] ? `Avg cost ${money(s.avg_cost_oz[col.metal])}/ozt · break-even spot` : "Troy ounces"}
           </div>
         </div>
       </div>
@@ -117,6 +128,8 @@ export default function BullionCollectionPage() {
         valueLabel="Melt value"
         emptyText="The chart fills in from the purchase date as daily spot prices are recorded."
       />
+
+      {importing && <BullionImportDialog collectionId={col.id} onClose={() => setImporting(false)} onDone={() => { load(); refresh(); }} />}
 
       <BullionTable items={held} empty="Nothing here yet. Add bars, rounds, coins, rolls or tubes." />
       {sold.length > 0 && (
@@ -166,23 +179,23 @@ function BullionTable({ items, sold = false, empty }: { items: BullionItem[]; so
                 </td>
                 <td className="strong c-date">
                   {i.description}
-                  {sold && i.sale_date && <span className="sub"> {shortDate(i.sale_date)}</span>}
+                  {sold && i.sale_date && <span className="sub"> {shortDate(i.sale_date)} · {termLabel(i)}</span>}
                 </td>
-                <td data-label="Amount">
+                <td className="b-amount" data-label="Amount">
                   {weightLabel(i)}
                   {i.face_value == null && <span className="sub"> · {quantityLabel(i)}</span>}
                 </td>
-                <td data-label="Purity">{purityLabel(i.purity)}</td>
-                <td className="num" data-label="Pure">
+                <td className="b-purity" data-label="Purity">{purityLabel(i.purity)}</td>
+                <td className="num b-oz" data-label="Pure">
                   {ozLabel(i.oz)}
                 </td>
-                <td className="num" data-label="Paid">
+                <td className="num c-paid" data-label="Paid">
                   {money(i.price_paid)}
                 </td>
-                <td className="num" data-label={sold ? "Sold for" : "Value"}>
+                <td className="num b-value" data-label={sold ? "Sold for" : "Value"}>
                   {money(sold ? i.sale_price : i.value_now)}
                 </td>
-                <td className={`num ${tone(i.change)}`} data-label={sold ? "P/L" : "Change"}>
+                <td className={`num b-change ${tone(i.change)}`} data-label={sold ? "P/L" : "Change"}>
                   {signed(i.change)}
                   {i.change_pct != null && <span className="sub"> {i.change_pct > 0 ? "+" : ""}{i.change_pct}%</span>}
                 </td>

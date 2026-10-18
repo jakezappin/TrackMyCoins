@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, type BullionItemIn, type BullionMeta } from "../api";
 import { useApp, useNavCollection } from "../App";
-import { FACE_NOTE, FACE_OZ, METAL_LABEL, PACKAGING_LABEL, purityLabel, pureOz } from "../bullionFormat";
+import { FACE_NOTE, FACE_OZ, METAL_LABEL, PACKAGING_LABEL, PRESETS, parsePurity, purityLabel, pureOz } from "../bullionFormat";
 import { money, parseMoney, todayISO } from "../format";
 
 const EMPTY: Omit<BullionItemIn, "collection_id"> = {
@@ -32,28 +32,36 @@ export default function BullionFormPage() {
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
   const [form, setForm] = useState(EMPTY);
   const [byFace, setByFace] = useState(false);
+  const [preset, setPreset] = useState("");
+  // Custom purity: typed in when it isn't one of the usual ones.
+  const [customPurity, setCustomPurity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.bullionMeta().then(setMeta).catch((e) => setError((e as Error).message));
   }, []);
+  // Editing: load the item. Duplicating (?from=AG-00003): start from a copy, without its sale.
+  const from = search.get("from");
   useEffect(() => {
-    if (!inv) return;
+    const source = inv ?? from;
+    if (!source) return;
     api
-      .bullionItem(inv)
+      .bullionItem(source)
       .then((i) => {
         setCollectionId(i.collection_id);
         setByFace(i.face_value != null);
+        const copy = !inv;
         setForm({
           description: i.description, packaging: i.packaging, quantity: i.quantity, weight: i.weight,
           weight_unit: i.weight_unit, purity: String(Number(i.purity)), face_value: i.face_value, price_paid: i.price_paid,
-          purchase_date: i.purchase_date, purchased_from: i.purchased_from, sale_price: i.sale_price, sale_date: i.sale_date,
-          sold_to: i.sold_to, notes: i.notes,
+          purchase_date: i.purchase_date, purchased_from: i.purchased_from,
+          sale_price: copy ? null : i.sale_price, sale_date: copy ? null : i.sale_date, sold_to: copy ? null : i.sold_to,
+          notes: copy ? null : i.notes,
         });
       })
       .catch((e) => setError((e as Error).message));
-  }, [inv]);
+  }, [inv, from]);
   useEffect(() => {
     if (collectionId === null && bullionCollections.length) setCollectionId(bullionCollections[0].id);
   }, [bullionCollections, collectionId]);
@@ -63,10 +71,25 @@ export default function BullionFormPage() {
   const metal = col?.metal ?? "silver";
   const purities = meta?.purities[metal] ?? [];
   const faceAllowed = metal === "silver";
-  // Keep the purity one this metal offers.
+  // A purity this metal doesn't usually come in (an edited item's .9995 silver, say) shows as Custom.
+  const usual = purities.includes(String(Number(form.purity)));
   useEffect(() => {
-    if (purities.length && !purities.includes(String(Number(form.purity)))) setForm((f) => ({ ...f, purity: purities[1] ?? purities[0] }));
-  }, [metal, purities.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (purities.length && !usual && customPurity === null) setCustomPurity(purityLabel(form.purity));
+  }, [metal, purities.join(), form.purity]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function applyPreset(name: string) {
+    setPreset(name);
+    const p = PRESETS[metal].find((x) => x.name === name);
+    if (!p) return;
+    setCustomPurity(null);
+    setByFace(Boolean(p.face));
+    setForm((f) => ({
+      ...f,
+      description: !f.description || PRESETS[metal].some((x) => x.name === f.description) ? p.name : f.description,
+      purity: p.purity,
+      ...(p.face ? { weight: null, quantity: 1, packaging: "single" as const } : { weight: p.weight ?? f.weight, weight_unit: p.unit ?? f.weight_unit }),
+    }));
+  }
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const text = (k: "description" | "purchased_from" | "sold_to" | "notes") => ({
@@ -82,6 +105,7 @@ export default function BullionFormPage() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!collectionId) return setError("Create a bullion collection first.");
+    if (customPurity !== null && !parsePurity(customPurity)) return setError("Enter the purity, e.g. .9995 or 92.5%.");
     const money_ = (label: string, v: string | null) => {
       const r = parseMoney(v);
       if ("error" in r) throw new Error(`${label} ${r.error}.`);
@@ -126,7 +150,7 @@ export default function BullionFormPage() {
   return (
     <form className="page" onSubmit={save}>
       <div className="page-head">
-        <h1>{inv ? `Edit ${inv}` : "Add Bullion"}</h1>
+        <h1>{inv ? `Edit ${inv}` : from ? `Add Bullion (copy of ${from})` : "Add Bullion"}</h1>
         <div className="row">
           <Link className="btn" to={inv ? `/bullion/items/${inv}` : col ? `/bullion/${col.id}` : "/dashboard"}>
             Cancel
@@ -140,6 +164,19 @@ export default function BullionFormPage() {
 
       <section className="card form-section">
         <h2>Bullion</h2>
+        {!inv && (
+          <label className="field">
+            <span>Start from a product (optional)</span>
+            <select value={preset} onChange={(e) => applyPreset(e.target.value)}>
+              <option value="">Choose a common coin or bar to fill in its weight and purity…</option>
+              {PRESETS[metal].map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="grid-2">
           <label className="field">
             <span>Collection</span>
@@ -161,8 +198,14 @@ export default function BullionFormPage() {
           <label className="field">
             <span>Purity</span>
             <select
-              value={String(Number(form.purity))}
+              value={customPurity !== null ? "custom" : String(Number(form.purity))}
               onChange={(e) => {
+                if (e.target.value === "custom") {
+                  setCustomPurity("");
+                  setByFace(false);
+                  return;
+                }
+                setCustomPurity(null);
                 set("purity", e.target.value);
                 if (!facePurities.includes(e.target.value)) setByFace(false);
               }}
@@ -172,8 +215,26 @@ export default function BullionFormPage() {
                   {purityLabel(p)}
                 </option>
               ))}
+              <option value="custom">Custom…</option>
             </select>
           </label>
+          {customPurity !== null && (
+            <label className="field">
+              <span>Custom purity</span>
+              <input
+                value={customPurity}
+                onChange={(e) => {
+                  setCustomPurity(e.target.value);
+                  const p = parsePurity(e.target.value);
+                  if (p) set("purity", p);
+                }}
+                placeholder=".9995 or 92.5%"
+                aria-invalid={customPurity !== "" && !parsePurity(customPurity)}
+                required
+              />
+              <small className="muted">{parsePurity(customPurity) ? `= ${purityLabel(parsePurity(customPurity)!)} fine` : "e.g. .9995, 999, 92.5%"}</small>
+            </label>
+          )}
           {faceAllowed && facePurities.includes(String(Number(form.purity))) && (
             <div className="field">
               <span>Enter by</span>

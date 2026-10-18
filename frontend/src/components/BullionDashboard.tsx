@@ -31,6 +31,11 @@ export default function BullionDashboard() {
                 <span className="muted">{METAL_LABEL[m]}</span> <strong>{money(spot[m]!)}</strong>
               </span>
             ))}
+          {spot.gold && spot.silver && (
+            <span title="Ounces of silver one ounce of gold buys">
+              <span className="muted">Gold/Silver</span> <strong>{(Number(spot.gold) / Number(spot.silver)).toFixed(1)}</strong>
+            </span>
+          )}
         </span>
       </div>
       <div className="coin-summary">
@@ -58,6 +63,7 @@ export default function BullionDashboard() {
             {metals.map((m) => (
               <span key={m}>
                 <strong>{ozLabel(s.oz[m])}</strong> {METAL_LABEL[m].toLowerCase()}
+                {s.avg_cost_oz[m] && <span className="muted small"> · avg {money(s.avg_cost_oz[m]!)}/ozt</span>}
               </span>
             ))}
           </div>

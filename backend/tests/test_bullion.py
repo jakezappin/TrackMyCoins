@@ -163,3 +163,56 @@ def test_bullion_documents(authed):
     authed.delete(f"/api/bullion/items/{inv}")
     assert not docs.coin_dir(f"bullion-{item['id']}").exists()
     assert authed.get(got[0]["url"]).status_code == 404
+
+
+def test_search_avg_cost_and_holding(authed):
+    ag = _col(authed)
+    a = _item(authed, ag, description="Buffalo Rounds", quantity=10, price_paid="300", purchase_date="2020-01-15",
+              purchased_from="APMEX")
+    _item(authed, ag, description="Silvertown Bar", weight="10", price_paid="250")
+    hits = authed.get("/api/bullion/search", params={"q": "buffalo apmex"}).json()
+    assert [h["inventory_number"] for h in hits] == [a["inventory_number"]]
+    assert authed.get("/api/bullion/search", params={"q": "AG-00002"}).json()[0]["description"] == "Silvertown Bar"
+    s = authed.get(f"/api/bullion/collections/{ag['id']}").json()["summary"]
+    assert s["avg_cost_oz"]["silver"] == "27.53"  # $550 / 19.98 ozt: also the break-even spot
+    assert a["long_term"] is True and a["held_days"] > 365
+    sold = authed.post(f"/api/bullion/items/{a['inventory_number']}/sell",
+                       json={"sale_price": "600", "sale_date": "2020-06-01"}).json()
+    assert authed.get(f"/api/bullion/items/{sold['sold']}").json()["long_term"] is False  # held under a year
+
+
+def test_export_import_round_trip(authed):
+    from app.services import bullion_io
+
+    ag = _col(authed)
+    _item(authed, ag, description="Buffalo Rounds", quantity=20, packaging="tube", price_paid="1150", purchase_date="2025-03-15")
+    _item(authed, ag, description="90% dimes", face_value="10", purity="0.9", weight=None, price_paid="300")
+    r = authed.get(f"/api/bullion/collections/{ag['id']}/export")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/vnd.openxmlformats")
+    other = _col(authed, name="Second stack")
+    prev = authed.post(f"/api/bullion/collections/{other['id']}/import/preview",
+                       files={"file": ("stack.xlsx", r.content, "application/octet-stream")}).json()
+    assert (prev["ok_count"], prev["error_count"]) == (2, 0)
+    assert [x["fields"]["oz"] for x in prev["rows"]] == ["19.9800", "7.1500"]
+    out = authed.post(f"/api/bullion/collections/{other['id']}/import/commit", json={"rows": prev["rows"]}).json()
+    assert len(out["created"]) == 2 and out["skipped"] == []
+    got = authed.get(f"/api/bullion/collections/{other['id']}").json()
+    assert got["summary"]["cost"] == "1450.00" and got["summary"]["oz"]["silver"] == "27.1300"
+
+    # Someone else's spreadsheet: loose headings, units in the weight, purity as "999", a bad row.
+    csv = "Item,Qty,Size,Fineness,Cost,Dealer\nMaple Leaf,25,1 oz,9999,800,JM\n10 oz bar,1,10oz,999,$330,\nOops,1,,999,,\n"
+    prev = authed.post(f"/api/bullion/collections/{other['id']}/import/preview",
+                       files={"file": ("mine.csv", csv.encode(), "text/csv")}).json()
+    rows = prev["rows"]
+    assert rows[0]["fields"]["quantity"] == 25 and rows[0]["fields"]["purity"] == "0.9999" and rows[0]["fields"]["oz"] == "24.9975"
+    assert rows[1]["fields"]["weight"] == "10" and rows[1]["fields"]["price_paid"] == "330.00"
+    assert rows[2]["errors"] and prev["error_count"] == 1
+    assert bullion_io.parse_purity("22k") == Decimal("0.9167")
+
+
+def test_insurance_report_includes_bullion(authed):
+    ag = _col(authed)
+    _item(authed, ag, description="Buffalo Rounds", quantity=20, price_paid="1150")
+    r = authed.get("/api/reports/insurance")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    assert len(r.content) > 2000

@@ -13,7 +13,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from ..config import get_settings
-from ..models import Coin, Collection, User
+from ..models import BullionCollection, BullionItem, Coin, Collection, User
 from . import photos as photo_store
 from .coins import CENTS, latest_quote, value_estimate
 
@@ -46,10 +46,11 @@ def _grade(c: Coin) -> str:
     return f"Raw {g}".strip() if c.grading_service == "RAW" else g
 
 
-def _thumb(c: Coin):
-    """First readable photo, shrunk and re-encoded so a big collection doesn't make a huge PDF."""
+def _thumb(c: Coin, key=None):
+    """First readable photo, shrunk and re-encoded so a big collection doesn't make a huge PDF. `key` is the photo
+    folder when it isn't the coin's id (bullion items)."""
     for p in c.photos:
-        path = photo_store.photo_path(c.id, p.file_name)
+        path = photo_store.photo_path(key if key is not None else c.id, p.file_name)
         if not path.exists():
             continue
         try:
@@ -108,7 +109,34 @@ def _coin_row(c: Coin, type_name: str) -> list:
     ]
 
 
-def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_names: dict[int, str], scope: str) -> bytes:
+def _bullion_row(i: BullionItem, spot: Decimal | None) -> list:
+    from . import bullion as bsvc
+
+    oz = bsvc.pure_oz(i)
+    amount = f"${i.face_value} face" if i.face_value is not None else f"{Decimal(str(i.weight)).normalize()} {i.weight_unit}"
+    if i.face_value is None and (i.quantity or 1) > 1:
+        amount += f" × {i.quantity}"
+    purity = Decimal(str(i.purity)).normalize()
+    bought = _money(i.price_paid)
+    if i.purchase_date:
+        bought += f'<br/><font color="#666666">{i.purchase_date:%b %d, %Y}</font>'
+    if i.purchased_from:
+        bought += f'<br/><font color="#666666">{i.purchased_from}</font>'
+    melt = _money(oz * spot) if spot is not None else "—"
+    return [
+        _thumb(i, f"bullion-{i.id}"),
+        Paragraph(i.inventory_number, CELL),
+        Paragraph(f"<b>{i.description}</b>", CELL),
+        Paragraph(f"{amount}<br/>{purity} fine · <b>{oz.normalize()} ozt pure</b>", CELL),
+        Paragraph(bought, CELL),
+        Paragraph(f"<b>{melt}</b><br/><font color='#666666'>melt at {_money(spot)}/ozt</font>", CELL),
+    ]
+
+
+def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_names: dict[int, str], scope: str,
+              bullion: list[tuple[BullionCollection, list[BullionItem]]] = (),
+              spots: dict[str, Decimal | None] | None = None) -> bytes:
+    from . import bullion as bsvc
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=landscape(letter), leftMargin=0.5 * inch, rightMargin=0.5 * inch,
@@ -121,6 +149,10 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
     est = sum((value_estimate(c) or Decimal(0) for c in all_coins), Decimal(0))
     unvalued = sum(1 for c in all_coins if value_estimate(c) is None)
     discount = Decimal(str(get_settings().wholesale_discount))
+    spots = spots or {}
+    bullion_items = [(col.metal, i) for col, items in bullion for i in items]
+    bullion_value = sum((bsvc.pure_oz(i) * spots[m] for m, i in bullion_items if spots.get(m) is not None), Decimal(0))
+    bullion_cost = sum((i.price_paid or Decimal(0) for _, i in bullion_items), Decimal(0))
 
     story = [
         Paragraph("Coin Collection Inventory", H1),
@@ -135,6 +167,10 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
                [f"Estimated wholesale ({int(discount * 100)}% below)", _money((est * (1 - discount)).quantize(CENTS))]]
     if unvalued:
         summary.append(["Coins without a value", str(unvalued)])
+    if bullion_items:
+        summary += [["Bullion items", str(len(bullion_items))], ["Bullion cost", _money(bullion_cost)],
+                    ["Bullion melt value (today's spot)", _money(bullion_value.quantize(CENTS))],
+                    ["Total estimated value (coins + bullion)", _money((est + bullion_value).quantize(CENTS))]]
     t = Table(summary, colWidths=[2.8 * inch, 1.8 * inch], hAlign="LEFT")
     t.setStyle(TableStyle([
         ("FONT", (0, 0), (-1, -1), "Helvetica", 10), ("FONT", (1, 0), (1, -1), "Helvetica-Bold", 10),
@@ -145,8 +181,9 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
     story.append(Paragraph(
         "Estimated values come from the CDN Certified Price Guide (CPG) retail values, plus any premiums the owner "
         "recorded for toning or holder, or from the owner's own estimate where noted. They are estimates, not "
-        "appraisals. Coins already sold are not included.", SMALL))
-    if groups:
+        "appraisals. Coins already sold are not included."
+        + (" Bullion is valued at its pure metal content times today's spot price." if bullion_items else ""), SMALL))
+    if groups or bullion:
         story.append(PageBreak())
 
     widths = [0.8 * inch, 0.95 * inch, 2.75 * inch, 2.0 * inch, 1.5 * inch, 2.0 * inch]
@@ -170,6 +207,29 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
                 style.append(("BACKGROUND", (0, i), (-1, i), ZEBRA))
         table.setStyle(TableStyle(style))
         story += [KeepTogether([Paragraph(col.name, H2)]), table, Spacer(1, 14)]
+
+    for col, items in bullion:
+        spot = spots.get(col.metal)
+        rows = [[Paragraph(h, HEAD) for h in ("Photo", "Inventory #", "Bullion", "Amount / purity", "Purchased", "Melt value")]]
+        rows += [_bullion_row(i, spot) for i in items]
+        col_cost = sum((i.price_paid or Decimal(0) for i in items), Decimal(0))
+        col_val = sum((bsvc.pure_oz(i) * spot for i in items), Decimal(0)) if spot is not None else None
+        col_oz = sum((bsvc.pure_oz(i) for i in items), Decimal(0))
+        rows.append(["", "", Paragraph(f"<b>{len(items)} item{'s' if len(items) != 1 else ''}</b>", CELL),
+                     Paragraph(f"<b>{col_oz.normalize()} ozt</b>", CELL), Paragraph(f"<b>{_money(col_cost)}</b>", CELL),
+                     Paragraph(f"<b>{_money(col_val)}</b>", CELL)])
+        table = Table(rows, colWidths=widths, repeatRows=1)
+        style = [
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 0.4, GRID),
+            ("LINEABOVE", (0, -1), (-1, -1), 1, NAVY), ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]
+        for n in range(1, len(rows) - 1):
+            if n % 2 == 0:
+                style.append(("BACKGROUND", (0, n), (-1, n), ZEBRA))
+        table.setStyle(TableStyle(style))
+        story += [KeepTogether([Paragraph(f"{col.name} (bullion)", H2)]), table, Spacer(1, 14)]
 
     def footer(canvas, doc_):
         canvas.saveState()

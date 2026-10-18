@@ -2,12 +2,14 @@
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import io
+import re
 from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field, field_validator, model_validator
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -17,6 +19,8 @@ from ..db import get_db
 from ..models import BullionAttachment, BullionCollection, BullionItem, BullionPhoto, User
 from ..services import attachments as docs
 from ..services import bullion as svc
+from ..services import bullion_io as bio
+from ..services.importer import ImportError_
 from ..services import photos as store
 
 router = APIRouter(prefix="/api/bullion", tags=["bullion"])
@@ -141,6 +145,9 @@ def _item_out(item: BullionItem, series: svc.SpotSeries | None, spot_now: Decima
         "change": str(change.quantize(svc.CENTS)) if change is not None else None,
         "change_pct": round(float(change / Decimal(str(cost))) * 100, 1) if change is not None and cost else None,
         "photos": [{"id": p.id, "url": _photo_url(p), "thumb_url": f"{_photo_url(p)}?size=thumb"} for p in item.photos],
+        # Held more than a year: long-term for U.S. taxes (bullion is taxed as a collectible).
+        "held_days": ((item.sale_date or datetime.now(timezone.utc).date()) - svc.started(item)).days,
+        "long_term": ((item.sale_date or datetime.now(timezone.utc).date()) - svc.started(item)).days > 365,
         "thumbnail_url": f"{_photo_url(item.photos[0])}?size=thumb" if item.photos else None,
     }
 
@@ -423,3 +430,127 @@ def delete_doc(attachment_id: int, db: Session = Depends(get_db), user: User = D
     docs.delete_file(_photo_key(a.item_id), a.file_name)
     db.delete(a)
     db.commit()
+
+
+# ---- Search (Quick Search) ----------------------------------------------------------------------------------
+
+@router.get("/search")
+def search(q: str = Query(..., min_length=1, max_length=100), limit: int = Query(6, ge=1, le=25),
+           db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Bullion items whose number, description, dealer, notes, collection or metal contain every word typed."""
+    words = [w for w in q.lower().split() if w]
+    hits = []
+    for i in _all_items(db, user):
+        hay = " ".join(x or "" for x in (i.inventory_number, i.description, i.purchased_from, i.sold_to, i.notes,
+                                         i.collection.name, i.collection.metal)).lower()
+        if all(w in hay for w in words):
+            exact = q.strip().upper() == i.inventory_number
+            hits.append((0 if exact else 1, svc.is_sold(i), i.inventory_number, i))
+    hits.sort(key=lambda h: h[:3])
+    out = []
+    for *_, i in hits[:limit]:
+        db.refresh(i, ["photos"])
+        out.append({"inventory_number": i.inventory_number, "description": i.description, "metal": i.collection.metal,
+                    "collection_name": i.collection.name, "oz": str(svc.pure_oz(i)), "is_sold": svc.is_sold(i),
+                    "thumbnail_url": f"{_photo_url(i.photos[0])}?size=thumb" if i.photos else None})
+    return out
+
+
+# ---- Spreadsheets -------------------------------------------------------------------------------------------
+
+def _xlsx(items: list[BullionItem], name: str) -> StreamingResponse:
+    spots = _spots({i.collection.metal for i in items})
+    data = bio.export_xlsx(items, spots)
+    safe = re.sub(r"[^A-Za-z0-9 _-]+", "", name).strip().replace(" ", "_") or "Bullion"
+    return StreamingResponse(io.BytesIO(data), headers={
+        "Content-Disposition": f'attachment; filename="{safe}_{datetime.now(timezone.utc).date():%Y-%m-%d}.xlsx"'},
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@router.get("/collections/{collection_id}/export")
+def export_collection(collection_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    col = _collection(db, user, collection_id)
+    return _xlsx(list(col.items), col.name)
+
+
+@router.get("/export")
+def export_all(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return _xlsx(_all_items(db, user), "Bullion")
+
+
+@router.get("/import/template")
+def import_template(_: User = Depends(current_user)):
+    return StreamingResponse(io.BytesIO(bio.TEMPLATE_CSV.encode()), media_type="text/csv",
+                             headers={"Content-Disposition": 'attachment; filename="TrackMyCoins_bullion_template.csv"'})
+
+
+class ImportRowOut(BaseModel):
+    row: int
+    sheet: str = ""
+    fields: dict
+    errors: list[str] = []
+
+
+class ImportCommitIn(BaseModel):
+    rows: list[ImportRowOut] = Field(max_length=2000)
+
+
+def _check_row(col: BullionCollection, r: ImportRowOut) -> ItemIn | None:
+    if r.errors:
+        return None
+    try:
+        return ItemIn(**{**r.fields, "collection_id": col.id})
+    except ValidationError as e:
+        r.errors.extend(err["msg"].removeprefix("Value error, ") for err in e.errors())
+        return None
+
+
+@router.post("/collections/{collection_id}/import/preview")
+async def import_preview(collection_id: int, file: UploadFile, db: Session = Depends(get_db),
+                         user: User = Depends(current_user)):
+    col = _collection(db, user, collection_id)
+    data = await file.read(10 * 1024 * 1024 + 1)
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "That file is too large (10 MB max).")
+    try:
+        raw = bio.read(file.filename or "", data)
+    except ImportError_ as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    if not raw:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No rows found. The first row should be column headings.")
+    rows = []
+    for sheet, n, values in raw[:2000]:
+        fields, errors = bio.row_to_item(values)
+        r = ImportRowOut(row=n, sheet=sheet, fields=fields, errors=errors)
+        item = _check_row(col, r)
+        if item is not None and col.metal != "silver" and item.face_value is not None:
+            r.errors.append("Face value is for silver coins")
+        if item is not None and not r.errors:
+            probe = BullionItem(weight=item.weight, weight_unit=item.weight_unit, purity=item.purity,
+                                face_value=item.face_value, quantity=item.quantity)
+            r.fields["oz"] = str(svc.pure_oz(probe))
+        rows.append(r)
+    bad = sum(1 for r in rows if r.errors)
+    return {"rows": rows, "ok_count": len(rows) - bad, "error_count": bad}
+
+
+@router.post("/collections/{collection_id}/import/commit")
+def import_commit(collection_id: int, body: ImportCommitIn, db: Session = Depends(get_db),
+                  user: User = Depends(current_user)):
+    col = _collection(db, user, collection_id)
+    created = []
+    skipped = []
+    for r in body.rows:
+        r.fields.pop("oz", None)
+        item_in = _check_row(col, r)
+        if item_in is None:
+            skipped.append({"row": r.row, "sheet": r.sheet, "description": r.fields.get("description") or "", "errors": r.errors})
+            continue
+        item = BullionItem(user_id=user.id, collection_id=col.id,
+                           inventory_number=svc.next_inventory_number(db, user.id, col.metal))
+        _apply(item, item_in)
+        db.add(item)
+        db.flush()
+        created.append(item.inventory_number)
+    db.commit()
+    return {"created": created, "skipped": skipped}

@@ -3301,3 +3301,37 @@ table {
   gap: 4px 16px;
   font-variant-numeric: tabular-nums;
 }
+
+/* Bullion table on phones: a card per item (same breakpoint as the coin table) */
+@media (max-width: 640px) {
+  .coin-table.bullion-table tr {
+    grid-template-areas:
+      "thumb date value"
+      "thumb amount amount"
+      "thumb oz paid"
+      "thumb change change"
+      "thumb purity inv";
+  }
+  .bullion-table .c-date .sub {
+    display: block;
+    font-size: 0.78rem;
+  }
+  .bullion-table .b-change { text-align: left; }
+  .bullion-table .b-amount { grid-area: amount; font-size: 0.88rem; }
+  .bullion-table .b-purity { grid-area: purity; font-size: 0.85rem; }
+  .bullion-table .b-oz { grid-area: oz; text-align: left; font-size: 0.88rem; }
+  .bullion-table .b-value { grid-area: value; font-weight: 600; }
+  .bullion-table .b-change { grid-area: change; }
+  .bullion-table .c-inv { text-align: right; }
+  .bullion-table .num { text-align: right; }
+  .bullion-table .b-oz.num { text-align: left; }
+}
+@media (max-width: 640px) {
+  .coin-table.bullion-table td.b-oz,
+  .coin-table.bullion-table td.b-change,
+  .coin-table.bullion-table td.b-amount,
+  .coin-table.bullion-table td.b-purity {
+    text-align: left;
+    justify-self: start;
+  }
+}

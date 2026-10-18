@@ -331,6 +331,8 @@ export type Metal = "silver" | "gold" | "platinum" | "palladium";
 export interface BullionSummary {
   count: number;
   oz: Partial<Record<Metal, string>>;
+  /** Paid per pure ounce: also the spot price where it breaks even. */
+  avg_cost_oz: Partial<Record<Metal, string>>;
   value: string;
   cost: string;
   change: string;
@@ -386,6 +388,26 @@ export interface BullionItem extends BullionItemIn {
   change_pct: number | null;
   photos: { id: number; url: string; thumb_url: string }[];
   thumbnail_url: string | null;
+  /** Days from purchase to sale (or today); over a year is long-term. */
+  held_days: number;
+  long_term: boolean;
+}
+
+export interface BullionSearchHit {
+  inventory_number: string;
+  description: string;
+  metal: Metal;
+  collection_name: string;
+  oz: string;
+  is_sold: boolean;
+  thumbnail_url: string | null;
+}
+
+export interface BullionImportRow {
+  row: number;
+  sheet: string;
+  fields: Partial<BullionItemIn> & { oz?: string };
+  errors: string[];
 }
 
 export interface BullionMeta {
@@ -849,6 +871,19 @@ export const api = {
     return request<BullionItem>("POST", `/api/bullion/items/${encodeURIComponent(inv)}/photos`, fd);
   },
   deleteBullionPhoto: (id: number) => request<void>("DELETE", `/api/bullion/photos/${id}`),
+  searchBullion: (q: string) => request<BullionSearchHit[]>("GET", `/api/bullion/search?q=${encodeURIComponent(q)}`),
+  bullionExportUrl: (collectionId: number | null) =>
+    collectionId == null ? "/api/bullion/export" : `/api/bullion/collections/${collectionId}/export`,
+  bullionTemplateUrl: "/api/bullion/import/template",
+  bullionImportPreview: (collectionId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ rows: BullionImportRow[]; ok_count: number; error_count: number }>(
+      "POST", `/api/bullion/collections/${collectionId}/import/preview`, fd);
+  },
+  bullionImportCommit: (collectionId: number, rows: BullionImportRow[]) =>
+    request<{ created: string[]; skipped: { row: number; sheet: string; description: string; errors: string[] }[] }>(
+      "POST", `/api/bullion/collections/${collectionId}/import/commit`, { rows }),
   sets: (coinTypeId: number, year?: number) =>
     request<SetOption[]>("GET", `/api/coin-types/${coinTypeId}/sets${year ? `?year=${year}` : ""}`),
   fillPurchaseValue: (inv: string) =>

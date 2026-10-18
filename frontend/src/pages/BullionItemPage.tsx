@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type BullionItem } from "../api";
 import { useApp, useNavCollection } from "../App";
-import { METAL_LABEL, ozLabel, purityLabel, quantityLabel, weightLabel } from "../bullionFormat";
+import { METAL_LABEL, heldLabel, ozLabel, purityLabel, quantityLabel, termLabel, weightLabel } from "../bullionFormat";
 import AttachmentsCard from "../components/AttachmentsCard";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import PhotoButtons from "../components/PhotoButtons";
@@ -88,6 +88,9 @@ export default function BullionItemPage() {
           >
             Delete
           </button>
+          <Link className="btn" to={`/bullion/items/new?collection=${item.collection_id}&from=${item.inventory_number}`}>
+            Duplicate
+          </Link>
           {!sold && (
             <button className="btn" onClick={() => setSelling(true)}>
               Sell…
@@ -115,7 +118,10 @@ export default function BullionItemPage() {
         <div className="card stat">
           <div className="stat-label">{sold ? "Profit / Loss" : "Change"}</div>
           <div className={`stat-value ${tone(item.change)}`}>{signed(item.change)}</div>
-          <div className="stat-note">{item.change_pct == null ? "Needs what you paid" : `${item.change_pct > 0 ? "+" : ""}${item.change_pct}%`}</div>
+          <div className="stat-note">
+            {item.change_pct == null ? "Needs what you paid" : `${item.change_pct > 0 ? "+" : ""}${item.change_pct}%`}
+            {sold && ` · ${item.long_term ? "long-term" : "short-term"}`}
+          </div>
         </div>
         <div className="card stat">
           <div className="stat-label">Melt at Purchase</div>
@@ -199,6 +205,15 @@ export default function BullionItemPage() {
             <dd>{item.purchased_from ?? "—"}</dd>
             <dt>Melt then</dt>
             <dd>{money(item.value_at_purchase)}</dd>
+            {!sold && (
+              <>
+                <dt>Held</dt>
+                <dd>
+                  {heldLabel(item.held_days)}
+                  <span className="muted"> · {item.long_term ? "long-term if sold now" : "short-term if sold now"}</span>
+                </dd>
+              </>
+            )}
           </dl>
           {sold && (
             <>
@@ -209,6 +224,8 @@ export default function BullionItemPage() {
                   {money(item.sale_price)} {item.sale_date && <span className="muted">on {shortDate(item.sale_date)}</span>}
                   {item.sold_to && <span className="muted"> to {item.sold_to}</span>}
                 </dd>
+                <dt>Holding</dt>
+                <dd>{termLabel(item)}</dd>
               </dl>
             </>
           )}

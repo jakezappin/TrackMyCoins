@@ -322,7 +322,20 @@ def insurance_report(collection_id: int | None = None, db: Session = Depends(get
         if coins:
             groups.append((col, coins))
     type_names = {t.id: t.name for t in db.scalars(select(CoinType)).all()}
-    pdf = insurance.build_pdf(user, groups, type_names, scope)
+    bullion, spots = [], {}
+    if collection_id is None:  # the whole inventory: bullion too, valued at today's spot
+        from ..models import BullionCollection, BullionItem
+        from ..services import bullion as bullion_svc
+
+        for bcol in db.scalars(select(BullionCollection).where(BullionCollection.user_id == user.id)
+                               .order_by(BullionCollection.metal, BullionCollection.name)):
+            items = [i for i in db.scalars(select(BullionItem).where(BullionItem.collection_id == bcol.id)
+                                           .options(selectinload(BullionItem.photos)).order_by(BullionItem.inventory_number))
+                     if not bullion_svc.is_sold(i)]
+            if items:
+                bullion.append((bcol, items))
+                spots.setdefault(bcol.metal, bullion_svc.live_spot(bcol.metal))
+    pdf = insurance.build_pdf(user, groups, type_names, scope, bullion, spots)
     filename = re.sub(r"[^A-Za-z0-9 _-]+", "", scope).strip().replace(" ", "_") or "collection"
     return StreamingResponse(
         io.BytesIO(pdf),

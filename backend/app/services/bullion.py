@@ -227,12 +227,14 @@ def summary(items: list[BullionItem], metal_of, spots_now: dict[str, Decimal | N
     """Totals over the items on hand: pure ounces per metal, value now, cost basis, change."""
     held = [i for i in items if not is_sold(i)]
     oz: dict[str, Decimal] = {}
+    cost_by: dict[str, Decimal] = {}
     value_now = cost = Decimal(0)
     unpriced = 0
     for i in held:
         m = metal_of(i)
         o = pure_oz(i)
         oz[m] = oz.get(m, Decimal(0)) + o
+        cost_by[m] = cost_by.get(m, Decimal(0)) + (_d(i.price_paid) or Decimal(0))
         if spots_now.get(m) is not None:
             value_now += o * spots_now[m]
         else:
@@ -244,6 +246,8 @@ def summary(items: list[BullionItem], metal_of, spots_now: dict[str, Decimal | N
     return {
         "count": len(held),
         "oz": {m: str(v.quantize(Decimal("0.0001"))) for m, v in oz.items()},
+        # What was paid per pure ounce: also the spot price where the stack breaks even.
+        "avg_cost_oz": {m: str((cost_by[m] / v).quantize(CENTS)) for m, v in oz.items() if v > 0 and cost_by.get(m)},
         "value": str(value_now.quantize(CENTS)),
         "cost": str(cost.quantize(CENTS)),
         "change": str(change.quantize(CENTS)),
