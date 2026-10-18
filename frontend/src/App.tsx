@@ -11,6 +11,7 @@ import ImportPage from "./pages/ImportPage";
 import NgcButtonPage from "./pages/NgcButtonPage";
 import { NGC_BOOKMARK_ENABLED } from "./ngcButton";
 import UpgradesPage from "./pages/UpgradesPage";
+import MetalsPage from "./pages/MetalsPage";
 import WantListPage from "./pages/WantListPage";
 import LandingPage from "./pages/LandingPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
@@ -139,6 +140,7 @@ export default function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/wants" element={<WantListPage />} />
+          <Route path="/metals" element={<MetalsPage />} />
           <Route path="/collections/:typeSlug/:number/upgrades" element={<Fresh><UpgradesPage /></Fresh>} />
           {NGC_BOOKMARK_ENABLED && <Route path="/ngc-button" element={<NgcButtonPage />} />}
           <Route path="/collections/:typeSlug/sold" element={<Fresh><SoldPage /></Fresh>} />

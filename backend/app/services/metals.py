@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 TROY_OZ_G = 31.1034768
 SPOT_URL = "https://api.gold-api.com/price/{symbol}"  # free, no key
-SYMBOLS = {"gold": "XAU", "silver": "XAG", "platinum": "XPT", "palladium": "XPD"}
+SYMBOLS = {"gold": "XAU", "silver": "XAG", "platinum": "XPT", "palladium": "XPD", "copper": "HG"}  # copper: USD/lb
 CACHE_SECONDS = 15 * 60
 FAIL_SECONDS = 5 * 60
 

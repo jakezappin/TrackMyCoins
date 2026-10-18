@@ -579,6 +579,63 @@ export interface WantItem {
   } | null;
 }
 
+export type PreciousMetal = "gold" | "silver" | "platinum" | "palladium";
+
+export interface SpotCard {
+  metal: PreciousMetal;
+  price: number | null;
+  live: boolean;
+  as_of: string | null;
+  prev_close: number | null;
+  prev_day: string | null;
+  /** Weekend: the change shown is the last trading day's. */
+  market_closed: boolean;
+  change: number | null;
+  change_pct: number | null;
+  changes: { "1w": number | null; "1m": number | null; ytd: number | null; "1y": number | null };
+  high_52w: number | null;
+  low_52w: number | null;
+}
+
+export interface MeltRow {
+  key: string;
+  group: string;
+  name: string;
+  years: string;
+  face: number;
+  metal: PreciousMetal | "copper";
+  amount: number;
+  unit: "ozt" | "lb";
+  composition: string;
+  melt: number | null;
+  x_face: number | null;
+}
+
+export interface MetalsOverview {
+  spot: SpotCard[];
+  copper: { price: number | null; as_of: string | null };
+  ratio: {
+    value: number | null;
+    signal: "trade_gold" | "trade_silver" | "neutral" | null;
+    average?: number;
+    high?: number;
+    low?: number;
+    years?: number;
+    percentile?: number;
+    min?: number;
+    max?: number;
+  };
+  coins: MeltRow[];
+  junk_oz_per_dollar: number;
+  holdings: {
+    metals: { metal: PreciousMetal; bullion_oz: number; coin_oz: number; oz: number; value: number | null }[];
+    coins_counted: number;
+    coins_total: number;
+  };
+}
+
+export type MetalRange = "1m" | "6m" | "1y" | "5y" | "10y" | "all";
+
 export interface WantIn {
   collection_id?: number | null;
   coin_type_id?: number | null;
@@ -841,6 +898,9 @@ export const api = {
   },
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
+  metals: () => request<MetalsOverview>("GET", "/api/metals"),
+  metalHistory: (series: PreciousMetal | "ratio", range: MetalRange) =>
+    request<{ date: string; value: number }[]>("GET", `/api/metals/history?series=${series}&range=${range}`),
   dashboard: () => request<DashboardData>("GET", "/api/dashboard"),
   coinHistory: (inv: string) => request<HistoryPoint[]>("GET", `/api/coins/${encodeURIComponent(inv)}/history`),
   history: (collectionId: number | null) =>

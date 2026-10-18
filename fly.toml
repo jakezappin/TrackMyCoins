@@ -10,11 +10,10 @@ primary_region = "iad"  # Ashburn, Virginia. List regions with: fly platform reg
 [http_service]
   internal_port = 8080
   force_https = true
-  # Always on: price refreshes, the hourly spot record and the monthly price upkeep run in the background and
-  # would stop whenever Fly put an idle machine to sleep. (About $3-4 a month for this size.)
-  auto_stop_machines = "off"
+  # Sleep when idle to save money; wakes on the next visit (a second or two).
+  auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
   [[http_service.checks]]
     grace_period = "20s"
