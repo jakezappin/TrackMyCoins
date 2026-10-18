@@ -3683,3 +3683,10 @@ table {
   background: var(--red-soft);
   color: var(--red);
 }
+
+/* ---- New collection ---- */
+.new-collection-modal { max-width: 480px; }
+.kind-choice { display: grid; grid-template-columns: 1fr 1fr; }
+.kind-choice .seg { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; text-align: left; white-space: normal; }
+.kind-choice .seg .small { opacity: 0.8; font-weight: 400; }
+.notice { background: var(--gold-soft); border-radius: 8px; padding: 8px 10px; margin: 0; }

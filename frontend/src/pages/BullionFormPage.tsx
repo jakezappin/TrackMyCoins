@@ -165,7 +165,7 @@ export default function BullionFormPage() {
       <div className="page">
         <div className="card empty-state">
           <h2>No Bullion Collections Yet</h2>
-          <p className="muted">Create one from the sidebar (Bullion → New bullion collection).</p>
+          <p className="muted">Create one with <strong>+ New collection</strong> in the sidebar (choose Bullion).</p>
         </div>
       </div>
     );
