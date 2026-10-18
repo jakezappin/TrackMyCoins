@@ -50,11 +50,26 @@ class UserOut(ORM):
     first_name: str
     last_name: str
     details_pct: int = 70
+    # Price code for labels (see services/price_code.py).
+    price_code_phrase: str | None = None
+    price_code_start: int | None = None
+    price_code_length: int = 6
+    asking_price_on: bool = False
 
 
 class Preferences(BaseModel):
     # Details (problem) coins are valued at this % of straight-grade CPG.
-    details_pct: int = Field(ge=1, le=100)
+    details_pct: int | None = Field(default=None, ge=1, le=100)
+    # An Asking price field on each coin and bullion item.
+    asking_price_on: bool | None = None
+
+
+class PriceCodeIn(BaseModel):
+    """None for the phrase: no price code."""
+
+    phrase: str | None = Field(default=None, max_length=60)
+    start: Literal[0, 1] | None = None
+    length: int = Field(6, ge=3, le=10)
 
 
 # ---- Coin types / collections ------------------------------------------------
@@ -157,6 +172,8 @@ class CoinFields(BaseModel):
     error_description: str | None = Field(default=None, max_length=200)
     # In the owner's hands, or out at a grading company (in a Grading Tracker submission).
     location: Literal["inventory", "grading"] = "inventory"
+    # What the owner would sell it for (printed on its label).
+    asking_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     # Where it's kept (a Storage spot) and where in it, e.g. "Page 3, hole 14".
     storage_id: int | None = None
     storage_position: str | None = Field(default=None, max_length=60)

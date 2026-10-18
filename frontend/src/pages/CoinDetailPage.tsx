@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type CoinDetail } from "../api";
+import { api, type CoinDetail, type CoinPublicState } from "../api";
 import { useApp, useNavCollection } from "../App";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import { ngcCertUrl } from "../ngcButton";
@@ -254,6 +254,11 @@ export default function CoinDetailPage() {
               refresh();
             }}
           />
+          {!coin.is_sold && (
+            <Link className="btn" to={`/labels?coin=${encodeURIComponent(coin.inventory_number)}`}>
+              Print label
+            </Link>
+          )}
           <Link className="btn btn-primary" to={`${coinPath(inv)}/edit`}>
             Edit
           </Link>
@@ -421,6 +426,12 @@ export default function CoinDetailPage() {
             </dd>
             <dt>From</dt>
             <dd>{coin.purchased_from ?? "—"}</dd>
+            {coin.asking_price != null && !coin.is_sold && (
+              <>
+                <dt>Asking</dt>
+                <dd>{money(coin.asking_price)}</dd>
+              </>
+            )}
             <dt>Value at purchase</dt>
             <dd>
               {coin.purchase_value?.value != null ? (
@@ -578,6 +589,8 @@ export default function CoinDetailPage() {
 
       {coin.grading_history.length > 0 && <GradingHistoryCard history={coin.grading_history} />}
 
+      {!coin.is_sold && <CoinLinkCard inv={coin.inventory_number} />}
+
       {!isSet && (
       <div className={`coin-row${coin.is_sold ? " single" : ""}`}>
         <AttachmentsCard inventoryNumber={coin.inventory_number} />
@@ -724,6 +737,92 @@ function GradingHistoryCard({ history }: { history: CoinDetail["grading_history"
           </tbody>
         </table>
       </div>
+    </section>
+  );
+}
+
+/** The coin's own link (its label's QR code): the public page switch, the link itself, and a new link to retire
+ * labels already printed. */
+function CoinLinkCard({ inv }: { inv: string }) {
+  const [state, setState] = useState<CoinPublicState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.coinPublic(inv).then(setState).catch(() => setState(null));
+  }, [inv]);
+
+  async function run(fn: () => Promise<CoinPublicState>, done?: string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      setState(await fn());
+      if (done) setMsg(done);
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!state) return null;
+  return (
+    <section className="card coin-link-card">
+      <div className="row between wrap">
+        <h2>Label and Public Page</h2>
+        <div className="row wrap">
+          <button
+            className="btn small"
+            disabled={busy}
+            onClick={async () => {
+              try {
+                await api.addToLabelQueue({ inventory_numbers: [inv] });
+                setMsg("Added to your label queue.");
+              } catch (e) {
+                setMsg((e as Error).message);
+              }
+            }}
+          >
+            Add to label queue
+          </button>
+          <Link className="btn small" to={`/labels?coin=${encodeURIComponent(inv)}`}>
+            Print label
+          </Link>
+        </div>
+      </div>
+      <label className="check public-check">
+        <input type="checkbox" checked={state.public_page} disabled={busy} onChange={(e) => run(() => api.setCoinPublic(inv, e.target.checked))} />
+        <span>
+          Public page
+          <small className="muted">
+            {state.public_page
+              ? "On: anyone who scans this coin's label sees its photos, grade, cert and CAC. Never prices, purchase details, storage or notes."
+              : 'Off: anyone else who scans its label sees "This coin is private." You always go straight to this page.'}
+          </small>
+        </span>
+      </label>
+      {state.url ? (
+        <p className="small coin-link">
+          <span className="muted">Label link:</span>{" "}
+          <a href={state.path ?? undefined} target="_blank" rel="noreferrer">
+            {window.location.origin + state.path}
+          </a>{" "}
+          <button
+            type="button"
+            className="link-btn small"
+            disabled={busy}
+            onClick={() => {
+              if (confirm("Make a new link? Labels you've already printed for this coin will stop working, so reprint its label afterwards."))
+                run(() => api.newCoinLink(inv), "New link made. Reprint this coin's label.");
+            }}
+          >
+            Make a new link
+          </button>
+        </p>
+      ) : (
+        <p className="small muted">This coin gets its own link the first time you print its label.</p>
+      )}
+      {msg && <p className="small muted">{msg}</p>}
     </section>
   );
 }

@@ -15,6 +15,7 @@ const EMPTY: Omit<BullionItemIn, "collection_id"> = {
   purity: "0.999",
   face_value: null,
   price_paid: null,
+  asking_price: null,
   purchase_date: null,
   purchased_from: null,
   sale_price: null,
@@ -30,7 +31,7 @@ export default function BullionFormPage() {
   const { inv } = useParams();
   const [search] = useSearchParams();
   const navigate = useNavigate();
-  const { bullionCollections, refresh, loaded } = useApp();
+  const { bullionCollections, refresh, loaded, user } = useApp();
   const [meta, setMeta] = useState<BullionMeta | null>(null);
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
   const [form, setForm] = useState(EMPTY);
@@ -60,6 +61,7 @@ export default function BullionFormPage() {
         setForm({
           description: i.description, packaging: i.packaging, quantity: i.quantity, weight: i.weight,
           weight_unit: i.weight_unit, purity: String(Number(i.purity)), face_value: i.face_value, price_paid: i.price_paid,
+          asking_price: copy ? null : i.asking_price,
           purchase_date: i.purchase_date, purchased_from: i.purchased_from,
           sale_price: copy ? null : i.sale_price, sale_date: copy ? null : i.sale_date, sold_to: copy ? null : i.sold_to,
           notes: copy ? null : i.notes,
@@ -142,6 +144,7 @@ export default function BullionFormPage() {
         quantity: face ? 1 : Number(form.quantity) || 1,
         price_paid: money_("Price paid", form.price_paid),
         sale_price: money_("Sale price", form.sale_price),
+        asking_price: money_("Asking price", form.asking_price),
       };
     } catch (err) {
       return setError((err as Error).message);
@@ -359,6 +362,13 @@ export default function BullionFormPage() {
         </section>
         <section className="card form-section">
           <h2>Sale</h2>
+          {(user?.asking_price_on || form.asking_price) && !form.sale_price && !form.sale_date && (
+            <label className="field">
+              <span>Asking price</span>
+              <input type="text" inputMode="decimal" value={form.asking_price ?? ""} onChange={(e) => set("asking_price", e.target.value || null)} placeholder="0.00" />
+              <small className="muted">What you'd sell it for.</small>
+            </label>
+          )}
           <div className="grid-2">
             <label className="field">
               <span>Sale price</span>

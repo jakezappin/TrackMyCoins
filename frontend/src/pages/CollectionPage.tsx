@@ -109,6 +109,20 @@ export default function CollectionPage() {
                 Insurance report (PDF)
               </DownloadLink>
               <ShareCollection collection={collection} onChange={setCollection} asMenuItem />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const q = await api.addToLabelQueue({ collection_id: collection.id });
+                    if (confirm(`Added to your label queue (${q.items.length} label${q.items.length === 1 ? "" : "s"} waiting). Go to Labels now?`))
+                      navigate("/labels");
+                  } catch (e) {
+                    alert((e as Error).message);
+                  }
+                }}
+              >
+                Print labels…
+              </button>
               <hr />
               <button type="button" onClick={() => setRenaming(true)}>Rename collection</button>
               <button type="button" className="danger" onClick={remove}>

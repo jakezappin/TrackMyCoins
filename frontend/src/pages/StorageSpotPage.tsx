@@ -70,6 +70,21 @@ export default function StorageSpotPage() {
           <button className="btn" onClick={() => print(false)} disabled={printing !== null || n === 0}>
             {printing === "checklist" ? "Preparing…" : "Print checklist"}
           </button>
+          <button
+            className="btn"
+            disabled={!spot.items.some((i) => i.kind === "coin")}
+            onClick={async () => {
+              try {
+                const q = await api.addToLabelQueue({ storage_id: spot.id });
+                if (confirm(`Added to your label queue (${q.items.length} label${q.items.length === 1 ? "" : "s"} waiting). Go to Labels now?`))
+                  navigate("/labels");
+              } catch (e) {
+                alert((e as Error).message);
+              }
+            }}
+          >
+            Print labels
+          </button>
           <button className="btn" onClick={() => setEditing(true)}>
             Edit
           </button>

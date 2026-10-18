@@ -8,7 +8,8 @@ from ..auth import clear_session, current_user, hash_password, set_session, veri
 from ..config import get_settings
 from ..db import get_db
 from ..models import User
-from ..schemas import LoginIn, PasswordChange, Preferences, ProfileUpdate, SignupIn, UserOut
+from ..schemas import LoginIn, PasswordChange, Preferences, PriceCodeIn, ProfileUpdate, SignupIn, UserOut
+from ..services import price_code
 from ..services.ratelimit import FailureLimiter, Pacer
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -112,7 +113,31 @@ def update_profile(body: ProfileUpdate, db: Session = Depends(get_db), user: Use
 
 @router.put("/preferences", response_model=UserOut)
 def update_preferences(body: Preferences, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    user.details_pct = body.details_pct
+    if body.details_pct is not None:
+        user.details_pct = body.details_pct
+    if body.asking_price_on is not None:
+        user.asking_price_on = body.asking_price_on
+    db.commit()
+    return user
+
+
+@router.put("/price-code", response_model=UserOut)
+def update_price_code(body: PriceCodeIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """The phrase must have exactly 10 different letters, and the owner must say whether its first letter is 0 or 1."""
+    if body.phrase is None or not body.phrase.strip():
+        user.price_code_phrase = None
+        user.price_code_start = None
+    else:
+        try:
+            phrase = price_code.check_phrase(body.phrase)
+        except price_code.PriceCodeError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+        if body.start is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                "Choose whether your phrase's first letter stands for 0 or 1.")
+        user.price_code_phrase = phrase
+        user.price_code_start = body.start
+    user.price_code_length = body.length
     db.commit()
     return user
 

@@ -122,6 +122,10 @@ export default function AccountPage() {
 
       <DetailsDefault />
 
+      <PriceCodeCard />
+
+      <AskingPriceSetting />
+
       <form className="card form-section" onSubmit={savePassword}>
         <h2>Change Password</h2>
         <label className="field">
@@ -213,5 +217,176 @@ function DetailsDefault() {
         </button>
       </div>
     </form>
+  );
+}
+
+/** Letters in a phrase, in order, without spaces or repeats (as the server counts them). */
+function codeLetters(phrase: string): string[] {
+  const out: string[] = [];
+  for (const ch of phrase.toUpperCase()) if (ch >= "A" && ch <= "Z" && !out.includes(ch)) out.push(ch);
+  return out;
+}
+
+/** The price code for labels: the phrase (hidden unless shown), whether it starts at 0 or 1, and the code length. */
+function PriceCodeCard() {
+  const { user, setUser } = useApp();
+  const [phrase, setPhrase] = useState(user?.price_code_phrase ?? "");
+  const [start, setStart] = useState<0 | 1 | null>(user?.price_code_start ?? null);
+  const [length, setLength] = useState(String(user?.price_code_length ?? 6));
+  const [show, setShow] = useState(false);
+  const [tryPrice, setTryPrice] = useState("145.60");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const letters = codeLetters(phrase);
+  const ready = letters.length === 10 && start !== null;
+  const digitOf = (i: number) => (i + (start ?? 0)) % 10;
+  const startChanged = user?.price_code_start != null && start !== user.price_code_start;
+  const len = Math.min(10, Math.max(3, Number(length) || 6));
+
+  function example(): string {
+    const n = Number(tryPrice.replace(/[$,\s]/g, ""));
+    if (!ready || !tryPrice.trim() || !Number.isFinite(n) || n < 0) return "";
+    const dollars = String(Math.round(n));
+    const code = [...dollars].map((d) => letters[(Number(d) - start! + 10) % 10]);
+    // Filler (the printed labels pick theirs per coin; this just shows the idea).
+    const filler = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].filter((c) => !letters.includes(c));
+    for (let i = 0; code.length < len; i++) code.splice((i * 3 + 1) % (code.length + 1), 0, filler[(i * 7 + dollars.length) % filler.length]);
+    return `${code.join("")} ($${Number(dollars).toLocaleString()})`;
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (phrase.trim() && letters.length !== 10) return setMsg({ ok: false, text: `Your phrase has ${letters.length} different letters. It needs exactly 10.` });
+    if (phrase.trim() && start === null) return setMsg({ ok: false, text: "Choose whether your phrase starts at 0 or at 1." });
+    if (startChanged && !confirm("Labels you've already printed were coded with your old setting, so they'll read differently from new ones. Change it anyway?")) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      setUser(await api.setPriceCode({ phrase: phrase.trim() || null, start: phrase.trim() ? start : null, length: len }));
+      setMsg({ ok: true, text: phrase.trim() ? "Saved." : "Price code removed." });
+    } catch (err) {
+      setMsg({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const ex = example();
+  return (
+    <form className="card form-section price-code" onSubmit={save}>
+      <h2>Price Code</h2>
+      <p className="muted small">
+        A price code lets you put what you paid (and when) on a coin's label without anyone else being able to read it.
+        Pick a phrase with exactly 10 different letters, like I LOVE FRANK. Its letters stand for the digits in order
+        (spaces and repeated letters don't count), starting at 0 or at 1, whichever you choose below. Prices are
+        rounded to the nearest whole dollar (no cents), then each digit becomes its letter. If that's shorter than your
+        code length, letters that aren't in your phrase are mixed in as filler: when you read a code, skip any letter
+        that isn't in your phrase. Purchase dates are coded the same way as month, day and 2-digit year (03/15/25).
+      </p>
+      <div className="grid-2">
+        <label className="field">
+          <span>Code phrase</span>
+          <div className="row nowrap">
+            <input
+              className="grow"
+              type={show ? "text" : "password"}
+              value={phrase}
+              onChange={(e) => (setPhrase(e.target.value.toUpperCase()), setMsg(null))}
+              maxLength={60}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="10 different letters"
+            />
+            <button type="button" className="btn small" onClick={() => setShow(!show)}>
+              {show ? "Hide" : "Show"}
+            </button>
+          </div>
+          {phrase.trim() && (
+            <small className={letters.length === 10 ? "muted" : "error"}>
+              {letters.length} of 10 different letters{letters.length > 10 ? " (too many)" : ""}
+            </small>
+          )}
+        </label>
+        <label className="field w-auto">
+          <span>Code length</span>
+          <input type="number" min={3} max={10} step={1} value={length} onChange={(e) => setLength(e.target.value)} />
+          <small className="muted">Letters per coded price, with filler</small>
+        </label>
+      </div>
+      <fieldset className="field">
+        <span>Your phrase's first letter stands for</span>
+        <div className="row wrap">
+          <label className="check">
+            <input type="radio" name="code-start" checked={start === 0} onChange={() => (setStart(0), setMsg(null))} /> 0 (0123456789)
+          </label>
+          <label className="check">
+            <input type="radio" name="code-start" checked={start === 1} onChange={() => (setStart(1), setMsg(null))} /> 1 (1234567890)
+          </label>
+        </div>
+      </fieldset>
+      {letters.length === 10 && start !== null && show && (
+        <div className="code-key" aria-label="Your code key">
+          {letters.map((l, i) => (
+            <span key={l}>
+              <strong>{l}</strong>
+              {digitOf(i)}
+            </span>
+          ))}
+        </div>
+      )}
+      {ready && (
+        <label className="field w-auto">
+          <span>Try a price</span>
+          <div className="row">
+            <input type="text" inputMode="decimal" value={tryPrice} onChange={(e) => setTryPrice(e.target.value)} style={{ maxWidth: 130 }} />
+            <span className="mono">{ex ? `→ ${ex}` : ""}</span>
+          </div>
+        </label>
+      )}
+      {startChanged && <p className="small warn">Labels already printed were coded with your old setting.</p>}
+      {msg && <p className={`small ${msg.ok ? "ok" : "error"}`}>{msg.text}</p>}
+      <div className="row-end">
+        <button className="btn btn-primary" disabled={busy}>
+          {busy ? "Saving…" : "Save price code"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Asking prices on coins and bullion: off unless the owner sells. */
+function AskingPriceSetting() {
+  const { user, setUser } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <section className="card form-section">
+      <h2>Asking Prices</h2>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={user?.asking_price_on ?? false}
+          disabled={busy}
+          onChange={async (e) => {
+            setBusy(true);
+            setError(null);
+            try {
+              setUser(await api.setPreferences({ asking_price_on: e.target.checked }));
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />{" "}
+        Show an Asking price field on each coin and bullion item
+      </label>
+      <p className="muted small">
+        For selling: the price you'd take, filled in on its label when you print one. You can always type an asking
+        price when printing labels, with this on or off.
+      </p>
+      {error && <p className="small error">{error}</p>}
+    </section>
   );
 }

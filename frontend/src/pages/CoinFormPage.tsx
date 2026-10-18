@@ -65,6 +65,7 @@ const EMPTY: CoinFields = {
   is_error: false,
   error_description: null,
   price_paid: null,
+  asking_price: null,
   purchase_value_custom: null,
   purchase_date: null,
   purchased_from: null,
@@ -349,7 +350,7 @@ export default function CoinFormPage() {
       set(key, (e.target.value === "" ? null : e.target.value) as never),
   });
   /** A money field: shows what was typed, and tidies "1,250" to "1250.00" on leaving the field. */
-  const money_ = (key: "price_paid" | "sale_price" | "purchase_value_custom") => ({
+  const money_ = (key: "price_paid" | "sale_price" | "purchase_value_custom" | "asking_price") => ({
     value: (form[key] as string | null) ?? "",
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(key, (e.target.value === "" ? null : e.target.value) as never),
     onBlur: () => {
@@ -638,10 +639,12 @@ export default function CoinFormPage() {
     const paid = parseMoney(form.price_paid);
     const sold = parseMoney(form.sale_price);
     const atPurchase = parseMoney(form.purchase_value_custom);
-    if ("error" in paid || "error" in sold || "error" in atPurchase) {
+    const asking = parseMoney(form.asking_price);
+    if ("error" in paid || "error" in sold || "error" in atPurchase || "error" in asking) {
       setError(
         [
           "error" in paid && `Price paid ${paid.error}.`,
+          "error" in asking && `Asking price ${asking.error}.`,
           "error" in sold && `Sale price ${sold.error}.`,
           "error" in atPurchase && `Est. value at purchase ${atPurchase.error}.`,
         ]
@@ -686,6 +689,7 @@ export default function CoinFormPage() {
       ...form,
       price_paid: paid.value,
       purchase_value_custom: atPurchase.value,
+      asking_price: asking.value,
       sale_price: sold.value,
       collection_id: collectionId ?? 0,
       error_value: form.is_error && "value" in errValue ? errValue.value : null,
@@ -1397,6 +1401,13 @@ export default function CoinFormPage() {
         </section>
         <section className={`card form-section ${isSold ? "sold-section" : ""}`}>
           <h2>Sale {isSold && <span className="tag sold">Sold</span>}</h2>
+          {(user?.asking_price_on || form.asking_price) && !isSold && (
+            <label className="field">
+              <span>Asking price</span>
+              <input type="text" inputMode="decimal" {...money_("asking_price")} placeholder="0.00" />
+              <small className="muted">What you'd sell it for. Printed on its label if you choose.</small>
+            </label>
+          )}
           <div className="grid-2">
             <label className="field">
               <span>Sale price</span>

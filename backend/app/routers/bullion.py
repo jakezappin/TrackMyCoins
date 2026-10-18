@@ -54,6 +54,7 @@ class ItemIn(BaseModel):
     purity: Decimal = Field(gt=0, le=1, max_digits=6, decimal_places=5)
     face_value: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     price_paid: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    asking_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     purchase_date: date | None = None
     purchased_from: str | None = Field(default=None, max_length=200)
     sale_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
@@ -138,6 +139,7 @@ def _item_out(item: BullionItem, series: svc.SpotSeries | None, spot_now: Decima
         "purity": str(Decimal(str(item.purity)).normalize()),
         "face_value": str(item.face_value) if item.face_value is not None else None,
         "price_paid": str(cost) if cost is not None else None, "purchase_date": item.purchase_date,
+        "asking_price": str(item.asking_price) if item.asking_price is not None else None,
         "purchased_from": item.purchased_from, "sale_price": str(item.sale_price) if item.sale_price is not None else None,
         "sale_date": item.sale_date, "sold_to": item.sold_to, "notes": item.notes, "is_sold": sold,
         "created_at": item.created_at,

@@ -8,6 +8,12 @@ export interface User {
   last_name: string;
   /** Details coins are valued at this % of straight-grade CPG. */
   details_pct: number;
+  /** Price code for labels: 10 different letters standing for the digits, starting at 0 or 1. */
+  price_code_phrase: string | null;
+  price_code_start: 0 | 1 | null;
+  price_code_length: number;
+  /** An Asking price field on each coin and bullion item. */
+  asking_price_on: boolean;
 }
 
 export type Finish = "MS" | "PR" | "SPR";
@@ -184,7 +190,7 @@ export interface LabelReading {
 export type SharedCoin = Omit<
   CoinFields,
   | "pcgs_number" | "price_paid" | "purchase_value_custom" | "purchase_date" | "purchased_from" | "sale_price" | "sale_date"
-  | "sold_to" | "notes"
+  | "sold_to" | "notes" | "asking_price"
 > & {
   id: number;
   value_estimate: string | null;
@@ -226,6 +232,8 @@ export interface CoinFields {
   details_pct: number | null;
   /** With the owner, or out at a grading company. */
   location: "inventory" | "grading";
+  /** What you'd sell it for (printed on its label). */
+  asking_price: string | null;
   /** Where it's kept (a Storage spot) and where in it, e.g. "Page 3, hole 14". */
   storage_id: number | null;
   storage_position: string | null;
@@ -411,6 +419,8 @@ export interface BullionItemIn {
   purity: string;
   face_value: string | null;
   price_paid: string | null;
+  /** What you'd sell it for. */
+  asking_price: string | null;
   purchase_date: string | null;
   purchased_from: string | null;
   sale_price: string | null;
@@ -1173,7 +1183,34 @@ export const api = {
   logout: () => request<void>("POST", "/api/auth/logout"),
   updateProfile: (b: { email: string; first_name: string; last_name: string; current_password?: string }) =>
     request<User>("PUT", "/api/auth/me", b),
-  setPreferences: (b: { details_pct: number }) => request<User>("PUT", "/api/auth/preferences", b),
+  setPreferences: (b: { details_pct?: number; asking_price_on?: boolean }) => request<User>("PUT", "/api/auth/preferences", b),
+  setPriceCode: (b: { phrase: string | null; start: 0 | 1 | null; length: number }) => request<User>("PUT", "/api/auth/price-code", b),
+  labelQueue: (only?: string) => request<LabelQueue>("GET", `/api/labels/queue${only ? `?only=${encodeURIComponent(only)}` : ""}`),
+  addToLabelQueue: (b: { inventory_numbers?: string[]; collection_id?: number; storage_id?: number }) =>
+    request<LabelQueue>("POST", "/api/labels/queue", b),
+  setQueuedAsking: (inv: string, asking_price: string | null) =>
+    request<LabelQueue>("PATCH", `/api/labels/queue/${encodeURIComponent(inv)}`, { asking_price }),
+  removeQueued: (inv: string) => request<LabelQueue>("DELETE", `/api/labels/queue/${encodeURIComponent(inv)}`),
+  clearLabelQueue: (inventory_numbers?: string[]) => request<LabelQueue>("POST", "/api/labels/queue/clear", { inventory_numbers }),
+  labelPreview: (job: LabelJob) => request<LabelPreview>("POST", "/api/labels/preview", job),
+  async printLabels(job: LabelJob): Promise<File> {
+    const res = await send("/api/labels/pdf", {
+      method: "POST", credentials: "same-origin", body: JSON.stringify(job), headers: { "Content-Type": "application/json" },
+    }, UPLOAD_TIMEOUT_MS);
+    checkSession("/api/labels/pdf", res.status);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiError(res.status, errorMessage(data, `${res.status} ${res.statusText}`), data?.detail);
+    }
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    const plain = /filename="?([^";]+)"?/i.exec(cd);
+    return new File([await res.blob()], plain ? plain[1] : "Coin_Labels.pdf", { type: "application/pdf" });
+  },
+  coinPublic: (inv: string) => request<CoinPublicState>("GET", `/api/labels/coins/${encodeURIComponent(inv)}/public`),
+  setCoinPublic: (inv: string, public_page: boolean) =>
+    request<CoinPublicState>("PUT", `/api/labels/coins/${encodeURIComponent(inv)}/public`, { public_page }),
+  newCoinLink: (inv: string) => request<CoinPublicState>("POST", `/api/labels/coins/${encodeURIComponent(inv)}/public/new-link`),
+  publicCoin: (token: string) => request<PublicCoin>("GET", `/api/c/${encodeURIComponent(token)}`),
   changePassword: (current_password: string, new_password: string) =>
     request<void>("POST", "/api/auth/password", { current_password, new_password }),
   certCheck: (service: GradingService, cert: string, exclude?: string | null) => {
@@ -1405,3 +1442,75 @@ export const api = {
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/price-quotes`, { value, source, description }),
   deleteQuote: (quoteId: number) => request<void>("DELETE", `/api/price-quotes/${quoteId}`),
 };
+
+// ---- Labels -------------------------------------------------------------------------------------------------
+
+export type LabelSize = "2x2" | "avery5160" | "thermal2x1";
+export type CodeMode = "off" | "plain" | "code";
+
+export interface LabelOptions {
+  size: LabelSize;
+  /** 2x2 squares: 2" or 1⅞" (slides into flips). */
+  square: 2 | 1.875;
+  cut_lines: boolean;
+  /** Sheets: the first unused spot (1 = top left). */
+  start: number;
+  inventory: boolean;
+  variety: boolean;
+  grade: boolean;
+  cert: boolean;
+  cac: boolean;
+  storage: boolean;
+  qr: boolean;
+  price: CodeMode;
+  purchase_date: CodeMode;
+  asking: boolean;
+}
+
+export interface LabelItem {
+  inventory_number: string;
+  title: string;
+  grade: string;
+  asking_price: string | null;
+  price_paid: string | null;
+  purchase_date: string | null;
+  public_page: boolean;
+  is_sold: boolean;
+}
+
+export interface LabelQueue {
+  items: LabelItem[];
+  options: LabelOptions;
+  price_code_ready: boolean;
+  asking_price_on: boolean;
+}
+
+export interface LabelJob {
+  options: LabelOptions;
+  items: { inventory_number: string; asking_price: string | null }[];
+  public_page: boolean;
+  site: string;
+}
+
+export interface LabelPreview {
+  /** The first few labels, each on its own (close-ups). */
+  labels: string[];
+  /** Sheets: the first pages, showing where the labels fall. */
+  pages: string[];
+  page_count: number;
+  label_count: number;
+  smallest_font: number;
+  warnings: string[];
+}
+
+export interface CoinPublicState {
+  public_page: boolean;
+  /** The coin's own link (its label's QR code), once it has one. */
+  url: string | null;
+  path: string | null;
+}
+
+export type PublicCoin =
+  | { owner: true; inventory_number: string }
+  | { owner: false; private: true }
+  | { owner: false; private: false; title: string; coin_type_name: string; coin: SharedCoin };

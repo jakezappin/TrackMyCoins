@@ -20,6 +20,8 @@ import WantListPage from "./pages/WantListPage";
 import LandingPage from "./pages/LandingPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
 import SharedCollectionPage from "./pages/SharedCollectionPage";
+import PublicCoinPage from "./pages/PublicCoinPage";
+import LabelsPage from "./pages/LabelsPage";
 import SoldPage from "./pages/SoldPage";
 import StatusPage from "./pages/StatusPage";
 import BullionCollectionPage from "./pages/BullionCollectionPage";
@@ -161,6 +163,7 @@ export default function App() {
         <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
         <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <SignupPage />} />
         <Route path="/shared/:token" element={<SharedCollectionPage />} />
+        <Route path="/c/:token" element={<Fresh><PublicCoinPage /></Fresh>} />
         <Route element={<RequireAuth />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />
@@ -171,6 +174,7 @@ export default function App() {
           <Route path="/grading/:id" element={<Fresh><SubmissionPage /></Fresh>} />
           <Route path="/storage" element={<StoragePage />} />
           <Route path="/storage/:id" element={<Fresh><StorageSpotPage /></Fresh>} />
+          <Route path="/labels" element={<Fresh><LabelsPage /></Fresh>} />
           <Route path="/collections/:typeSlug/:number/upgrades" element={<Fresh><UpgradesPage /></Fresh>} />
           {NGC_BOOKMARK_ENABLED && <Route path="/ngc-button" element={<NgcButtonPage />} />}
           <Route path="/collections/:typeSlug/sold" element={<Fresh><SoldPage /></Fresh>} />

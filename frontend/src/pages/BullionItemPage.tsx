@@ -217,6 +217,12 @@ export default function BullionItemPage() {
             </dd>
             <dt>From</dt>
             <dd>{item.purchased_from ?? "—"}</dd>
+            {item.asking_price != null && !sold && (
+              <>
+                <dt>Asking</dt>
+                <dd>{money(item.asking_price)}</dd>
+              </>
+            )}
             <dt>Melt then</dt>
             <dd>{money(item.value_at_purchase)}</dd>
             {!sold && (

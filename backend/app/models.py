@@ -35,6 +35,15 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     # Details (problem) coins are valued at this % of straight-grade CPG unless the coin says otherwise.
     details_pct: Mapped[int] = mapped_column(Integer, default=70, server_default="70")
+    # Price code for labels: a phrase of 10 different letters standing for the digits, starting at 0 or 1
+    # (0123456789 or 1234567890), and how many letters a coded price fills out to.
+    price_code_phrase: Mapped[str | None] = mapped_column(String(60))
+    price_code_start: Mapped[int | None] = mapped_column(Integer)
+    price_code_length: Mapped[int] = mapped_column(Integer, default=6, server_default="6")
+    # An Asking price field on each coin and bullion item (most collectors don't sell, so it's off).
+    asking_price_on: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # The label options used last time (size, fields, price and date modes...).
+    label_options: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -305,6 +314,12 @@ class Coin(Base):
     storage_position: Mapped[str | None] = mapped_column(String(60))
     # Where the coin is: "inventory" (with the owner) or "grading" (out at a grader, in a GradingSubmission).
     location: Mapped[str] = mapped_column(String(12), default="inventory", server_default="inventory")
+    # What the owner would sell it for (printed on its label).
+    asking_price: Mapped[Decimal | None] = mapped_column(Money)
+    # The coin's own link (its label's QR code): /c/<token>. The owner lands on the coin; anyone else sees a
+    # public page only when public_page is on. A new token retires old labels.
+    public_token: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
+    public_page: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Mint error (off-center, double struck, broadstrike...): no catalog or PCGS number, so no CPG, price guide or
     # auction data; the owner's own value is its value.
     is_error: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -452,6 +467,7 @@ class BullionItem(Base):
     weight_unit: Mapped[str] = mapped_column(String(4), default="ozt")  # ozt | g | kg
     purity: Mapped[Decimal] = mapped_column(Numeric(6, 5))  # 0.999
     face_value: Mapped[Decimal | None] = mapped_column(Money)  # junk silver: "$10 face" instead of weight
+    asking_price: Mapped[Decimal | None] = mapped_column(Money)
     price_paid: Mapped[Decimal | None] = mapped_column(Money)
     purchase_date: Mapped[date | None] = mapped_column(Date)
     purchased_from: Mapped[str | None] = mapped_column(String(200))
@@ -609,3 +625,18 @@ class StorageSpot(Base):
     name: Mapped[str] = mapped_column(String(100))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LabelQueueItem(Base):
+    """A coin waiting to have its label printed. The asking price to print is set here (starting from the coin's)."""
+
+    __tablename__ = "label_queue"
+    __table_args__ = (UniqueConstraint("user_id", "coin_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE", name="fk_label_queue_user"), index=True)
+    coin_id: Mapped[int] = mapped_column(ForeignKey("coins.id", ondelete="CASCADE", name="fk_label_queue_coin"))
+    asking_price: Mapped[Decimal | None] = mapped_column(Money)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    coin: Mapped[Coin] = relationship()
