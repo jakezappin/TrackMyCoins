@@ -271,7 +271,7 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <span>© {new Date().getFullYear()} TrackMyCoins</span>
         <span>
-          Values from Greysheet (CPG) and PCGS. Not affiliated with PCGS, NGC, CAC, ANACS or CDN Publishing. Coin
+          Values from Greysheet (CPG) and PCGS. Not affiliated with PCGS, NGC, CAC, ANACS, ICG or CDN Publishing. Coin
           photos: Wikimedia Commons, public domain.
         </span>
       </footer>

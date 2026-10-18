@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from .designations import canonical, unknown
 from .urls import absolute_url
 
-GradingService = Literal["PCGS", "NGC", "ANACS", "CACG", "RAW"]
+GradingService = Literal["PCGS", "NGC", "ANACS", "CACG", "ICG", "RAW"]
 CacSticker = Literal["green", "gold"]
 
 

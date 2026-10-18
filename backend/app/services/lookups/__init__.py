@@ -7,11 +7,12 @@ from .. import quota
 from . import cac, pcgs
 from .base import LookupError, clean_cert
 
-# NGC and ANACS put their verification pages behind bot protection, so the app
+# NGC, ANACS and ICG put their verification pages behind bot protection (ICG's behind a reCAPTCHA), so the app
 # can't fetch them. We return the verification link and the user copies the details.
 VERIFY_URLS = {
     "NGC": "https://www.ngccoin.com/certlookup/{cert}/",
     "ANACS": "https://anacs.com/verify/",
+    "ICG": "https://www.icgcoin.com/verification/",
 }
 
 

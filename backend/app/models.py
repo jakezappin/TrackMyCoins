@@ -291,7 +291,7 @@ class Coin(Base):
     pcgs_number: Mapped[str | None] = mapped_column(String(20))
 
     # Grading
-    grading_service: Mapped[str] = mapped_column(String(10))  # PCGS|NGC|ANACS|CACG|RAW
+    grading_service: Mapped[str] = mapped_column(String(10))  # PCGS|NGC|ANACS|CACG|ICG|RAW
     cert_number: Mapped[str | None] = mapped_column(String(30), index=True)
     grade_prefix: Mapped[str | None] = mapped_column(String(5))  # MS, AU, XF, VF, PR ...
     grade: Mapped[int | None] = mapped_column(Integer)  # Sheldon 1-70

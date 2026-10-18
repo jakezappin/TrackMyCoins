@@ -65,7 +65,7 @@ const EMPTY: CoinFields = {
   notes: null,
 };
 
-const SERVICES: GradingService[] = ["PCGS", "NGC", "ANACS", "CACG", "RAW"];
+const SERVICES: GradingService[] = ["PCGS", "NGC", "ANACS", "CACG", "ICG", "RAW"];
 const CIRC_PREFIXES = ["MS", "SP", "AU", "XF", "VF", "F", "VG", "G", "AG", "FR", "PO"];
 // Used until the catalog's designations for the series load (or if it can't be reached).
 const FALLBACK_DESIGNATIONS: Record<string, string[]> = {
@@ -94,7 +94,7 @@ const VARIETY_HINTS: Record<string, string> = {
 };
 
 function verifyUrl(service: GradingService, cert: string, grade: number | null): string | null {
-  if (!cert && service !== "ANACS" && service !== "CACG") return null;
+  if (!cert && service !== "ANACS" && service !== "CACG" && service !== "ICG") return null;
   switch (service) {
     case "PCGS":
       return `https://www.pcgs.com/cert/${encodeURIComponent(cert)}`;
@@ -103,6 +103,9 @@ function verifyUrl(service: GradingService, cert: string, grade: number | null):
     case "ANACS":
       // ANACS's lookup form; it can't be prefilled from the address.
       return "https://portal.anacs.com/Verify/CertVerification.aspx";
+    case "ICG":
+      // ICG's verification page (behind a reCAPTCHA; the serial is typed there).
+      return "https://www.icgcoin.com/verification/";
     case "CACG":
       return cert ? `https://www.cacgrading.com/lookup/${encodeURIComponent(cert)}` : "https://www.cacgrading.com/lookup";
     default:
@@ -683,7 +686,7 @@ export default function CoinFormPage() {
   const canLookUp = form.grading_service === "PCGS";
   const isNgc = form.grading_service === "NGC";
   // NGC and ANACS: no lookups we can automate, so cert + grade and a Verify button that's always there.
-  const verifyOnly = isNgc || form.grading_service === "ANACS";
+  const verifyOnly = isNgc || form.grading_service === "ANACS" || form.grading_service === "ICG";
   const vurl = lookup?.verify_url && form.grading_service !== "NGC" ? lookup.verify_url : verifyUrl(form.grading_service, form.cert_number ?? "", form.grade);
   const isSold = Boolean(form.sale_price || form.sale_date);
 
@@ -749,7 +752,7 @@ export default function CoinFormPage() {
             <span>Cert number</span>
             <input
               {...text("cert_number")}
-              placeholder={isNgc ? "e.g. 1234567-001" : form.grading_service === "ANACS" ? "e.g. 8016482" : "e.g. 12345678"}
+              placeholder={isNgc ? "e.g. 1234567-001" : form.grading_service === "ANACS" ? "e.g. 8016482" : form.grading_service === "ICG" ? "e.g. 1234567890" : "e.g. 12345678"}
               onBlur={async () => {
                 if (!(await checkDuplicate()) && isNgc) checkCac();
               }}
@@ -825,6 +828,12 @@ export default function CoinFormPage() {
           <p className="muted small">
             ANACS doesn't allow automated lookups. Use <strong>Verify ↗</strong> to check the cert on ANACS's site, then
             fill in the date below.
+          </p>
+        )}
+        {!isRaw && form.grading_service === "ICG" && (
+          <p className="muted small">
+            ICG doesn't allow automated lookups. Use <strong>Verify ↗</strong> to check the serial on ICG's site, or read it
+            from a photo of the label, then fill in the date and grade below.
           </p>
         )}
         {!isRaw && form.grading_service === "CACG" && (

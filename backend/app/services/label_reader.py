@@ -37,7 +37,7 @@ SCHEMA = {
     "type": "object",
     "properties": {
         "found_label": {"type": "boolean", "description": "A grading-service slab label is visible and readable."},
-        "grading_service": {"type": "string", "enum": ["PCGS", "NGC", "ANACS", "CACG", "unknown"]},
+        "grading_service": {"type": "string", "enum": ["PCGS", "NGC", "ANACS", "CACG", "ICG", "unknown"]},
         "cert_number": _nullable("string"),
         "year": _nullable("integer"),
         "mint_mark": _nullable("string"),
@@ -65,7 +65,7 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-PROMPT = """This photo should show a U.S. coin in a third-party grading slab (PCGS, NGC, ANACS or CAC Grading).
+PROMPT = """This photo should show a U.S. coin in a third-party grading slab (PCGS, NGC, ANACS, CAC Grading or ICG).
 Read the slab's printed label and fill in the fields.
 
 - cert_number: the certification number exactly as printed (digits, and a dash if NGC prints one, e.g. "1234567-001"). Not the PCGS coin number or a barcode's other numbers.
@@ -282,7 +282,7 @@ def read_ngc_page(cert: str, grade_in_url: str | None, text: str, user_id: int |
 def _clean(r: dict) -> dict:
     """Tidy values so they drop straight into the coin form."""
     service = r.get("grading_service")
-    r["grading_service"] = service if service in ("PCGS", "NGC", "ANACS", "CACG") else None
+    r["grading_service"] = service if service in ("PCGS", "NGC", "ANACS", "CACG", "ICG") else None
     for k in ("cert_number", "mint_mark", "grade_prefix", "strike_designation", "variety", "vam", "coin_type",
               "denomination", "notes"):
         v = r.get(k)

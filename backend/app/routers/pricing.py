@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api", tags=["pricing", "lookups"])
 
 @router.get("/lookup", response_model=LookupResult)
 def cert_lookup(
-    service: str = Query(..., description="PCGS, NGC, ANACS or CACG"),
+    service: str = Query(..., description="PCGS, NGC, ANACS, CACG or ICG"),
     cert: str = Query(..., min_length=1, max_length=30),
     user: User = Depends(current_user),
 ):

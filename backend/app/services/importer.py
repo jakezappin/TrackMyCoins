@@ -72,7 +72,7 @@ DATE_RE = re.compile(r"^\s*(\d{4})(?:\s*[-/]\s*([A-Z]{1,2})\b|\s+(CC|[PDSOW])\b)
 OVERDATE_RE = re.compile(r"^\s*(\d{4})/(\d{1,2})(?:\s*-\s*([A-Z]{1,2})\b)?\s*(.*)$", re.I)
 OVERMINT_RE = re.compile(r"^\s*(\d{4})\s*-\s*([A-Z]{1,2})/([A-Z]{1,2})\b\s*(.*)$", re.I)
 GRADE_RE = re.compile(r"^(?:(raw)\s*)?(proof|unc|[A-Za-z]{1,3}(?![A-Za-z]))?[\s-]*(\d{1,2})?\s*(\+)?\s*(★|\*|star)?\s*(.*)$", re.I)
-SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
+SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "ICG": "ICG", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
             "RAW": "RAW", "UNGRADED": "RAW", "NONE": "RAW"}
 YES = {"yes", "y", "true", "1", "x", "✓", "green", "gold"}
 
@@ -241,7 +241,7 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     if service:
         svc = SERVICES.get(_key(service).upper())
         if svc is None:
-            errors.append(f"Unknown grading service: {service} (use PCGS, NGC, ANACS, CACG or Raw)")
+            errors.append(f"Unknown grading service: {service} (use PCGS, NGC, ANACS, CACG, ICG or Raw)")
         f["grading_service"] = svc or "RAW"
     else:
         f["grading_service"] = "RAW" if is_raw or not _text(vals.get("cert_number")) else None

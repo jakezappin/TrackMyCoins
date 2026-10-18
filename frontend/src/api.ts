@@ -1,4 +1,4 @@
-export type GradingService = "PCGS" | "NGC" | "ANACS" | "CACG" | "RAW";
+export type GradingService = "PCGS" | "NGC" | "ANACS" | "CACG" | "ICG" | "RAW";
 export type CacSticker = "green" | "gold";
 
 export interface User {

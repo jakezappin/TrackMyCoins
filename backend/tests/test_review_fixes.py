@@ -287,3 +287,16 @@ def test_one_address(client, monkeypatch):
     assert client.get("/api/health", headers={"host": "trackmycoins.app"}).status_code == 200
     assert client.get("/api/health", headers={"host": "trackmycoins.fly.dev"}, follow_redirects=False).status_code == 200
     assert client.get("/api/health", headers={"host": "127.0.0.1:8080"}).status_code == 200
+
+
+def test_icg_coins(authed, morgan_collection):
+    from app.services.importer import row_to_fields
+
+    r = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], grading_service="ICG", cert_number="1234567890"))
+    assert r.status_code == 201 and r.json()["grading_service"] == "ICG", r.text
+    assert authed.post("/api/coins", json=coin_payload(morgan_collection["id"], grading_service="ICG",
+                                                       cert_number="1234567890")).status_code == 409  # duplicate
+    look = authed.get("/api/lookup?service=ICG&cert=1234567890").json()
+    assert look["grading_service"] == "ICG" and "icgcoin.com/verification" in look["verify_url"]
+    f, _, errors, _ = row_to_fields({"Date": "1881-S", "Grade": "MS65", "Service": "ICG", "Cert": "1234567891"})
+    assert f["grading_service"] == "ICG" and not errors
