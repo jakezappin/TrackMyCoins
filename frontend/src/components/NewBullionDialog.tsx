@@ -39,7 +39,7 @@ export default function NewBullionDialog({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               key={m}
-              className={`seg ${metal === m ? "active" : ""}`}
+              className={`seg metal-${m} ${metal === m ? "active" : ""}`}
               onClick={() => {
                 setMetal(m);
                 setName(defaultName(m));

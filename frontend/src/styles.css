@@ -775,6 +775,32 @@ table {
   cursor: pointer;
   color: var(--text);
 }
+.seg + .seg {
+  border-left: 1px solid var(--border);
+}
+/* The chosen option of any segmented control (some places restyle it below). */
+.seg.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+/* Bullion metal picker: each metal in its own color. */
+.seg.active.metal-silver {
+  background: linear-gradient(180deg, #e9ecef, #c3c8ce);
+  color: #2b3036;
+}
+.seg.active.metal-gold {
+  background: linear-gradient(180deg, #f3d27a, #c99a35);
+  color: #3b2a05;
+}
+.seg.active.metal-platinum {
+  background: linear-gradient(180deg, #dfe6ec, #a9b6c2);
+  color: #1f2a35;
+}
+.seg.active.metal-palladium {
+  background: linear-gradient(180deg, #d9d4cc, #a79f93);
+  color: #2e2a24;
+}
 .seg.active.cac-green {
   background: var(--green-soft);
   color: var(--green);
