@@ -29,6 +29,16 @@ def test_parse_any_side_or_size():
     assert ngc_images.parse(LINK.replace("@500x722", "").replace("REV", "OBV"))["urls"] == info["urls"]
 
 
+def test_parse_newer_folder_ids_and_uppercase_jpg():
+    """Newer photos sit in 40-character folders, with .JPG and an @200X300 preview size."""
+    link = ("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/d7d9afcb81fdf5faaebc316e7e0b934fc1a0db03/"
+            "NGC3871027-001_OBV@200X300.JPG")
+    info = ngc_images.parse(link)
+    base = "https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/d7d9afcb81fdf5faaebc316e7e0b934fc1a0db03/NGC3871027-001"
+    assert info["cert_number"] == "3871027-001"
+    assert info["urls"] == [f"{base}_OBV.JPG", f"{base}_REV.JPG"]
+
+
 @pytest.mark.parametrize("bad", [
     "", "https://www.ngccoin.com/certlookup/6521048-002/62/",
     "https://evil.example.com/1ba8ddce-270b-4b4a-b00e-0561b256781a/NGC6521048-002_OBV.jpg",

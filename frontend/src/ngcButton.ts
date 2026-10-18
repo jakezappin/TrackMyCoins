@@ -17,7 +17,7 @@ if(!/(^|\\.)ngccoin\\.com$/.test(location.hostname)){alert(bad);return;}
 var m=location.pathname.match(/certlookup\\/(\\d{5,10}-\\d{3})(?:\\/([^\\/?]+))?/i);
 if(!m){alert(bad);return;}
 var html=document.documentElement.innerHTML.replace(/\\\\\\//g,"/");
-var re=/https:\\/\\/ccg-imaging-ngc-coins-production\\.s3\\.amazonaws\\.com\\/[^"'\\s)<>]+?\\.jpe?g/g;
+var re=/https:\\/\\/ccg-imaging-ngc-coins-production\\.s3\\.amazonaws\\.com\\/[^"'\\s)<>]+?\\.jpe?g/gi;
 var imgs=[],x;while((x=re.exec(html))&&imgs.length<12){if(imgs.indexOf(x[0])<0)imgs.push(x[0]);}
 var main=document.querySelector("main")||document.body;
 var t=(main.innerText||"").replace(/[ \\t]+/g," ").replace(/\\n{2,}/g,"\\n").slice(0,4000);
