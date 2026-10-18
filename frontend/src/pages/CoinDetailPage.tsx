@@ -775,15 +775,21 @@ function CoinLinkCard({ inv }: { inv: string }) {
             className="btn small"
             disabled={busy}
             onClick={async () => {
+              setBusy(true);
+              setMsg(null);
               try {
-                await api.addToLabelQueue({ inventory_numbers: [inv] });
-                setMsg("Added to your label queue.");
+                if (state.queued) await api.removeQueued(inv);
+                else await api.addToLabelQueue({ inventory_numbers: [inv] });
+                setState({ ...state, queued: !state.queued });
+                setMsg(state.queued ? "Taken out of your label queue." : "Added to your label queue.");
               } catch (e) {
                 setMsg((e as Error).message);
+              } finally {
+                setBusy(false);
               }
             }}
           >
-            Add to label queue
+            {state.queued ? "Remove from label queue" : "Add to label queue"}
           </button>
           <Link className="btn small" to={`/labels?coin=${encodeURIComponent(inv)}`}>
             Print label
@@ -822,7 +828,11 @@ function CoinLinkCard({ inv }: { inv: string }) {
       ) : (
         <p className="small muted">This coin gets its own link the first time you print its label.</p>
       )}
-      {msg && <p className="small muted">{msg}</p>}
+      {msg && (
+        <p className="small muted">
+          {msg} {msg.includes("label queue") && <Link to="/labels">Go to Labels</Link>}
+        </p>
+      )}
     </section>
   );
 }

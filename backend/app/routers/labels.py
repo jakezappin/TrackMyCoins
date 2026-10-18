@@ -291,14 +291,15 @@ class PublicIn(BaseModel):
     public_page: bool
 
 
-def _public_state(request: Request, c: Coin) -> dict:
+def _public_state(request: Request, c: Coin, db: Session) -> dict:
+    queued = db.scalar(select(LabelQueueItem.id).where(LabelQueueItem.coin_id == c.id)) is not None
     return {"public_page": c.public_page, "url": coin_link(_site(request, None), c) if c.public_token else None,
-            "path": f"/c/{c.public_token}" if c.public_token else None}
+            "path": f"/c/{c.public_token}" if c.public_token else None, "queued": queued}
 
 
 @router.get("/coins/{inv}/public")
 def public_state(inv: str, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return _public_state(request, get_owned_coin(db, user, inv))
+    return _public_state(request, get_owned_coin(db, user, inv), db)
 
 
 @router.put("/coins/{inv}/public")
@@ -307,7 +308,7 @@ def set_public(inv: str, body: PublicIn, request: Request, db: Session = Depends
     ensure_token(db, c)
     c.public_page = body.public_page
     db.commit()
-    return _public_state(request, c)
+    return _public_state(request, c, db)
 
 
 @router.post("/coins/{inv}/public/new-link")
@@ -318,7 +319,7 @@ def new_link(inv: str, request: Request, db: Session = Depends(get_db), user: Us
     db.flush()
     ensure_token(db, c)
     db.commit()
-    return _public_state(request, c)
+    return _public_state(request, c, db)
 
 
 def _viewer(request: Request, db: Session) -> User | None:

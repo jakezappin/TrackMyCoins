@@ -3897,7 +3897,8 @@ fieldset.field .check {
   flex-direction: column;
   gap: 10px;
 }
-.coin-link-card h2 {
+.coin-link-card h2,
+.coin-link-card p {
   margin: 0;
 }
 .coin-link {

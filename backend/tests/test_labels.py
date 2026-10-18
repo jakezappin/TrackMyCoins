@@ -111,7 +111,9 @@ def test_labels_queue_preview_and_print(authed, morgan_collection):
     one = authed.get(f"/api/labels/queue?only={c2['inventory_number']}").json()
     assert [i["inventory_number"] for i in one["items"]] == [c2["inventory_number"]]
 
+    assert authed.get(f"/api/labels/coins/{c1['inventory_number']}/public").json()["queued"] is True
     q = authed.post("/api/labels/queue/clear", json={"inventory_numbers": [c1["inventory_number"]]}).json()
+    assert authed.get(f"/api/labels/coins/{c1['inventory_number']}/public").json()["queued"] is False
     assert [i["inventory_number"] for i in q["items"]] == [c2["inventory_number"]]
     assert authed.post("/api/labels/queue/clear", json={}).json()["items"] == []
 

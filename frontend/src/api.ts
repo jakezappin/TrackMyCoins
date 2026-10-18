@@ -1515,6 +1515,8 @@ export interface CoinPublicState {
   /** The coin's own link (its label's QR code), once it has one. */
   url: string | null;
   path: string | null;
+  /** In the label queue. */
+  queued: boolean;
 }
 
 export type PublicCoin =
