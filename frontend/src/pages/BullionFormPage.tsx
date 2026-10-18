@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, type BullionItemIn, type BullionMeta } from "../api";
 import { useApp, useNavCollection } from "../App";
+import { useUnsavedGuard } from "../components/useUnsavedGuard";
 import { FACE_NOTE, FACE_OZ, METAL_LABEL, PACKAGING_LABEL, PRESETS, parsePurity, purityLabel, pureOz } from "../bullionFormat";
 import { money, parseMoney, todayISO } from "../format";
 import StoragePicker from "../components/StoragePicker";
@@ -43,6 +44,11 @@ export default function BullionFormPage() {
   const [saving, setSaving] = useState(false);
   // Editing or copying: the form waits for the item instead of showing defaults that saving would write over it.
   const [loadingItem, setLoadingItem] = useState(Boolean(inv ?? search.get("from")));
+  // Unsaved-changes guard: everything the form would save, compared with how it started.
+  const snapshot = JSON.stringify({ form, collectionId, byFace });
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const dirty = baseline !== null && snapshot !== baseline;
+  const leaving = useUnsavedGuard(dirty, "You have unsaved changes to this item. Leave without saving?");
 
   useEffect(() => {
     api.bullionMeta().then(setMeta).catch((e) => setError((e as Error).message));
@@ -76,7 +82,13 @@ export default function BullionFormPage() {
     if (collectionId === null && bullionCollections.length) setCollectionId(bullionCollections[0].id);
   }, [bullionCollections, collectionId]);
 
+  // The starting point: once the item has loaded (or, for a new item, once its collection is picked).
+  useEffect(() => {
+    if (baseline === null && loaded && !loadingItem && (collectionId !== null || !bullionCollections.length)) setBaseline(snapshot);
+  }, [baseline, loaded, loadingItem, collectionId, bullionCollections.length, snapshot]);
+
   const col = bullionCollections.find((c) => c.id === collectionId);
+  const cancelTo = inv ? `/bullion/items/${inv}` : col ? `/bullion/${col.id}` : "/dashboard";
   useNavCollection("bullion", collectionId);
   const metal = col?.metal ?? "silver";
   const purities = meta?.purities[metal] ?? [];
@@ -154,6 +166,7 @@ export default function BullionFormPage() {
     try {
       const item = inv ? await api.updateBullionItem(inv, body) : await api.createBullionItem(body);
       refresh();
+      leaving.current = true;
       navigate(`/bullion/items/${item.inventory_number}`);
     } catch (err) {
       setError((err as Error).message);
@@ -178,7 +191,7 @@ export default function BullionFormPage() {
       <div className="page-head">
         <h1>{inv ? `Edit ${inv}` : from ? `Add Bullion (copy of ${from})` : "Add Bullion"}</h1>
         <div className="row">
-          <Link className="btn" to={inv ? `/bullion/items/${inv}` : col ? `/bullion/${col.id}` : "/dashboard"}>
+          <Link className="btn" to={cancelTo}>
             Cancel
           </Link>
           <button className="btn btn-primary" disabled={saving}>
@@ -401,6 +414,16 @@ export default function BullionFormPage() {
         <textarea rows={3} {...text("notes")} />
         {!inv && <p className="muted small">Add photos on the item's page after saving.</p>}
       </section>
+
+      {error && <p className="error">{error}</p>}
+      <div className="row-end">
+        <Link className="btn" to={cancelTo}>
+          Cancel
+        </Link>
+        <button className="btn btn-primary" disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
     </form>
   );
 }

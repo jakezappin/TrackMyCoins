@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useBlocker, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useUnsavedGuard } from "../components/useUnsavedGuard";
 import {
   api,
   ApiError,
@@ -173,25 +174,7 @@ export default function CoinFormPage() {
       if (next !== f) setBaseline((b) => (b === JSON.stringify(f) ? JSON.stringify(next) : b));
       return next;
     });
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      dirty && !leaving.current && currentLocation.pathname !== nextLocation.pathname,
-  );
-  useEffect(() => {
-    if (blocker.state !== "blocked") return;
-    if (window.confirm("You have unsaved changes to this coin. Leave without saving?")) blocker.proceed();
-    else blocker.reset();
-  }, [blocker]);
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      if (leaving.current) return;
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  useUnsavedGuard(dirty, "You have unsaved changes to this coin. Leave without saving?", leaving);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelReading | null>(null);
   const [dup, setDup] = useState<{ service: string; cert: string; duplicate: DuplicateCert } | null>(null);
@@ -617,9 +600,8 @@ export default function CoinFormPage() {
     }));
   }
 
-  // Back where the user came from, or (opened directly, e.g. from the NGC bookmark) to the coin or its collection.
+  // Editing: back to the coin. Adding: to the collection it was going in (or the dashboard). Unsaved changes ask first.
   function cancel() {
-    if (location.key !== "default") return navigate(-1);
     if (editInv) return navigate(coinPath(editInv));
     navigate(collection ? collectionPath(collection) : "/dashboard");
   }
