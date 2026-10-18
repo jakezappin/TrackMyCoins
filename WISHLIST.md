@@ -6,8 +6,8 @@ Features we've talked about and put on hold, with what we learned so they're qui
 
 1. Install on phone (installable web app: icon, full screen).
 2. Rapid batch add (scan slab after slab into a queue, review, save all).
-3. **Bullion collection** (bars, rounds, etc.): works differently from numismatic coins (weight, purity, melt-based
-   value, quantities). Design to be discussed before building.
+
+(Bullion collections were built 2026-10-18.)
 
 ## On hold
 
@@ -57,12 +57,15 @@ Real CPG history from Greysheet would replace the auction step for older purchas
 - Where each coin is kept (home safe, bank box). Probably unpopular: many collectors don't want to record where their
   stack is; the Notes field covers anyone who does.
 
-### Historical spot prices (gold, silver, platinum)
-- Today the app only knows the current spot price (gold-api.com). Daily history would show what bullion was
-  worth when bought, chart a stack's value over time, and give past melt values for numismatic coins.
-- Options: a metals-price API with daily history (free/cheap tiers) or the LBMA daily fix. Check current terms,
-  limits and cost before choosing.
-- Decide when designing the Bullion collection; that feature depends on it.
+### Dealer buy-back estimate for bullion
+Show what a dealer would likely pay (below melt) next to melt value. No major U.S. dealer (APMEX, JM Bullion,
+SD Bullion) has a public API (checked 2026-10-18).
+- Simplest: a buy-back percentage per metal set by the owner (e.g. silver spot -3%, gold -1.5%).
+- Market data: goldprice.dev's physical-prices endpoint has dealer sell and buyback quotes with premium over
+  spot (22 countries incl. US) on its $19/month Basic plan; it doesn't name the U.S. dealers or products, and
+  says redistribution needs a reseller plan, so ask hello@goldprice.dev before showing quotes in the app.
+- Avoid scraping dealer sites (Apify scrapers exist): against their terms and brittle.
+- Stack Heavy (a website, no API) tracks retail premiums only; FindBullionPrices has no public API.
 
 ### Numista catalog
 - Free API (needs a key; monthly request limit) with type photos, mintages, weight and metal content, and
