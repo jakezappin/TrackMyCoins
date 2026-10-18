@@ -3927,3 +3927,16 @@ fieldset.field .check {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Coin form: grade modifiers and the Details / Error switches on one line under the grade. */
+.coin-flags {
+  gap: 8px 22px;
+  padding-top: 0;
+  margin-top: -2px;
+}
+.coin-flags .info-tip {
+  margin-left: 2px;
+}
+.catalog-search > p {
+  margin: 6px 0 0;
+}

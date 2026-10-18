@@ -1082,17 +1082,15 @@ export default function CoinFormPage() {
             </>
           )}
         </div>
-        {coinType && VAM_SERIES.includes(coinType.slug) && (
-          <div className="grid-4">
+        {!isSetSeries && (
+          <>
+        <div className="grid-4">
+          {coinType && VAM_SERIES.includes(coinType.slug) && (
             <label className="field">
               <span>VAM (optional)</span>
               <input {...text("vam")} placeholder="e.g. VAM-1A" />
             </label>
-          </div>
-        )}
-        {!isSetSeries && (
-          <>
-        <div className="grid-4">
+          )}
           <label className="field">
             <span>{isRaw ? "Grade (optional)" : form.details ? "Grade (number optional)" : "Grade"}</span>
             <div className="row tight">
@@ -1122,17 +1120,6 @@ export default function CoinFormPage() {
               ))}
             </select>
           </label>
-          <div className="field">
-            <span>Modifiers</span>
-            <div className="checks">
-              <label>
-                <input type="checkbox" disabled={isRaw || form.details} {...check("grade_plus")} /> Plus (+)
-              </label>
-              <label>
-                <input type="checkbox" disabled={isRaw || form.details} {...check("grade_star")} /> Star (★)
-              </label>
-            </div>
-          </div>
           <label className="field">
             <span>PCGS coin # (for pricing)</span>
             <div className="row tight">
@@ -1143,32 +1130,48 @@ export default function CoinFormPage() {
             </div>
           </label>
         </div>
-        <div className="grid-4 details-row">
-          <div className="field">
-            <span>Problem coin</span>
-            <label className="checks">
-              <input
-                type="checkbox"
-                checked={form.details}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setForm((f) => ({
-                    ...f,
-                    details: on,
-                    ...(on ? { grade_plus: false, grade_star: false, cac: false, cac_sticker: null } : { details_problem: null, details_pct: null }),
-                  }));
-                }}
-              />{" "}
-              Details grade
-              <span
-                className="info-tip"
-                tabIndex={0}
-                title="A Details grade (e.g. “AU Details – Cleaned”) means the coin is genuine but has a problem. Price guides only cover problem-free coins, so it's valued at a share of the CPG for the same straight grade, never below melt."
-              >
-                ⓘ
-              </span>
-            </label>
-          </div>
+        <div className="checks coin-flags">
+          <label>
+            <input type="checkbox" disabled={isRaw || form.details} {...check("grade_plus")} /> Plus (+)
+          </label>
+          <label>
+            <input type="checkbox" disabled={isRaw || form.details} {...check("grade_star")} /> Star (★)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={form.details}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setForm((f) => ({
+                  ...f,
+                  details: on,
+                  ...(on ? { grade_plus: false, grade_star: false, cac: false, cac_sticker: null } : { details_problem: null, details_pct: null }),
+                }));
+              }}
+            />{" "}
+            Details grade
+            <span
+              className="info-tip"
+              tabIndex={0}
+              title="A Details grade (e.g. “AU Details – Cleaned”) means the coin is genuine but has a problem. Price guides only cover problem-free coins, so it's valued at a share of the CPG for the same straight grade, never below melt."
+            >
+              ⓘ
+            </span>
+          </label>
+          <label>
+            <input type="checkbox" checked={form.is_error} onChange={(e) => setForm((f) => ({ ...f, is_error: e.target.checked }))} /> Error coin
+            <span
+              className="info-tip"
+              tabIndex={0}
+              title="Off-center strikes, double strikes, broadstrikes and the like aren't in the price guides (no PCGS number, CPG or auction data), so their value is the one you enter here."
+            >
+              ⓘ
+            </span>
+          </label>
+        </div>
+        {(form.details || form.is_error) && (
+          <div className="grid-4 details-row">
           {form.details && (
             <>
               <label className="field">
@@ -1196,26 +1199,6 @@ export default function CoinFormPage() {
               </label>
             </>
           )}
-        </div>
-        <div className="grid-4 details-row">
-          <div className="field">
-            <span>Mint error</span>
-            <label className="checks">
-              <input
-                type="checkbox"
-                checked={form.is_error}
-                onChange={(e) => setForm((f) => ({ ...f, is_error: e.target.checked }))}
-              />{" "}
-              Error coin
-              <span
-                className="info-tip"
-                tabIndex={0}
-                title="Off-center strikes, double strikes, broadstrikes and the like aren't in the price guides (no PCGS number, CPG or auction data), so their value is the one you enter here."
-              >
-                ⓘ
-              </span>
-            </label>
-          </div>
           {form.is_error && (
             <>
               <label className="field span-2">
@@ -1241,7 +1224,8 @@ export default function CoinFormPage() {
               </label>
             </>
           )}
-        </div>
+          </div>
+        )}
         {form.is_error && (
           <p className="muted small">Error coins skip CPG, the PCGS price guide and auctions; the value you enter is its value.</p>
         )}
