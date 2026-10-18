@@ -33,6 +33,8 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100))
     password_hash: Mapped[str] = mapped_column(String(255))
+    # Details (problem) coins are valued at this % of straight-grade CPG unless the coin says otherwise.
+    details_pct: Mapped[int] = mapped_column(Integer, default=70, server_default="70")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -298,6 +300,11 @@ class Coin(Base):
     strike_designation: Mapped[str | None] = mapped_column(String(20))  # PL, DMPL, RD, FB, DCAM, "RD CAM" ...
     cac: Mapped[bool] = mapped_column(Boolean, default=False)
     cac_sticker: Mapped[str | None] = mapped_column(String(10))  # green | gold
+    # Details grade ("AU Details – Cleaned"): genuine but with a problem, so not priced like a straight grade.
+    # The grade number is optional (PCGS and NGC usually give only AU, XF...).
+    details: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    details_problem: Mapped[str | None] = mapped_column(String(40))  # cleaned, environmental-damage...
+    details_pct: Mapped[int | None] = mapped_column(Integer)  # this coin's % of straight CPG (None: the owner's default)
 
     # Collector slabs
     slab_soapbox: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -357,6 +364,7 @@ class Coin(Base):
 
     coin_type: Mapped[CoinType] = relationship()
     collection: Mapped[Collection] = relationship(back_populates="coins")
+    user: Mapped[User] = relationship()
     photos: Mapped[list["CoinPhoto"]] = relationship(
         back_populates="coin", cascade="all, delete-orphan", order_by="CoinPhoto.sort_order"
     )

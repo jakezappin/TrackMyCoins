@@ -46,7 +46,27 @@ export function dateMint(c: Pick<CoinFields, "year" | "mint_mark">): string {
 }
 
 /** "MS65+ DMPL", or for raw coins "Raw AU55", "Raw AU" or just "Raw". */
-type GradeFields = Pick<CoinFields, "grading_service" | "grade_prefix" | "grade" | "grade_plus" | "grade_star" | "strike_designation">;
+type GradeFields = Pick<CoinFields, "grading_service" | "grade_prefix" | "grade" | "grade_plus" | "grade_star" | "strike_designation"> &
+  Partial<Pick<CoinFields, "details" | "details_problem">>;
+
+/** Problems a Details grade can name (matches backend services/details.py). */
+export const DETAILS_PROBLEMS: Record<string, string> = {
+  cleaned: "Cleaned",
+  "environmental-damage": "Environmental Damage",
+  scratched: "Scratched",
+  tooled: "Tooled",
+  "altered-surfaces": "Altered Surfaces",
+  damaged: "Damaged",
+  holed: "Holed",
+  repaired: "Repaired",
+  graffiti: "Graffiti",
+  bent: "Bent",
+  "rim-damage": "Rim Damage",
+  "questionable-color": "Questionable Color",
+  polished: "Polished",
+  whizzed: "Whizzed",
+  other: "Other",
+};
 type ToningFields = Pick<CoinFields, "toning_obverse" | "toning_reverse" | "toning_dual" | "toning_rainbow">;
 type SlabFields = Pick<
   CoinFields,
@@ -55,6 +75,12 @@ type SlabFields = Pick<
 >;
 
 export function gradeLabel(c: GradeFields): string {
+  if (c.details) {
+    // "AU55 Details · Cleaned": no plus, star or designation on a Details grade.
+    let d = `${c.grade_prefix ?? ""}${c.grade ?? ""} Details`.trim();
+    if (c.details_problem) d += ` · ${DETAILS_PROBLEMS[c.details_problem] ?? c.details_problem}`;
+    return c.grading_service === "RAW" ? `Raw ${d}` : d;
+  }
   let s = `${c.grade_prefix ?? ""}${c.grade ?? ""}`;
   if (s && c.grade_plus) s += "+";
   if (s && c.grade_star) s += "★";

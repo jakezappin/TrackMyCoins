@@ -10,8 +10,8 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..models import Coin, PriceQuote
-from . import catalog, grade_prices, greysheet, price_archive, quota
-from .coins import CPG, GREYSHEET, PCGS_GUIDE, PREMIUM, latest_quote
+from . import catalog, details, grade_prices, greysheet, price_archive, quota
+from .coins import CPG, GREYSHEET, PCGS_GUIDE, PREMIUM, coin_melt, latest_quote
 from .lookups import pcgs
 
 
@@ -35,7 +35,7 @@ def refresh_cpg(db: Session, coin: Coin) -> bool:
     record(coin, PriceQuote(source=CPG, **q))
     if grey is not None:
         record(coin, PriceQuote(source=GREYSHEET, **{**q, "value": grey}))
-    if (coin.toner_premium or coin.holder_premium) and q["value"] is not None:
+    if coin.value_source != "custom" and (coin.toner_premium or coin.holder_premium) and q["value"] is not None:
         record(coin, premium_quote(coin, q["value"]))
     return cached is None
 
@@ -51,9 +51,11 @@ def record(coin: Coin, quote: PriceQuote) -> None:
 
 
 def premium_quote(coin: Coin, cpg: Decimal) -> PriceQuote:
-    """A price-history row for CPG plus the coin's toner and/or holder premium."""
+    """A price-history row for CPG (a Details coin's share of it) plus the coin's toner and/or holder premium."""
     toner, holder = coin.toner_premium or Decimal(0), coin.holder_premium or Decimal(0)
-    parts = [f"CPG ${cpg:,.2f}"]
+    if coin.details:
+        cpg = details.adjust(coin, cpg, coin_melt(coin))
+    parts = [f"{'Details value' if coin.details else 'CPG'} ${cpg:,.2f}"]
     if toner:
         parts.append(f"toner premium ${toner:,.2f}")
     if holder:
@@ -62,7 +64,7 @@ def premium_quote(coin: Coin, cpg: Decimal) -> PriceQuote:
         coin_id=coin.id,
         source=PREMIUM,
         value=cpg + toner + holder,
-        grade_used=f"{coin.grade_prefix or ''}{coin.grade or ''}",
+        grade_used=details.label(coin),
         description="Estimate: " + " + ".join(parts),
     )
 
@@ -74,11 +76,12 @@ def refresh_pcgs(db: Session, coin: Coin) -> bool:
         catalog.resolve_for_coin(db, coin)
     if not coin.pcgs_number:
         raise greysheet.PricingError("This coin needs a PCGS number. Use Find on the edit page.")
+    grade = details.price_grade(coin)
     data, called = pcgs.market_cached(
-        coin.pcgs_number, coin.grade, coin.grade_plus, before_call=lambda: quota.spend(coin.user_id, "pcgs", 2)
+        coin.pcgs_number, grade, coin.grade_plus and not coin.details, before_call=lambda: quota.spend(coin.user_id, "pcgs", 2)
     )
     coin.pcgs_market = {**data, "fetched_at": data.get("fetched_at") or datetime.now(timezone.utc).isoformat()}
-    price_archive.save_market(db, data, coin.grade, coin.grade_plus)
+    price_archive.save_market(db, data, grade, coin.grade_plus and not coin.details)
     if data["price_guide"] is not None:
         record(
             coin,

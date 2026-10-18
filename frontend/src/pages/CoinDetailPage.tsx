@@ -439,6 +439,12 @@ export default function CoinDetailPage() {
               Greysheet (wholesale): <strong>{money(coin.latest_greysheet.value)}</strong>
             </p>
           )}
+          {coin.details && coin.latest_cpg && (
+            <p className="details-note small">
+              <span className="details-badge">Details</span> This is the CPG for a problem-free {coin.latest_cpg.grade_used ?? "coin"}.
+              Your coin is valued at {money(coin.details_value)}; see Estimated Value.
+            </p>
+          )}
           {cpgError && <p className="error small">{cpgError}</p>}
           <form className="row tight manual-quote" onSubmit={addManual}>
             <input
@@ -574,7 +580,9 @@ function CoinSummary({ coin }: { coin: CoinDetail }) {
               ? "No price yet"
               : coin.value_source === "custom"
                 ? "Your own value"
-                : `CPG${coin.latest_cpg ? ` · ${shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}` : ""}`}
+                : coin.details
+                  ? <span className="info-tip" tabIndex={0} title={coin.details_basis ?? undefined}>Details coin · share of CPG ⓘ</span>
+                  : `CPG${coin.latest_cpg ? ` · ${shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}` : ""}`}
         </div>
       </div>
       <div className="card stat">

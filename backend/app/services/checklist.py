@@ -208,7 +208,7 @@ def _held_coins(db: Session, col: Collection) -> list[Coin]:
     return db.scalars(
         on_hand(select(Coin).where(Coin.collection_id == col.id))
         .options(selectinload(Coin.photos), selectinload(Coin.price_quotes))
-        .order_by(Coin.grade.desc(), Coin.inventory_number)
+        .order_by(Coin.details, Coin.grade.desc(), Coin.grade_plus.desc(), Coin.inventory_number)
     ).all()
 
 
@@ -290,7 +290,7 @@ def build(db: Session, col: Collection, mode: str = "full") -> Checklist:
     coins = db.scalars(
         on_hand(select(Coin).where(Coin.collection_id == col.id))
         .options(selectinload(Coin.photos), selectinload(Coin.price_quotes))
-        .order_by(Coin.grade.desc(), Coin.inventory_number)
+        .order_by(Coin.details, Coin.grade.desc(), Coin.grade_plus.desc(), Coin.inventory_number)
     ).all()
 
     others = []

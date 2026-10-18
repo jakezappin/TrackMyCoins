@@ -6,6 +6,8 @@ export interface User {
   email: string;
   first_name: string;
   last_name: string;
+  /** Details coins are valued at this % of straight-grade CPG. */
+  details_pct: number;
 }
 
 export type Finish = "MS" | "PR" | "SPR";
@@ -142,6 +144,8 @@ export interface LabelReading {
   grade_plus: boolean;
   grade_star: boolean;
   strike_designation: string | null;
+  details?: boolean;
+  details_problem?: string | null;
   variety: string | null;
   vam: string | null;
   cac_sticker: CacSticker | null;
@@ -192,6 +196,11 @@ export interface CoinFields {
   strike_designation: string | null;
   cac: boolean;
   cac_sticker: CacSticker | null;
+  /** Details grade: genuine but with a problem; valued at a share of straight-grade CPG. */
+  details: boolean;
+  details_problem: string | null;
+  /** This coin's % of straight CPG (null: the owner's default). */
+  details_pct: number | null;
   slab_soapbox: boolean;
   slab_ngc_fatty: boolean;
   slab_rattler: boolean;
@@ -254,6 +263,10 @@ export interface Coin extends CoinFields {
   toner_premium: string | null;
   holder_premium: string | null;
   value_estimate: string | null;
+  /** How a Details coin's value was worked out. */
+  details_basis: string | null;
+  /** A Details coin's share of CPG, before premiums. */
+  details_value: string | null;
   latest_greysheet: PriceQuote | null;
   photo_count: number;
   thumbnail_url: string | null;
@@ -481,6 +494,8 @@ export interface LookupResult {
   pcgs_number: string | null;
   cac: boolean | null;
   cac_sticker: CacSticker | null;
+  details?: boolean;
+  details_problem?: string | null;
   description: string | null;
   image_urls: string[];
   price_guide_value: string | null;
@@ -559,6 +574,7 @@ export interface WantItem {
     grade_star: boolean;
     strike_designation: string | null;
     grading_service: GradingService;
+    details?: boolean;
     meets_target: boolean;
   } | null;
 }
@@ -589,6 +605,8 @@ export interface UpgradeItem {
     grade_star: boolean;
     strike_designation: string | null;
     cac: boolean;
+    details?: boolean;
+    details_problem?: string | null;
   };
   current_value: string | null;
   next_grade: number;
@@ -761,6 +779,7 @@ export const api = {
   logout: () => request<void>("POST", "/api/auth/logout"),
   updateProfile: (b: { email: string; first_name: string; last_name: string; current_password?: string }) =>
     request<User>("PUT", "/api/auth/me", b),
+  setPreferences: (b: { details_pct: number }) => request<User>("PUT", "/api/auth/preferences", b),
   changePassword: (current_password: string, new_password: string) =>
     request<void>("POST", "/api/auth/password", { current_password, new_password }),
   certCheck: (service: GradingService, cert: string, exclude?: string | null) => {

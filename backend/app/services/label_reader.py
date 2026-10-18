@@ -18,7 +18,7 @@ from PIL import Image, ImageOps
 
 from ..config import get_settings
 from ..images import ImageTooLarge, open_image
-from . import lookups, quota
+from . import details, lookups, quota
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +48,8 @@ SCHEMA = {
         "grade_plus": {"type": "boolean"},
         "grade_star": {"type": "boolean"},
         "strike_designation": _nullable("string"),
+        "details": {"type": "boolean"},
+        "details_problem": _nullable("string"),
         "variety": _nullable("string"),
         "vam": _nullable("string"),
         "cac_sticker": {"type": "string", "enum": ["green", "gold", "none"]},
@@ -56,7 +58,8 @@ SCHEMA = {
     },
     "required": [
         "found_label", "grading_service", "cert_number", "year", "mint_mark", "coin_type", "denomination",
-        "grade_prefix", "grade", "grade_plus", "grade_star", "strike_designation", "variety", "vam",
+        "grade_prefix", "grade", "grade_plus", "grade_star", "strike_designation", "details", "details_problem",
+        "variety", "vam",
         "cac_sticker", "confidence", "notes",
     ],
     "additionalProperties": False,
@@ -71,6 +74,7 @@ Read the slab's printed label and fill in the fields.
 - coin_type: the series, e.g. "Morgan Dollar", "Peace Dollar", "Saint-Gaudens $20".
 - grade_prefix and grade: e.g. "MS" and 65 for "MS65"; proofs are "PR" (NGC's "PF" is also "PR"). grade_plus for a "+", grade_star for a star (★).
 - strike_designation: designations printed with the grade, using these abbreviations: PL, DMPL, DPL, RD, RB, BN, FB, FBL, FS, FH, FT, CAM, DCAM, UCAM. Several are separated by spaces, e.g. "RD CAM".
+- details: true for a Details (problem) grade, e.g. "AU Details", "XF Details – Cleaned", "Genuine". Then grade_prefix is the grade's letters (AU), grade is the number only if one is printed, grade_plus and grade_star are false, and details_problem is the problem as printed (e.g. "Cleaned", "Environmental Damage", "Scratched"), else null. Otherwise details is false and details_problem null.
 - variety: any variety or pedigree text (e.g. "8TF", "VAM-3 Hot Lips", "First Strike", "Tail feathers"), or null.
 - vam: the VAM number alone if printed, e.g. "VAM-3", else null.
 - cac_sticker: "green" or "gold" if a CAC bean sticker is on the slab, else "none".
@@ -114,7 +118,7 @@ def _barcode_texts(img: Image.Image) -> list[str]:
 
 def _blank(**fields) -> dict:
     r = {k: None for k in SCHEMA["properties"]}
-    r.update(found_label=True, grade_plus=False, grade_star=False, confidence="high")
+    r.update(found_label=True, grade_plus=False, grade_star=False, details=False, confidence="high")
     r.update(fields)
     return r
 
@@ -134,13 +138,13 @@ def _from_barcodes(texts: list[str], user_id: int | None = None) -> dict | None:
             found = lookups.lookup("PCGS", cert, user_id=user_id)
         except (lookups.LookupError, httpx.HTTPError):
             continue
-        if found.year is None and found.grade is None:
+        if found.year is None and found.grade is None and not found.details:
             continue
         return _blank(
             grading_service="PCGS", cert_number=found.cert_number, year=found.year, mint_mark=found.mint_mark,
             grade_prefix=found.grade_prefix, grade=found.grade, grade_plus=found.grade_plus,
             grade_star=found.grade_star, strike_designation=found.strike_designation, vam=found.vam,
-            coin_type=found.description, cac_sticker=found.cac_sticker if found.cac else None,
+            details=found.details, details_problem=found.details_problem, coin_type=found.description, cac_sticker=found.cac_sticker if found.cac else None,
             source="barcode", lookup=found.model_dump(mode="json"),
             notes="Read from the barcode and confirmed with PCGS.",
         )
@@ -220,6 +224,7 @@ lookup, so set found_label true if the text describes a coin.
   grade_plus; a star (★) sets grade_star.
 - strike_designation: designations next to the grade, abbreviated as PL, DPL, DMPL, RD, RB, BN, FB, FBL, FS, FH,
   FT, CAM, DCAM, UCAM (NGC's "Ultra Cameo" is UCAM). Several are separated by spaces.
+- details: true for a Details (problem) grade, e.g. "AU Details", "XF Details – Cleaned", "Genuine". Then grade_prefix is the grade's letters (AU), grade is the number only if one is printed, grade_plus and grade_star are false, and details_problem is the problem as printed (e.g. "Cleaned", "Environmental Damage", "Scratched"), else null. Otherwise details is false and details_problem null.
 - variety: variety or pedigree text (e.g. "VAM-3 Hot Lips", "8TF", "Toned"), else null. vam: the VAM number alone.
 - cac_sticker: "none" unless the text says the coin has a CAC sticker, then "green" or "gold".
 - Ignore navigation, ads, and other coins mentioned on the page.
@@ -257,7 +262,10 @@ def read_ngc_page(cert: str, grade_in_url: str | None, text: str, user_id: int |
             result["variety"] = f"{om.group(2)}/{om.group(3)}".upper()
         elif m:
             result["year"], result["mint_mark"] = int(m.group(1)), (m.group(2) or "P").upper()
-        g = GRADE_IN_TEXT.search(text)
+        is_details, problem, d_prefix, d_grade = details.in_page(text)
+        g = None if is_details else GRADE_IN_TEXT.search(text)
+        if is_details:
+            result.update(details=True, details_problem=problem, grade_prefix=d_prefix, grade=d_grade)
         if g:
             result["grade_prefix"] = "PR" if g.group(1).upper() in ("PF", "PR") else g.group(1).upper()
             result["grade"] = int(g.group(2))
@@ -290,6 +298,11 @@ def _clean(r: dict) -> dict:
         r["grade_prefix"] = "PR" if r["grade_prefix"].upper() in ("PF", "PR", "PROOF") else r["grade_prefix"].upper()
     g = r.get("grade")
     r["grade"] = g if isinstance(g, int) and 1 <= g <= 70 else None
+    r["details"] = bool(r.get("details"))
+    r["details_problem"] = details.problem_of(r.get("details_problem")) if r["details"] else None
+    if r["details"]:
+        r["grade_plus"] = r["grade_star"] = False
+        r["cac_sticker"] = None
     y = r.get("year")
     r["year"] = y if isinstance(y, int) and 1700 <= y <= 2200 else None
     r["cac_sticker"] = r.get("cac_sticker") if r.get("cac_sticker") in ("green", "gold") else None

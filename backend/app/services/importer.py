@@ -14,7 +14,7 @@ from openpyxl import load_workbook
 from pydantic import ValidationError
 
 from ..schemas import CoinFields
-from . import series_match
+from . import details, series_match
 
 MAX_ROWS = 2000
 
@@ -39,6 +39,9 @@ ALIASES = {
     "cert": "cert_number", "certno": "cert_number", "certnumber": "cert_number", "certification": "cert_number",
     "certificationnumber": "cert_number", "serial": "cert_number",
     "grade": "grade",
+    "details": "details", "detailsgrade": "details", "problem": "details_problem",
+    "detailsproblem": "details_problem", "detailsreason": "details_problem", "detailspercent": "details_pct",
+    "details%": "details_pct",
     "designation": "strike_designation", "strikedesignation": "strike_designation",
     "cac": "cac", "caced": "cac",
     "cacsticker": "cac_sticker", "sticker": "cac_sticker",
@@ -68,10 +71,14 @@ ALIASES = {
 DATE_RE = re.compile(r"^\s*(\d{4})(?:\s*[-/]\s*([A-Z]{1,2})\b|\s+(CC|[PDSOW])\b)?\s*(.*)$", re.I)
 OVERDATE_RE = re.compile(r"^\s*(\d{4})/(\d{1,2})(?:\s*-\s*([A-Z]{1,2})\b)?\s*(.*)$", re.I)
 OVERMINT_RE = re.compile(r"^\s*(\d{4})\s*-\s*([A-Z]{1,2})/([A-Z]{1,2})\b\s*(.*)$", re.I)
-GRADE_RE = re.compile(r"^(?:(raw)\s*)?([A-Za-z]{1,3})?[\s-]*(\d{1,2})?\s*(\+)?\s*(★|\*|star)?\s*(.*)$", re.I)
+GRADE_RE = re.compile(r"^(?:(raw)\s*)?(proof|unc|[A-Za-z]{1,3}(?![A-Za-z]))?[\s-]*(\d{1,2})?\s*(\+)?\s*(★|\*|star)?\s*(.*)$", re.I)
 SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
             "RAW": "RAW", "UNGRADED": "RAW", "NONE": "RAW"}
 YES = {"yes", "y", "true", "1", "x", "✓", "green", "gold"}
+
+
+def _yes(v) -> bool:
+    return (_text(v) or "").strip().lower() in YES
 
 
 def read_rows(filename: str, data: bytes, sheets: tuple[str, ...] = ("Coins", "Sold")) -> list[tuple[str, int, dict]]:
@@ -196,13 +203,31 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     service = _text(vals.get("grading_service"))
     grade_text = _text(vals.get("grade"))
     is_raw = False
+    # Details grades: "AU Details", "AU55 Details - Cleaned", "Genuine - Cleaned - XF Details".
+    is_details, problem = details.detect(grade_text)
+    if is_details:
+        f["details"], f["details_problem"] = True, problem
+        found, _, d_prefix, d_grade = details.in_page(grade_text)
+        raw = re.match(r"^\s*raw\b", grade_text or "", re.I)
+        grade_text = f"{'Raw ' if raw else ''}{d_prefix}{d_grade or ''}" if found else None
+        if not found:
+            errors.append(f"Couldn't read the grade in “{_text(vals.get('grade'))}” (e.g. AU Details)")
+    if _yes(vals.get("details")):
+        f["details"] = True
+    if _text(vals.get("details_problem")):
+        f["details"] = True
+        f["details_problem"] = details.problem_of(_text(vals.get("details_problem"))) or "other"
+    if _text(vals.get("details_pct")):
+        try:
+            f["details_pct"] = int(Decimal(str(_text(vals.get("details_pct"))).rstrip("%")))
+        except InvalidOperation:
+            errors.append(f"Details % isn't a number: {vals.get('details_pct')}")
     if grade_text:
         m = GRADE_RE.match(grade_text)
         if m and (m.group(2) or m.group(3) or m.group(1)):
             is_raw = bool(m.group(1))
             prefix = (m.group(2) or "").upper() or None
-            if prefix in ("PF", "PROOF"):
-                prefix = "PR"
+            prefix = {"PF": "PR", "PROOF": "PR", "UNC": "MS", "EF": "XF"}.get(prefix, prefix)
             f["grade_prefix"] = prefix
             f["grade"] = int(m.group(3)) if m.group(3) else None
             f["grade_plus"] = bool(m.group(4))

@@ -49,6 +49,12 @@ class UserOut(ORM):
     email: str
     first_name: str
     last_name: str
+    details_pct: int = 70
+
+
+class Preferences(BaseModel):
+    # Details (problem) coins are valued at this % of straight-grade CPG.
+    details_pct: int = Field(ge=1, le=100)
 
 
 # ---- Coin types / collections ------------------------------------------------
@@ -142,6 +148,10 @@ class CoinFields(BaseModel):
     strike_designation: str | None = Field(default=None, max_length=20)
     cac: bool = False
     cac_sticker: CacSticker | None = None
+    # Details grade: genuine, but with a problem (cleaned, damaged...). Valued at details_pct% of straight CPG.
+    details: bool = False
+    details_problem: str | None = Field(default=None, max_length=40)
+    details_pct: int | None = Field(default=None, ge=1, le=100)
 
     slab_soapbox: bool = False
     slab_ngc_fatty: bool = False
@@ -200,6 +210,25 @@ class CoinFields(BaseModel):
         if v and not re.fullmatch(r"\d{1,8}", v):
             raise ValueError("A PCGS coin number is digits only (e.g. 7130).")
         return v
+
+    @model_validator(mode="after")
+    def _details(self):
+        from .services.details import PROBLEMS
+
+        if not self.details:
+            self.details_problem = None
+            self.details_pct = None
+            return self
+        if self.cac:
+            raise ValueError("CAC doesn't sticker Details coins. Untick CAC or Details.")
+        if self.details_problem and self.details_problem not in PROBLEMS:
+            raise ValueError(f"Unknown problem “{self.details_problem}”.")
+        if self.grading_service != "RAW" and not self.grade_prefix:
+            raise ValueError("A Details coin still needs its grade, e.g. AU (AU Details).")
+        # Details grades carry no plus or star.
+        self.grade_plus = False
+        self.grade_star = False
+        return self
 
     @model_validator(mode="after")
     def _sale_after_purchase(self):
@@ -286,6 +315,8 @@ class CoinOut(CoinFields, ORM):
     toner_premium: Decimal | None = None
     holder_premium: Decimal | None = None
     value_estimate: Decimal | None = None  # what totals use for this coin
+    details_basis: str | None = None  # how a Details coin's value was worked out
+    details_value: Decimal | None = None  # a Details coin's share of CPG (before premiums)
     latest_greysheet: PriceQuoteOut | None = None
     photo_count: int = 0
     thumbnail_url: str | None = None
@@ -421,6 +452,8 @@ class LookupResult(BaseModel):
     pcgs_number: str | None = None
     cac: bool | None = None
     cac_sticker: CacSticker | None = None
+    details: bool = False
+    details_problem: str | None = None
     description: str | None = None
     image_urls: list[str] = []
     price_guide_value: Decimal | None = None
@@ -453,6 +486,8 @@ class SharedCoin(BaseModel):
     strike_designation: str | None
     cac: bool
     cac_sticker: str | None
+    details: bool = False
+    details_problem: str | None = None
     slab_soapbox: bool
     slab_ngc_fatty: bool
     slab_rattler: bool

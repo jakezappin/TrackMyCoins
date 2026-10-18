@@ -10,7 +10,7 @@ from ..config import get_settings
 from ..models import Coin, CoinType, CollectionCounter, InventoryCounter, PriceQuote
 from ..series import collection_type_slug
 from ..schemas import CoinDetail, CoinFacts, CoinOut, CollectionSummary, PhotoOut, PriceQuoteOut, PurchaseValue
-from . import metals
+from . import details, metals
 from .lookups.pcgs import coin_facts as pcgs_specs
 
 CPG = "CPG"
@@ -85,14 +85,39 @@ def latest_cpg_value(coin: Coin) -> Decimal | None:
     return q.value if q else None
 
 
+def coin_melt(coin: Coin) -> Decimal | None:
+    facts = _facts(coin)
+    m = metals.melt(facts.weight_g, facts.metal) if facts else None
+    return Decimal(str(m["value"])).quantize(CENTS) if m else None
+
+
+def market_value(coin: Coin) -> Decimal | None:
+    """Latest CPG, made into this coin's value: a Details coin gets its share of the straight-grade CPG
+    (never below melt)."""
+    cpg = latest_cpg_value(coin)
+    if cpg is None or not coin.details:
+        return cpg
+    return details.adjust(coin, cpg, coin_melt(coin))
+
+
+def details_basis(coin: Coin) -> str | None:
+    if not coin.details:
+        return None
+    cpg = latest_cpg_value(coin)
+    melt = coin_melt(coin)
+    plain = details.adjust(coin, cpg) if cpg is not None else None
+    return details.basis(coin, melt_used=plain is not None and melt is not None and melt > plain)
+
+
 def value_estimate(coin: Coin) -> Decimal | None:
-    """The coin's estimated value for totals: the owner's own value, or latest CPG plus any premiums."""
+    """The coin's estimated value for totals: the owner's own value, or latest CPG (a share of it for a Details
+    coin) plus any premiums."""
     if coin.value_source == "custom":
         return coin.custom_value
-    cpg = latest_cpg_value(coin)
-    if cpg is None:
+    base = market_value(coin)
+    if base is None:
         return None
-    return cpg + (coin.toner_premium or Decimal(0)) + (coin.holder_premium or Decimal(0))
+    return base + (coin.toner_premium or Decimal(0)) + (coin.holder_premium or Decimal(0))
 
 
 def value_totals(coins) -> dict:
@@ -108,7 +133,7 @@ def value_totals(coins) -> dict:
         if c.value_source == "custom":
             custom_count += 1
         else:
-            cpg += latest_cpg_value(c) or 0
+            cpg += market_value(c) or 0
             if c.toner_premium:
                 toner += c.toner_premium
                 toner_count += 1
@@ -132,6 +157,8 @@ def value_totals(coins) -> dict:
 def coin_out(coin: Coin) -> CoinOut:
     out = CoinOut.model_validate(coin)
     out.value_estimate = value_estimate(coin)
+    out.details_basis = details_basis(coin)
+    out.details_value = market_value(coin) if coin.details else None
     q = latest_quote(coin)
     out.latest_cpg = PriceQuoteOut.model_validate(q) if q else None
     g = latest_quote(coin, GREYSHEET)

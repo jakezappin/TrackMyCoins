@@ -66,8 +66,11 @@ def lookup(cert: str) -> LookupResult:
     )
     parse_grade(str(facts.get("Grade") or ""), res)
     set_designation(facts.get("Designation"), res)
-    if res.strike_designation is None:
-        set_designation(facts.get("Name"), res)
+    if res.strike_designation is None and not res.details:
+        # Variety numbers in the name ("FS-101", "DDO FS-801", "VAM-3") aren't designations: FS-101 isn't
+        # Full Steps.
+        name = re.sub(r"\b(?:FS|DDO|DDR|RPM|OMM|VAM|FS-\d+)[-\s]?\d[\w./-]*", " ", str(facts.get("Name") or ""), flags=re.I)
+        set_designation(name, res)
     vam = facts.get("DieVariety") or facts.get("MinorVariety")
     if vam and "VAM" in str(vam).upper():
         res.vam = str(vam)

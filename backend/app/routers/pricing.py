@@ -6,7 +6,7 @@ from ..auth import current_user
 from ..db import get_db
 from ..models import PriceQuote, User
 from ..schemas import CoinDetail, LookupResult, ManualQuoteIn, ValuationIn
-from ..services import greysheet, lookups, price_refresh, purchase_value
+from ..services import details, greysheet, lookups, price_refresh, purchase_value
 from ..services import ebay, grade_prices
 from ..services import ngc_images as ngc_images_service
 from ..services.history import value_history
@@ -140,7 +140,7 @@ def set_valuation(
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter your estimated value")
         coin.value_source, coin.custom_value = "custom", body.custom_value
         db.add(PriceQuote(coin_id=coin.id, source=CUSTOM, value=body.custom_value,
-                          grade_used=f"{coin.grade_prefix or ''}{coin.grade or ''}", description="Your own estimate"))
+                          grade_used=details.label(coin), description="Your own estimate"))
     else:
         coin.value_source = "cpg"
         coin.toner_premium = body.toner_premium or None
@@ -167,7 +167,7 @@ def add_manual_quote(
             source=body.source.upper(),
             value=body.value,
             description=body.description or "Entered manually",
-            grade_used=f"{coin.grade_prefix or ''}{coin.grade or ''}",
+            grade_used=f"{coin.grade_prefix or ''}{details.price_grade(coin) or ''}",
         )
     )
     db.commit()

@@ -28,6 +28,18 @@ def parse_grade(text: str | None, result: LookupResult) -> None:
             result.grade_prefix = {"PF": "PR", "EF": "XF"}.get(prefix, prefix) or None
             result.grade_plus = result.grade_plus or bool(m.group("plus"))
             result.grade_star = result.grade_star or bool(m.group("star"))
+    # Details grades ("AU Details", "Genuine - Cleaned - XF Details"): no number, or a number that isn't a
+    # straight grade.
+    from ..details import detect, in_page
+
+    is_details, problem = detect(text)
+    if is_details:
+        result.details, result.details_problem = True, problem
+        found, _, prefix, _num = in_page(text)
+        if found and not result.grade_prefix:
+            result.grade_prefix = prefix
+        result.grade_plus = result.grade_star = False
+        return  # "DETAILS", "CLEANED"... aren't designations
     # Designations may be glued to the number ("MS65RD"), so split letters from digits first.
     set_designation(re.sub(r"(\d)([A-Z])", r"\1 \2", upper), result)
 

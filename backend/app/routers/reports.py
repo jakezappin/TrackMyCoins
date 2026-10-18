@@ -20,7 +20,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import Coin, CoinType, Collection, User
 from ..schemas import CoinOut
-from ..services import checklist, insurance, purchase_value, upgrades
+from ..services import checklist, details, insurance, purchase_value, upgrades
 from ..services.importer import no_formulas
 from ..services.coins import CPG, coin_out, collection_summary, latest_quote, on_hand, sold, value_estimate
 from ..services.greysheet import PricingError
@@ -111,7 +111,10 @@ MONEY = '"$"#,##0.00'
 
 
 def _grade(c: Coin) -> str:
-    g = f"{c.grade_prefix or ''}{c.grade or ''}{'+' if c.grade_plus else ''}{'★' if c.grade_star else ''}"
+    if c.details:
+        g = details.label(c)  # "AU55 Details · Cleaned" (imports back as a Details grade)
+    else:
+        g = f"{c.grade_prefix or ''}{c.grade or ''}{'+' if c.grade_plus else ''}{'★' if c.grade_star else ''}"
     if c.strike_designation and g:
         g = f"{g} {c.strike_designation}"
     if c.grading_service == "RAW":
@@ -164,6 +167,7 @@ COIN_COLUMNS = [
     ("CPG as of", 12, lambda c: (q.fetched_at.date() if (q := latest_quote(c, CPG)) else None)),
     ("Toner premium", 12, lambda c: c.toner_premium),
     ("Holder premium", 12, lambda c: c.holder_premium),
+    ("Details %", 9, lambda c: details.pct(c) if c.details else None),
     ("Value source", 10, lambda c: "Own value" if c.value_source == "custom" else "CPG"),
     ("Estimated value", 14, lambda c: value_estimate(c)),
     ("Photos", 7, lambda c: len(c.photos)),

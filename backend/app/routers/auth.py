@@ -8,7 +8,7 @@ from ..auth import clear_session, current_user, hash_password, set_session, veri
 from ..config import get_settings
 from ..db import get_db
 from ..models import User
-from ..schemas import LoginIn, PasswordChange, ProfileUpdate, SignupIn, UserOut
+from ..schemas import LoginIn, PasswordChange, Preferences, ProfileUpdate, SignupIn, UserOut
 from ..services.ratelimit import FailureLimiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -94,6 +94,13 @@ def update_profile(body: ProfileUpdate, db: Session = Depends(get_db), user: Use
         user.email = email
     user.first_name = body.first_name.strip()
     user.last_name = body.last_name.strip()
+    db.commit()
+    return user
+
+
+@router.put("/preferences", response_model=UserOut)
+def update_preferences(body: Preferences, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    user.details_pct = body.details_pct
     db.commit()
     return user
 

@@ -120,6 +120,8 @@ export default function AccountPage() {
         </div>
       </form>
 
+      <DetailsDefault />
+
       <form className="card form-section" onSubmit={savePassword}>
         <h2>Change Password</h2>
         <label className="field">
@@ -165,5 +167,51 @@ export default function AccountPage() {
 
       <PriceDataCard />
     </div>
+  );
+}
+
+/** The share of straight-grade CPG that Details (problem) coins are valued at, unless a coin sets its own. */
+function DetailsDefault() {
+  const { user, setUser } = useApp();
+  const [pct, setPct] = useState(String(user?.details_pct ?? 70));
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    const n = Number(pct);
+    if (!/^\d+$/.test(pct.trim()) || n < 1 || n > 100) return setMsg({ ok: false, text: "Enter a whole number from 1 to 100." });
+    setBusy(true);
+    setMsg(null);
+    try {
+      setUser(await api.setPreferences({ details_pct: n }));
+      setMsg({ ok: true, text: "Saved. Details coins are revalued everywhere." });
+    } catch (err) {
+      setMsg({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="card form-section" onSubmit={save}>
+      <h2>Details Coins</h2>
+      <p className="muted small">
+        A Details grade (e.g. “AU Details – Cleaned”) means a genuine coin with a problem. Price guides only cover
+        problem-free coins, so Details coins are valued at this share of the CPG for the same straight grade (for a grade
+        without a number, the bottom of its range: AU Details is priced from AU50), never below melt. A coin can set its
+        own % on its edit page.
+      </p>
+      <label className="field w-auto">
+        <span>Value at % of straight CPG</span>
+        <input type="number" min={1} max={100} step={1} value={pct} onChange={(e) => setPct(e.target.value)} />
+      </label>
+      {msg && <p className={`small ${msg.ok ? "ok" : "error"}`}>{msg.text}</p>}
+      <div className="row-end">
+        <button className="btn btn-primary" disabled={busy}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </form>
   );
 }

@@ -16,7 +16,7 @@ import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import { useApp, useNavCollection } from "../App";
-import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money, parseMoney, todayISO } from "../format";
+import { coinPath, collectionPath, collectionsBySeries, DETAILS_PROBLEMS, FINISH_LABEL, money, parseMoney, todayISO } from "../format";
 
 const EMPTY: CoinFields = {
   year: null,
@@ -33,6 +33,9 @@ const EMPTY: CoinFields = {
   strike_designation: null,
   cac: false,
   cac_sticker: null,
+  details: false,
+  details_problem: null,
+  details_pct: null,
   slab_soapbox: false,
   slab_ngc_fatty: false,
   slab_rattler: false,
@@ -107,7 +110,7 @@ export default function CoinFormPage() {
   const editInv = params.inv ?? null;
   const [search] = useSearchParams();
   const navigate = useNavigate();
-  const { collections, coinTypes, refresh } = useApp();
+  const { collections, coinTypes, refresh, user } = useApp();
 
   const [form, setForm] = useState<CoinFields>(EMPTY);
   const [collectionId, setCollectionId] = useState<number | null>(Number(search.get("collection")) || null);
@@ -358,8 +361,12 @@ export default function CoinFormPage() {
       vam: r.vam ?? f.vam,
       variety: r.variety ?? f.variety,
       pcgs_number: r.pcgs_number ?? f.pcgs_number,
-      cac: r.cac ?? f.cac,
-      cac_sticker: r.cac === null ? f.cac_sticker : r.cac_sticker,
+      cac: r.details ? false : r.cac ?? f.cac,
+      cac_sticker: r.details ? null : r.cac === null ? f.cac_sticker : r.cac_sticker,
+      // The grading service's word on whether it's a Details grade.
+      details: Boolean(r.details),
+      details_problem: r.details ? r.details_problem ?? f.details_problem : null,
+      ...(r.details ? { grade_plus: false, grade_star: false } : {}),
     }));
     setImportUrls(r.image_urls);
   }
@@ -402,8 +409,11 @@ export default function CoinFormPage() {
         strike_designation: r.strike_designation ?? f.strike_designation,
         variety: r.variety ?? f.variety,
         vam: r.vam ?? f.vam,
-        cac: r.cac_sticker ? true : f.cac,
-        cac_sticker: r.cac_sticker ?? f.cac_sticker,
+        cac: r.details ? false : r.cac_sticker ? true : f.cac,
+        cac_sticker: r.details ? null : r.cac_sticker ?? f.cac_sticker,
+        details: r.details ?? f.details,
+        details_problem: r.details ? r.details_problem ?? f.details_problem : r.details === false ? null : f.details_problem,
+        ...(r.details ? { grade_plus: false, grade_star: false } : {}),
       }));
   }
 
@@ -544,6 +554,10 @@ export default function CoinFormPage() {
           .filter(Boolean)
           .join(" "),
       );
+      return;
+    }
+    if (form.details && form.details_pct != null && (form.details_pct < 1 || form.details_pct > 100)) {
+      setError("The Details % of straight CPG must be between 1 and 100.");
       return;
     }
     submitting.current = true;
@@ -912,7 +926,7 @@ export default function CoinFormPage() {
           <>
         <div className="grid-4">
           <label className="field">
-            <span>{isRaw ? "Grade (optional)" : "Grade"}</span>
+            <span>{isRaw ? "Grade (optional)" : form.details ? "Grade (number optional)" : "Grade"}</span>
             <div className="row tight">
               <select {...text("grade_prefix")} className="w-auto" disabled={isProof}>
                 {isProof ? (
@@ -944,10 +958,10 @@ export default function CoinFormPage() {
             <span>Modifiers</span>
             <div className="checks">
               <label>
-                <input type="checkbox" disabled={isRaw} {...check("grade_plus")} /> Plus (+)
+                <input type="checkbox" disabled={isRaw || form.details} {...check("grade_plus")} /> Plus (+)
               </label>
               <label>
-                <input type="checkbox" disabled={isRaw} {...check("grade_star")} /> Star (★)
+                <input type="checkbox" disabled={isRaw || form.details} {...check("grade_star")} /> Star (★)
               </label>
             </div>
           </div>
@@ -960,6 +974,60 @@ export default function CoinFormPage() {
               </button>
             </div>
           </label>
+        </div>
+        <div className="grid-4 details-row">
+          <div className="field">
+            <span>Problem coin</span>
+            <label className="checks">
+              <input
+                type="checkbox"
+                checked={form.details}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setForm((f) => ({
+                    ...f,
+                    details: on,
+                    ...(on ? { grade_plus: false, grade_star: false, cac: false, cac_sticker: null } : { details_problem: null, details_pct: null }),
+                  }));
+                }}
+              />{" "}
+              Details grade
+              <span
+                className="info-tip"
+                tabIndex={0}
+                title="A Details grade (e.g. “AU Details – Cleaned”) means the coin is genuine but has a problem. Price guides only cover problem-free coins, so it's valued at a share of the CPG for the same straight grade, never below melt."
+              >
+                ⓘ
+              </span>
+            </label>
+          </div>
+          {form.details && (
+            <>
+              <label className="field">
+                <span>Problem</span>
+                <select value={form.details_problem ?? ""} onChange={(e) => set("details_problem", e.target.value || null)}>
+                  <option value="">Not stated</option>
+                  {Object.entries(DETAILS_PROBLEMS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Value at % of straight CPG</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={form.details_pct ?? ""}
+                  placeholder={`${user?.details_pct ?? 70} (your default)`}
+                  onChange={(e) => set("details_pct", e.target.value === "" ? null : Math.round(Number(e.target.value)))}
+                />
+              </label>
+            </>
+          )}
         </div>
         {findMsg && <p className="small muted find-msg">{findMsg}</p>}
         {candidates.length > 0 && (
@@ -980,13 +1048,13 @@ export default function CoinFormPage() {
       {/* ---- CAC / slab / packaging / toning ---- */}
       <div className="grid-3">
         {!isSetSeries && (
-        <section className={`card form-section ${isRaw ? "not-applicable" : ""}`}>
+        <section className={`card form-section ${isRaw || form.details ? "not-applicable" : ""}`}>
           <h2>CAC</h2>
           <div className="checks col">
             <label>
               <input
                 type="checkbox"
-                disabled={isRaw}
+                disabled={isRaw || form.details}
                 checked={form.cac}
                 onChange={(e) => setForm((f) => ({ ...f, cac: e.target.checked, cac_sticker: e.target.checked ? f.cac_sticker ?? "green" : null }))}
               />{" "}
@@ -1007,6 +1075,7 @@ export default function CoinFormPage() {
               </div>
             )}
             {isRaw && <p className="muted small">Not applicable to raw coins</p>}
+            {!isRaw && form.details && <p className="muted small">CAC doesn't sticker Details coins</p>}
           </div>
         </section>
         )}

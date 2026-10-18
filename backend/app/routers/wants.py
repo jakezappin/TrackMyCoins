@@ -126,7 +126,7 @@ def _out(db: Session, user: User, w: WantItem, held: list[Coin]) -> dict:
     mine = [c for c in held if c.coin_type_id == w.coin_type_id and c.year == w.year and c.mint_mark == w.mint_mark
             and _finish_of(c) == w.finish
             and (not w.variety or (c.variety or "").lower().find(w.variety.lower()) >= 0)]
-    mine.sort(key=lambda c: -(c.grade or 0))
+    mine.sort(key=lambda c: (c.details, -(c.grade or 0), not c.grade_plus))  # problem-free first
     best = mine[0] if mine else None
     return {
         "id": w.id,
@@ -148,8 +148,10 @@ def _out(db: Session, user: User, w: WantItem, held: list[Coin]) -> dict:
         "owned": {"inventory_number": best.inventory_number, "grade": best.grade, "grade_prefix": best.grade_prefix,
                   "grade_plus": best.grade_plus, "grade_star": best.grade_star,
                   "strike_designation": best.strike_designation,
-                  "grading_service": best.grading_service,
-                  "meets_target": bool(w.grade and best.grade and best.grade >= w.grade)} if best else None,
+                  "grading_service": best.grading_service, "details": best.details,
+                  # A Details coin never meets a target grade.
+                  "meets_target": bool(w.grade and best.grade and best.grade >= w.grade and not best.details)}
+        if best else None,
         "created_at": w.created_at,
     }
 

@@ -2,6 +2,7 @@
 
 import io
 from datetime import date
+from xml.sax.saxutils import escape
 from decimal import Decimal
 
 from PIL import Image as PILImage
@@ -14,6 +15,7 @@ from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, Simple
 
 from ..config import get_settings
 from ..models import BullionCollection, BullionItem, Coin, Collection, User
+from . import details
 from . import photos as photo_store
 from .coins import CENTS, latest_quote, value_estimate
 
@@ -31,6 +33,11 @@ H1 = ParagraphStyle("h1", parent=styles["Title"], fontSize=20, leading=24, textC
 H2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=13, textColor=NAVY, spaceBefore=6, spaceAfter=4)
 
 
+def _e(v) -> str:
+    """User-entered text, made safe for reportlab's markup ("VAM 1A <B" would otherwise break the report)."""
+    return escape(str(v)) if v is not None else ""
+
+
 def _money(v) -> str:
     return "—" if v is None else f"${Decimal(v):,.2f}"
 
@@ -40,7 +47,11 @@ def _date_mint(c: Coin) -> str:
 
 
 def _grade(c: Coin) -> str:
-    g = f"{c.grade_prefix or ''}{c.grade or ''}{'+' if c.grade_plus else ''}{'★' if c.grade_star else ''}"
+    # The PDF's built-in fonts have no ★, so a star grade prints as "*" (as PCGS and NGC write it in text).
+    if c.details:
+        g = details.label(c)
+    else:
+        g = f"{c.grade_prefix or ''}{c.grade or ''}{'+' if c.grade_plus else ''}{'*' if c.grade_star else ''}"
     if c.strike_designation and g:
         g += f" {c.strike_designation}"
     return f"Raw {g}".strip() if c.grading_service == "RAW" else g
@@ -75,6 +86,8 @@ def _value_note(c: Coin) -> str:
     q = latest_quote(c)
     if q:
         parts.append(f"CPG {q.fetched_at:%b %d, %Y}")
+    if c.details:
+        parts.append(f"× {details.pct(c)}% (Details)")
     if c.toner_premium:
         parts.append(f"+ toner {_money(c.toner_premium)}")
     if c.holder_premium:
@@ -83,8 +96,8 @@ def _value_note(c: Coin) -> str:
 
 
 def _coin_row(c: Coin, type_name: str) -> list:
-    desc = f"<b>{_date_mint(c)} {type_name}</b>"
-    extras = [x for x in (c.variety, c.vam) if x]
+    desc = f"<b>{_date_mint(c)} {_e(type_name)}</b>"
+    extras = [_e(x) for x in (c.variety, c.vam) if x]
     if extras:
         desc += "<br/>" + " · ".join(extras)
     slab = [s for on, s in ((c.slab_rattler, "Rattler"), (c.slab_ngc_fatty, "NGC Fatty"), (c.slab_ogh, "OGH"),
@@ -92,18 +105,18 @@ def _coin_row(c: Coin, type_name: str) -> list:
                             (c.gsa_soft_pack, "GSA Soft Pack")) if on]
     if slab:
         desc += f'<br/><font color="#666666">{", ".join(slab)}</font>'
-    service = "Raw (ungraded)" if c.grading_service == "RAW" else f"{c.grading_service} #{c.cert_number or '—'}"
+    service = "Raw (ungraded)" if c.grading_service == "RAW" else f"{c.grading_service} #{_e(c.cert_number) or '—'}"
     cac = f"CAC ({c.cac_sticker.title()})" if c.cac and c.cac_sticker else ("CAC" if c.cac else "")
     bought = _money(c.price_paid)
     if c.purchase_date:
         bought += f'<br/><font color="#666666">{c.purchase_date:%b %d, %Y}</font>'
     if c.purchased_from:
-        bought += f'<br/><font color="#666666">{c.purchased_from}</font>'
+        bought += f'<br/><font color="#666666">{_e(c.purchased_from)}</font>'
     return [
         _thumb(c),
         Paragraph(c.inventory_number, CELL),
         Paragraph(desc, CELL),
-        Paragraph(f"<b>{_grade(c) or '—'}</b><br/>{service}" + (f"<br/>{cac}" if cac else ""), CELL),
+        Paragraph(f"<b>{_e(_grade(c)) or '—'}</b><br/>{service}" + (f"<br/>{cac}" if cac else ""), CELL),
         Paragraph(bought, CELL),
         Paragraph(f"<b>{_money(value_estimate(c))}</b><br/><font color='#666666'>{_value_note(c)}</font>", CELL),
     ]
@@ -121,12 +134,12 @@ def _bullion_row(i: BullionItem, spot: Decimal | None) -> list:
     if i.purchase_date:
         bought += f'<br/><font color="#666666">{i.purchase_date:%b %d, %Y}</font>'
     if i.purchased_from:
-        bought += f'<br/><font color="#666666">{i.purchased_from}</font>'
+        bought += f'<br/><font color="#666666">{_e(i.purchased_from)}</font>'
     melt = _money(oz * spot) if spot is not None else "—"
     return [
         _thumb(i, f"bullion-{i.id}"),
         Paragraph(i.inventory_number, CELL),
-        Paragraph(f"<b>{i.description}</b>", CELL),
+        Paragraph(f"<b>{_e(i.description)}</b>", CELL),
         Paragraph(f"{amount}<br/>{purity} fine · <b>{oz.normalize()} ozt pure</b>", CELL),
         Paragraph(bought, CELL),
         Paragraph(f"<b>{melt}</b><br/><font color='#666666'>melt at {_money(spot)}/ozt</font>", CELL),
@@ -156,9 +169,9 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
 
     story = [
         Paragraph("Coin Collection Inventory", H1),
-        Paragraph(f"Prepared for insurance purposes · {scope}", styles["Heading3"]),
+        Paragraph(f"Prepared for insurance purposes · {_e(scope)}", styles["Heading3"]),
         Spacer(1, 6),
-        Paragraph(f"Owner: <b>{user.first_name} {user.last_name}</b> ({user.email})", styles["BodyText"]),
+        Paragraph(f"Owner: <b>{_e(user.first_name)} {_e(user.last_name)}</b> ({_e(user.email)})", styles["BodyText"]),
         Paragraph(f"Date: <b>{today:%B %d, %Y}</b>", styles["BodyText"]),
         Spacer(1, 12),
     ]
@@ -182,6 +195,9 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
         "Estimated values come from the CDN Certified Price Guide (CPG) retail values, plus any premiums the owner "
         "recorded for toning or holder, or from the owner's own estimate where noted. They are estimates, not "
         "appraisals. Coins already sold are not included."
+        + (" Details (problem) coins have no published price, so they are valued at the stated share of the CPG "
+           "for the equivalent problem-free grade (for a grade without a number, the bottom of its range), and "
+           "never below melt." if any(c.details for c in all_coins) else "")
         + (" Bullion is valued at its pure metal content times today's spot price." if bullion_items else ""), SMALL))
     if groups or bullion:
         story.append(PageBreak())
@@ -206,7 +222,7 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
             if i % 2 == 0:
                 style.append(("BACKGROUND", (0, i), (-1, i), ZEBRA))
         table.setStyle(TableStyle(style))
-        story += [KeepTogether([Paragraph(col.name, H2)]), table, Spacer(1, 14)]
+        story += [KeepTogether([Paragraph(_e(col.name), H2)]), table, Spacer(1, 14)]
 
     for col, items in bullion:
         spot = spots.get(col.metal)
@@ -229,7 +245,7 @@ def build_pdf(user: User, groups: list[tuple[Collection, list[Coin]]], type_name
             if n % 2 == 0:
                 style.append(("BACKGROUND", (0, n), (-1, n), ZEBRA))
         table.setStyle(TableStyle(style))
-        story += [KeepTogether([Paragraph(f"{col.name} (bullion)", H2)]), table, Spacer(1, 14)]
+        story += [KeepTogether([Paragraph(f"{_e(col.name)} (bullion)", H2)]), table, Spacer(1, 14)]
 
     def footer(canvas, doc_):
         canvas.saveState()

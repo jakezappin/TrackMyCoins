@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from ..db import SessionLocal
 from ..models import Coin, Collection, PriceRefreshRun
-from . import greysheet, lookups, price_refresh, purchase_value, quota
+from . import details, greysheet, lookups, price_refresh, purchase_value, quota
 from .coins import on_hand
 
 
@@ -90,49 +90,23 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
         cpg_ok = True
         for coin_id in ids:
             coin = db.get(Coin, coin_id)
+            if coin is None:  # deleted while the job ran
+                job.done += 1
+                continue
             job.current = _label(coin)
             is_set = greysheet.is_set(coin)  # mint & proof sets: CPG in OGP, no grade, no PCGS data
-            if not coin.grade and not is_set:
+            if not details.price_grade(coin) and not is_set:
                 job.skipped += 1
                 job.messages.append(f"{job.current}: skipped, no numeric grade")
                 job.done += 1
                 continue
             changed = called = False
             try:
-                if cpg_ok:
-                    called |= price_refresh.refresh_cpg(db, coin)
-                    changed = True
-            except quota.QuotaExceeded as e:  # out of today's Greysheet allowance: no more CPG this run
-                cpg_ok = False
-                job.messages.append(f"CPG stopped: {e}")
-            except (greysheet.PricingError, lookups.LookupError) as e:
-                job.messages.append(f"{job.current}: CPG: {e}")
-            except httpx.HTTPError as e:
-                job.messages.append(f"{job.current}: CPG: Greysheet error ({e.__class__.__name__})")
-            if pcgs_ok and not is_set:
-                try:
-                    called |= price_refresh.refresh_pcgs(db, coin)
-                    changed = True
-                except quota.QuotaExceeded as e:
-                    pcgs_ok = False
-                    job.pcgs_stopped = str(e)
-                except (greysheet.PricingError, lookups.LookupError) as e:
-                    if "limit" in str(e).lower():
-                        pcgs_ok = False
-                        job.pcgs_stopped = str(e)
-                    else:
-                        job.messages.append(f"{job.current}: PCGS: {e}")
-                except httpx.HTTPError as e:
-                    job.messages.append(f"{job.current}: PCGS: error ({e.__class__.__name__})")
-            if pcgs_ok and purchase_value.needs_auctions(db, coin):  # value at purchase from auction sales
-                try:
-                    called |= purchase_value.fill_auctions(coin, job.user_id)
-                    changed = True
-                except quota.QuotaExceeded as e:
-                    pcgs_ok = False
-                    job.pcgs_stopped = str(e)
-                except (lookups.LookupError, httpx.HTTPError):
-                    pass  # it's tried again next time
+                changed, called, cpg_ok, pcgs_ok = _refresh_one(db, job, coin, is_set, cpg_ok, pcgs_ok)
+            except Exception as e:  # a maintenance page instead of JSON, say: skip this coin, keep going
+                db.rollback()
+                changed = False
+                job.messages.append(f"{job.current}: skipped, unexpected response ({e.__class__.__name__})")
             if changed:
                 db.commit()
                 job.updated += 1
@@ -158,6 +132,49 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
             except Exception:  # pragma: no cover - never let bookkeeping hide the job's own result
                 db.rollback()
         db.close()
+
+
+def _refresh_one(db, job: Job, coin: Coin, is_set: bool, cpg_ok: bool, pcgs_ok: bool) -> tuple[bool, bool, bool, bool]:
+    """CPG, PCGS market data and the value at purchase for one coin. Returns (changed, called, cpg_ok, pcgs_ok)."""
+    changed = called = False
+    try:
+        if cpg_ok:
+            called |= price_refresh.refresh_cpg(db, coin)
+            changed = True
+    except quota.QuotaExceeded as e:  # out of today's Greysheet allowance: no more CPG this run
+        cpg_ok = False
+        job.messages.append(f"CPG stopped: {e}")
+    except (greysheet.PricingError, lookups.LookupError) as e:
+        job.messages.append(f"{job.current}: CPG: {e}")
+    except httpx.HTTPError as e:
+        job.messages.append(f"{job.current}: CPG: Greysheet error ({e.__class__.__name__})")
+    if pcgs_ok and not is_set:
+        try:
+            called |= price_refresh.refresh_pcgs(db, coin)
+            changed = True
+        except quota.QuotaExceeded as e:
+            pcgs_ok = False
+            job.pcgs_stopped = str(e)
+        except (greysheet.PricingError, lookups.LookupError) as e:
+            if "limit" in str(e).lower():
+                pcgs_ok = False
+                job.pcgs_stopped = str(e)
+            else:
+                job.messages.append(f"{job.current}: PCGS: {e}")
+        except httpx.HTTPError as e:
+            job.messages.append(f"{job.current}: PCGS: error ({e.__class__.__name__})")
+    if pcgs_ok and purchase_value.needs_auctions(db, coin):  # value at purchase from auction sales
+        # Save what's been fetched first: the auction lookup archives sales in its own session.
+        db.commit()
+        try:
+            called |= purchase_value.fill_auctions(coin, job.user_id)
+            changed = True
+        except quota.QuotaExceeded as e:
+            pcgs_ok = False
+            job.pcgs_stopped = str(e)
+        except (lookups.LookupError, httpx.HTTPError):
+            pass  # it's tried again next time
+    return changed, called, cpg_ok, pcgs_ok
 
 
 def collection_scope(db, user_id: int, collection_id: int | None) -> str | None:

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from ..models import Coin, CpgHistory
-from . import quota
+from . import details, quota
 from .coins import CENTS, CPG
 
 RECENT = timedelta(days=61)  # "within 2 months" of the purchase
@@ -50,11 +50,17 @@ def purchase_day(coin: Coin) -> date:
     return coin.purchase_date or _day(coin.created_at) or date.today()
 
 
+def _grade(coin: Coin) -> tuple[int | None, bool]:
+    """(numeric grade, plus) prices are looked up at: a Details coin's straight-grade equivalent, no plus."""
+    return details.price_grade(coin), bool(coin.grade_plus) and not getattr(coin, "details", False)
+
+
 def auction_key(coin: Coin) -> str | None:
     """What an auction average depends on; None if the coin can't have one (no PCGS # or numeric grade)."""
-    if not coin.pcgs_number or not coin.grade:
+    grade, plus = _grade(coin)
+    if not coin.pcgs_number or not grade:
         return None
-    return f"{coin.pcgs_number}|{coin.grade}|{int(bool(coin.grade_plus))}|{purchase_day(coin).isoformat()}"
+    return f"{coin.pcgs_number}|{grade}|{int(plus)}|{int(bool(coin.cac))}|{purchase_day(coin).isoformat()}"
 
 
 def _fmt(d: date) -> str:
@@ -67,19 +73,21 @@ def _month(ym: str) -> str:
 
 
 def _own_cpg(coin: Coin, start: date):
+    # A quote added this session and not yet saved has no fetched_at yet: it's from today.
     near = [q for q in coin.price_quotes
-            if q.source == CPG and q.value is not None and abs(_day(q.fetched_at) - start) <= RECENT]
-    return min(near, key=lambda q: (abs(_day(q.fetched_at) - start), q.id), default=None)
+            if q.source == CPG and q.value is not None and abs((_day(q.fetched_at) or date.today()) - start) <= RECENT]
+    return min(near, key=lambda q: (abs((_day(q.fetched_at) or date.today()) - start), q.id or 0), default=None)
 
 
 def _history_cpg(db: Session, coin: Coin, start: date) -> CpgHistory | None:
-    if not coin.grade:
+    grade, plus = _grade(coin)
+    if not grade:
         return None
     from .grade_prices import _key_for  # the coin's price-sheet keys (pcgs:N, gsid:N)
 
     for key in _key_for(coin):
-        rows = db.scalars(select(CpgHistory).where(CpgHistory.key == key, CpgHistory.grade == coin.grade)).all()
-        rows = [h for h in rows if ("+" in h.label) == bool(coin.grade_plus)]
+        rows = db.scalars(select(CpgHistory).where(CpgHistory.key == key, CpgHistory.grade == grade)).all()
+        rows = [h for h in rows if ("+" in h.label) == plus]
         # A CAC coin: CAC prices if the history has them for that date, else the plain ones.
         for want_cac in ([True, False] if coin.cac else [False]):
             before = [h for h in rows if h.cac == want_cac and _day(h.first_seen) <= start]
@@ -92,18 +100,27 @@ def _history_cpg(db: Session, coin: Coin, start: date) -> CpgHistory | None:
 
 
 def estimate(db: Session, coin: Coin) -> Estimate:
+    e = _estimate(db, coin)
+    if getattr(coin, "details", False) and e.value is not None and e.source in ("cpg", "cpg_history", "auctions"):
+        # Straight-grade prices: a Details coin was worth its share of them.
+        e.value = details.adjust(coin, e.value)
+        e.detail = f"{e.detail} × {details.pct(coin)}% (Details coin)"
+    return e
+
+
+def _estimate(db: Session, coin: Coin) -> Estimate:
     start = purchase_day(coin)
     if coin.purchase_value_custom is not None:
         return Estimate(coin.purchase_value_custom, "custom", "Your own value")
     q = _own_cpg(coin, start)
     if q is not None:
-        return Estimate(q.value, "cpg", f"CPG on {_fmt(_day(q.fetched_at))}")
+        return Estimate(q.value, "cpg", f"CPG on {_fmt(_day(q.fetched_at) or date.today())}")
     h = _history_cpg(db, coin, start)
     if h is not None:
         return Estimate(h.value, "cpg_history", f"CPG as of {_fmt(_day(h.first_seen))} (TrackMyCoins price history)")
     key = auction_key(coin)
     pending = key is not None and coin.purchase_auction_key != key
-    if not pending and coin.purchase_auction_value is not None:
+    if key is not None and not pending and coin.purchase_auction_value is not None:
         n = coin.purchase_auction_count or 0
         lo, _, hi = (coin.purchase_auction_span or "").partition("..")
         span = _month(lo) if lo == hi or not hi else f"{_month(lo)} – {_month(hi)}"
@@ -154,7 +171,8 @@ def fill_auctions(coin: Coin, user_id: int) -> bool:
     key = auction_key(coin)
     if key is None or coin.purchase_auction_key == key:
         return False
-    args = (str(coin.pcgs_number), int(coin.grade), bool(coin.grade_plus), user_id)
+    grade, plus = _grade(coin)
+    args = (str(coin.pcgs_number), int(grade), plus, user_id)
     # Like for like: CAC sales sell higher, so plain coins use plain sales; a CAC coin uses CAC sales when there
     # were some around then, else plain ones.
     got = average_near(_sales(*args, cac=True), purchase_day(coin)) if coin.cac else None

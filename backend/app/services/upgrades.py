@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..designations import from_greysheet_name, with_designation
 from ..models import Coin, Collection, GradePriceSheet
-from . import checklist
+from . import checklist, details
 from .coins import CENTS, value_estimate
 
 
@@ -22,9 +22,13 @@ def _sheet(db: Session, keys: list[str]) -> GradePriceSheet | None:
 
 def _cpg_rows(sheet: GradePriceSheet, cac: bool) -> list[dict]:
     """Plain (or CAC, for CAC coins) priced rows in grade order."""
-    rows = [r for r in sheet.rows if r.get("cpg") and bool(r.get("cac")) == cac]
-    if cac and not rows:
-        rows = [r for r in sheet.rows if r.get("cpg") and not r.get("cac")]
+    plain = [r for r in sheet.rows if r.get("cpg") and not r.get("cac")]
+    rows = plain
+    if cac:
+        # CAC prices where the sheet has them, plain ones for the grades it doesn't.
+        cac_rows = [r for r in sheet.rows if r.get("cpg") and r.get("cac")]
+        have = {(r["grade"], "+" in str(r["label"])) for r in cac_rows}
+        rows = cac_rows + [r for r in plain if (r["grade"], "+" in str(r["label"])) not in have]
     return sorted(rows, key=lambda r: (int(r["grade"] or 0), "+" in str(r["label"])))
 
 
@@ -34,8 +38,10 @@ def find(db: Session, col: Collection, mode: str = "full") -> dict:
     for row in cl.rows:
         if not row.coins:
             continue
-        best: Coin = row.coins[0]  # coins come best grade first
-        if not best.grade:
+        # Coins come best grade first; a problem-free coin beats a Details one.
+        best: Coin = next((c for c in row.coins if not c.details), row.coins[0])
+        grade = details.price_grade(best)
+        if not grade:
             continue
         keys = ([f"pcgs:{best.pcgs_number}"] if best.pcgs_number else []) + [f"pcgs:{n}" for n in sorted(row.pcgs_numbers)]
         sheet = _sheet(db, keys)
@@ -45,12 +51,14 @@ def find(db: Session, col: Collection, mode: str = "full") -> dict:
         rows = _cpg_rows(sheet, cac=best.cac)
         current = value_estimate(best)
         # Grades in order with their plus: a 65+ is priced as a 65+, and its next step up is 66.
-        mine = (best.grade, bool(best.grade_plus))
+        mine = (grade, bool(best.grade_plus) and not best.details)
         rank = lambda r: (int(r["grade"] or 0), "+" in str(r["label"]))  # noqa: E731
         here = next((r for r in rows if rank(r) == mine), None)
         if current is None and here is not None:
-            current = Decimal(here["cpg"])
-        nxt = next((r for r in rows if rank(r)[0] > best.grade), None)
+            current = details.adjust(best, Decimal(here["cpg"]))
+        # A Details coin's next step is a problem-free coin of its grade; otherwise the next grade up.
+        nxt = next((r for r in rows if rank(r) == mine), None) if best.details else None
+        nxt = nxt or next((r for r in rows if rank(r)[0] > grade), None)
         if nxt is None:
             top.append(row.label)  # already at the top priced grade
             continue
@@ -64,7 +72,8 @@ def find(db: Session, col: Collection, mode: str = "full") -> dict:
             "variety": row.variety,
             "coin": {"inventory_number": best.inventory_number, "grade": best.grade, "grade_prefix": best.grade_prefix,
                      "grade_plus": best.grade_plus, "grade_star": best.grade_star,
-                     "strike_designation": best.strike_designation, "cac": best.cac},
+                     "strike_designation": best.strike_designation, "cac": best.cac,
+                     "details": best.details, "details_problem": best.details_problem},
             "current_value": str(current.quantize(CENTS)) if current is not None else None,
             "next_grade": int(nxt["grade"]),
             "next_label": with_designation(str(nxt["label"]), designation) + (" CAC" if nxt.get("cac") else ""),

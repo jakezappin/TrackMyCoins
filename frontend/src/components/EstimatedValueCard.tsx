@@ -26,7 +26,8 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
     setCustom(coin.custom_value ?? "");
   }, [coin.value_source, coin.toner_premium, coin.holder_premium, coin.custom_value]);
 
-  const cpg = coin.latest_cpg?.value ?? null;
+  // A Details coin's CPG-based value is its share of the straight-grade CPG.
+  const cpg = coin.details ? coin.details_value : coin.latest_cpg?.value ?? null;
   const premium = (k: PremiumKey) => (on[k] && amount[k] ? amount[k] : "");
   const amt = (t: string) => {
     const r = parseMoney(t);
@@ -87,7 +88,7 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
   }
 
   const breakdown = [
-    cpg ? `CPG ${money(cpg)}` : null,
+    cpg ? `${coin.details ? "Details value" : "CPG"} ${money(cpg)}` : null,
     coin.toner_premium ? `toner premium ${money(coin.toner_premium)}` : null,
     coin.holder_premium ? `holder premium ${money(coin.holder_premium)}` : null,
   ].filter(Boolean);
@@ -102,7 +103,9 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
           : cpg
             ? breakdown.length > 1
               ? breakdown.join(" + ")
-              : "From CPG"
+              : coin.details
+                ? "From CPG, as a Details coin"
+                : "From CPG"
             : "Get a CPG price or enter your own value"}
         . Used in your collection totals.
       </p>
@@ -176,6 +179,17 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
         )}
         {error && <p className="error small">{error}</p>}
       </form>
+      {coin.details && coin.details_basis && <DetailsNote basis={coin.details_basis} />}
     </section>
+  );
+}
+
+/** How a Details (problem) coin is priced: shown at the foot of the value cards. */
+export function DetailsNote({ basis }: { basis: string }) {
+  return (
+    <p className="details-note small">
+      <span className="details-badge">Details</span> {basis} Change the default % in Account settings, or set this
+      coin's own on its edit page.
+    </p>
   );
 }

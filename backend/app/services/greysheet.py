@@ -14,6 +14,7 @@ from ..config import get_settings
 from ..designations import from_greysheet_name, with_designation
 from ..models import Coin
 from ..series import BY_SLUG
+from .details import price_grade
 
 PROD_URL = "https://cpgpublicapiv2.greysheet.com/api"
 SANDBOX_URL = "https://cpgpublicapiv2beta.greysheet.com/api"
@@ -78,23 +79,27 @@ def _pick(items: list[dict], coin: Coin) -> dict | None:
     if is_set(coin):
         rows = [i for i in items if not i.get("IsCac") and _money(i.get("CpgVal")) is not None]
         return next((i for i in rows if str(i.get("GradeLabel") or "").upper().startswith("OGP")), rows[0] if rows else None)
-    rows = [i for i in items if str(i.get("Grade")) == str(coin.grade)]
+    grade = price_grade(coin)
+    # Rows without a CPG are no use (saving one would show the coin as unpriced).
+    rows = [i for i in items if str(i.get("Grade")) == str(grade) and _money(i.get("CpgVal")) is not None]
     if not rows:
         return None
     label_plus = [r for r in rows if "+" in str(r.get("GradeLabel") or "")]
     label_plain = [r for r in rows if "+" not in str(r.get("GradeLabel") or "")]
-    rows = (label_plus or label_plain) if coin.grade_plus else (label_plain or rows)
+    # A plus coin takes the plus price, else the plain one (conservative); a plain coin never takes a plus price.
+    rows = (label_plus or label_plain) if coin.grade_plus and not getattr(coin, "details", False) else label_plain
     cac_rows = [r for r in rows if r.get("IsCac")]
     plain_rows = [r for r in rows if not r.get("IsCac")]
     if coin.cac and cac_rows:
         return cac_rows[0]
-    return (plain_rows or rows)[0]
+    # A coin without a CAC sticker never takes a CAC price.
+    return plain_rows[0] if plain_rows else None
 
 
 def require_grade(coin: Coin) -> None:
     if is_set(coin):
         return  # priced in OGP, no grade
-    if not coin.grade:
+    if not price_grade(coin):
         if coin.grading_service == "RAW":
             raise PricingError("CPG prices are by numeric grade. Give this raw coin a number (e.g. AU55) to look one up.")
         raise PricingError("This coin needs a numeric grade to look up CPG.")
@@ -135,7 +140,7 @@ def fetch_cpg(coin: Coin, gsid: int | None = None, cached: dict | None = None) -
     entry = data[0]
     row = _pick(entry.get("PricingData") or [], coin)
     if row is None:
-        raise PricingError(f"No CPG price for grade {coin.grade} on {ident}")
+        raise PricingError(f"No CPG price for {coin.grade_prefix or ''}{price_grade(coin)} on {ident}")
 
     designation = from_greysheet_name(entry.get("Name"))
     label = with_designation(str(row.get("GradeLabel") or row.get("Grade")), designation)

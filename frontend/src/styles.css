@@ -3335,3 +3335,37 @@ table {
     justify-self: start;
   }
 }
+
+/* ---- Details (problem) coins ---- */
+.info-tip {
+  cursor: help;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.info-tip:focus-visible {
+  outline: 2px solid var(--accent);
+  border-radius: 4px;
+}
+.details-note {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--gold-soft);
+  color: var(--text);
+  line-height: 1.45;
+}
+.details-badge {
+  display: inline-block;
+  padding: 0 6px;
+  margin-right: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.details-row {
+  margin-top: 4px;
+}

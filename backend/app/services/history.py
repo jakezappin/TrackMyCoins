@@ -18,8 +18,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..models import Coin
-from . import price_archive, purchase_value
-from .coins import CENTS, CPG, CUSTOM, PREMIUM
+from . import details, price_archive, purchase_value
+from .coins import CENTS, CPG, CUSTOM, PREMIUM, value_estimate
 
 MARKET_WINDOW_MONTHS = 6  # sales this close to a date describe the market then
 
@@ -63,20 +63,31 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None, c
     for c in coins:
         start = c.purchase_date or _day(c.created_at)
         end = c.sale_date  # sold on this day: no longer held from then on
+        if end is None and c.sale_price is not None:
+            end = _day(c.updated_at) or start  # sold, date not given: gone from when the sale was entered
+        if end is not None and end < start:
+            end = start
         held[c.id] = (start, end)
         days.add(start)
         if end:
             days.add(end)
+        # The kind of estimate the owner uses now: their own values (CPG before the first one), or CPG-based ones.
+        sources = VALUE_SOURCES if c.value_source == "custom" else {CPG, PREMIUM}
         quotes = sorted(
-            (q for q in c.price_quotes if q.source in VALUE_SOURCES and q.value is not None),
+            (q for q in c.price_quotes if q.source in sources and q.value is not None),
             key=lambda q: (q.fetched_at, q.id),
         )
-        estimates[c.id] = [(_day(q.fetched_at), q.value) for q in quotes]
+        if c.value_source == "custom" and any(q.source == CUSTOM for q in quotes):
+            first_custom = next(q for q in quotes if q.source == CUSTOM)
+            quotes = [q for q in quotes if q.source == CUSTOM or q.fetched_at < first_custom.fetched_at]
+        # A Details coin is worth its share of the straight-grade CPG.
+        estimates[c.id] = [(_day(q.fetched_at), details.adjust(c, q.value) if q.source == CPG else q.value) for q in quotes]
         days.update(d for d, _ in estimates[c.id])
         if estimates[c.id] and estimates[c.id][0][0] > start:
             at_purchase[c.id] = purchase_value.estimate(db, c).value
-            if c.pcgs_number and c.grade:
-                key = (str(c.pcgs_number), int(c.grade), bool(c.grade_plus))
+            g = details.price_grade(c)
+            if c.pcgs_number and g:
+                key = (str(c.pcgs_number), int(g), bool(c.grade_plus) and not c.details)
                 if key not in sales:
                     sales[key] = price_archive.sales_for(db, *key, cac=False)  # the market's shape: plain sales
                 market_key[c.id] = key
@@ -108,6 +119,8 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None, c
                     latest = v
                 else:
                     break
+            if d == today and (now := value_estimate(c)) is not None:
+                latest = now  # today: exactly what the totals use
             if latest is None and estimates[c.id]:
                 # Not priced yet on this day: on the line from its value at purchase to its first estimate.
                 first_day, first = estimates[c.id][0]
