@@ -1108,6 +1108,14 @@ export default function CoinFormPage() {
               </select>
               <input type="number" min={1} max={70} step={1} {...text("grade")} placeholder="65" />
             </div>
+            <span className="checks grade-mods">
+              <label>
+                <input type="checkbox" disabled={isRaw || form.details} {...check("grade_plus")} /> Plus (+)
+              </label>
+              <label>
+                <input type="checkbox" disabled={isRaw || form.details} {...check("grade_star")} /> Star (★)
+              </label>
+            </span>
           </label>
           <label className="field">
             <span>Strike designation</span>
@@ -1131,12 +1139,6 @@ export default function CoinFormPage() {
           </label>
         </div>
         <div className="checks coin-flags">
-          <label>
-            <input type="checkbox" disabled={isRaw || form.details} {...check("grade_plus")} /> Plus (+)
-          </label>
-          <label>
-            <input type="checkbox" disabled={isRaw || form.details} {...check("grade_star")} /> Star (★)
-          </label>
           <label>
             <input
               type="checkbox"
@@ -1170,10 +1172,10 @@ export default function CoinFormPage() {
             </span>
           </label>
         </div>
-        {(form.details || form.is_error) && (
-          <div className="grid-4 details-row">
-          {form.details && (
-            <>
+        {form.details && (
+          <div className="flag-panel">
+            <h3 className="details-sub">Details Grade</h3>
+            <div className="grid-4">
               <label className="field">
                 <span>Problem</span>
                 <select value={form.details_problem ?? ""} onChange={(e) => set("details_problem", e.target.value || null)}>
@@ -1197,10 +1199,13 @@ export default function CoinFormPage() {
                   onChange={(e) => set("details_pct", e.target.value === "" ? null : Math.round(Number(e.target.value)))}
                 />
               </label>
-            </>
-          )}
-          {form.is_error && (
-            <>
+            </div>
+          </div>
+        )}
+        {form.is_error && (
+          <div className="flag-panel">
+            <h3 className="details-sub">Error Coin</h3>
+            <div className="grid-4">
               <label className="field span-2">
                 <span>Describe the error</span>
                 <input
@@ -1222,12 +1227,9 @@ export default function CoinFormPage() {
                   placeholder="0.00"
                 />
               </label>
-            </>
-          )}
+            </div>
+            <p className="muted small">Error coins skip CPG, the PCGS price guide and auctions; the value you enter is its value.</p>
           </div>
-        )}
-        {form.is_error && (
-          <p className="muted small">Error coins skip CPG, the PCGS price guide and auctions; the value you enter is its value.</p>
         )}
         {findMsg && <p className="small muted find-msg">{findMsg}</p>}
         {candidates.length > 0 && (

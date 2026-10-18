@@ -3937,6 +3937,28 @@ fieldset.field .check {
 .coin-flags .info-tip {
   margin-left: 2px;
 }
+.grade-mods {
+  gap: 4px 14px;
+  padding-top: 4px;
+  font-size: 0.9rem;
+}
+.flag-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.flag-panel .details-sub {
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.flag-panel p {
+  margin: 0;
+}
 .catalog-search > p {
   margin: 6px 0 0;
 }
