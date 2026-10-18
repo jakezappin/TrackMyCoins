@@ -18,6 +18,12 @@ export default function Layout() {
 
   useEffect(() => setMenuOpen(false), [loc.pathname]);
 
+  // The logo always lands at the top of the dashboard (even when you're already on it, scrolled down).
+  function toTop() {
+    setMenuOpen(false);
+    window.scrollTo({ top: 0 });
+  }
+
   async function logout() {
     await api.logout();
     setUser(null);
@@ -35,13 +41,13 @@ export default function Layout() {
         <button className="icon-btn" aria-label="Menu" onClick={() => setMenuOpen((o) => !o)}>
           ☰
         </button>
-        <Link to="/dashboard" className="brand">
+        <Link to="/dashboard" className="brand" onClick={toTop}>
           <Logo size={26} tone="light" />
         </Link>
       </header>
 
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <Link to="/dashboard" className="brand desktop-only">
+        <Link to="/dashboard" className="brand desktop-only" onClick={toTop}>
           <Logo size={28} tone="light" />
         </Link>
 
@@ -85,7 +91,7 @@ export default function Layout() {
                 </NavLink>
               ))}
               <NavLink to={soldPath(type.slug)} className="nav-item nav-sold">
-                Sold
+                Sold Coins
               </NavLink>
             </div>
           ))}

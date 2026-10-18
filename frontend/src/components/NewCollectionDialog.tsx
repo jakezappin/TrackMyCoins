@@ -96,9 +96,14 @@ export default function NewCollectionDialog({ initialType, onClose, onCreated }:
   const ready = kind === "bullion" || (kind === "numismatic" && !unavailable && type != null);
 
   return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+    <div className="modal-backdrop">
       <form className="modal new-collection-modal" role="dialog" aria-modal="true" aria-label="New collection" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2>New Collection</h2>
+        <div className="modal-head">
+          <h2>New Collection</h2>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose} disabled={busy}>
+            ✕
+          </button>
+        </div>
 
         <div className="field">
           <span>What are you collecting?</span>

@@ -4099,3 +4099,40 @@ fieldset.field .check {
   align-items: flex-start;
   white-space: normal;
 }
+
+/* A dialog's title with its close button (dialogs you type into don't close on an outside click). */
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.modal-head h2 {
+  margin: 0;
+}
+
+.sold-filter {
+  flex: none;
+}
+.sold-filter select {
+  min-width: 240px;
+}
+
+/* Desktop: Add coin and Account settings stay put at the bottom of the menu; only the list above them scrolls. */
+@media (min-width: 901px) {
+  .sidebar {
+    overflow: hidden;
+  }
+  .sidebar nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0 -12px;
+    padding: 0 12px 12px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+  .sidebar-footer {
+    flex: none;
+  }
+}

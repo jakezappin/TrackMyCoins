@@ -110,7 +110,7 @@ export default function DealerDialog({
   );
 
   return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && !reading && onClose()}>
+    <div className="modal-backdrop">
       <form
         className="modal dealer-dialog"
         role="dialog"
@@ -119,7 +119,12 @@ export default function DealerDialog({
         onClick={(e) => e.stopPropagation()}
         onSubmit={save}
       >
-        <h2>{dealer ? "Edit Dealer" : "Add Dealer"}</h2>
+        <div className="modal-head">
+          <h2>{dealer ? "Edit Dealer" : "Add Dealer"}</h2>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose} disabled={busy || reading}>
+            ✕
+          </button>
+        </div>
         <div className="dealer-scan">
           {preview ? <img src={preview} alt="Card or banner" className="dealer-card-photo" /> : null}
           <div className="stack">

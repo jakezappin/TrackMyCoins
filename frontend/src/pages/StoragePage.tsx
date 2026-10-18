@@ -102,9 +102,14 @@ export function SpotDialog({
   }
 
   return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+    <div className="modal-backdrop">
       <form className="modal" role="dialog" aria-modal="true" aria-label={spot ? "Edit storage spot" : "New storage spot"} onClick={(e) => e.stopPropagation()} onSubmit={save}>
-        <h2>{spot ? "Edit Storage Spot" : "New Storage Spot"}</h2>
+        <div className="modal-head">
+          <h2>{spot ? "Edit Storage Spot" : "New Storage Spot"}</h2>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose} disabled={busy}>
+            ✕
+          </button>
+        </div>
         <label className="field">
           <span>Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Dansco Peace Album, Box #12" maxLength={100} autoFocus />
