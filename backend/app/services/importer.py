@@ -39,6 +39,7 @@ ALIASES = {
     "cert": "cert_number", "certno": "cert_number", "certnumber": "cert_number", "certification": "cert_number",
     "certificationnumber": "cert_number", "serial": "cert_number",
     "grade": "grade",
+    "error": "error_description", "errortype": "error_description", "minterror": "error_description",
     "details": "details", "detailsgrade": "details", "problem": "details_problem",
     "detailsproblem": "details_problem", "detailsreason": "details_problem", "detailspercent": "details_pct",
     "details%": "details_pct",
@@ -237,6 +238,8 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
             errors.append(f"Couldn't read the grade: {grade_text}")
     if _text(vals.get("strike_designation")):
         f["strike_designation"] = _text(vals["strike_designation"])
+    if _text(vals.get("error_description")) and (_text(vals.get("error_description")) or "").lower() not in ("no", "none", "n"):
+        f["is_error"], f["error_description"] = True, _text(vals["error_description"])
 
     if service:
         svc = SERVICES.get(_key(service).upper())
@@ -270,8 +273,9 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
              capital_holder="capital" in pack)
     toning = (_text(vals.get("toning")) or "").lower()
     f.update(toning_obverse="obv" in toning, toning_reverse="rev" in toning, toning_dual="dual" in toning,
-             toning_rainbow="rainbow" in toning)
-    if toning in YES and not any(f[k] for k in ("toning_obverse", "toning_reverse", "toning_dual", "toning_rainbow")):
+             toning_rainbow="rainbow" in toning, toning_rim="rim" in toning)
+    if toning in YES and not any(f[k] for k in ("toning_obverse", "toning_reverse", "toning_dual", "toning_rainbow",
+                                                 "toning_rim")):
         f["toning_obverse"] = True
 
     f["pcgs_number"] = _text(vals.get("pcgs_number"))

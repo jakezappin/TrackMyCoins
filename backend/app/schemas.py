@@ -152,6 +152,9 @@ class CoinFields(BaseModel):
     details: bool = False
     details_problem: str | None = Field(default=None, max_length=40)
     details_pct: int | None = Field(default=None, ge=1, le=100)
+    # Mint error: described by the owner, valued by the owner (no catalog, CPG or auction data).
+    is_error: bool = False
+    error_description: str | None = Field(default=None, max_length=200)
     # In the owner's hands, or out at a grading company (in a Grading Tracker submission).
     location: Literal["inventory", "grading"] = "inventory"
     # Where it's kept (a Storage spot) and where in it, e.g. "Page 3, hole 14".
@@ -173,6 +176,7 @@ class CoinFields(BaseModel):
     toning_reverse: bool = False
     toning_dual: bool = False
     toning_rainbow: bool = False
+    toning_rim: bool = False
 
     price_paid: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     purchase_value_custom: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
@@ -215,6 +219,14 @@ class CoinFields(BaseModel):
         if v and not re.fullmatch(r"\d{1,8}", v):
             raise ValueError("A PCGS coin number is digits only (e.g. 7130).")
         return v
+
+    @model_validator(mode="after")
+    def _error(self):
+        if not self.is_error:
+            self.error_description = None
+        elif not self.error_description:
+            raise ValueError("Describe the error, e.g. Off-center 20%, Double struck, Broadstrike.")
+        return self
 
     @model_validator(mode="after")
     def _details(self):
@@ -274,7 +286,7 @@ class CoinFields(BaseModel):
         return v
 
     @field_validator("cert_number", "vam", "variety", "pcgs_number", "purchased_from", "sold_to", "notes",
-                     "storage_position", mode="before")
+                     "storage_position", "error_description", mode="before")
     @classmethod
     def _blank_to_none(cls, v):
         if isinstance(v, str):
@@ -312,6 +324,8 @@ class CoinIn(CoinFields):
     collection_id: int  # 0 with `new_collection`: create the collection
     grading: GradingChoice | None = None
     new_collection: NewCollectionPick | None = None
+    # Error coins: the owner's estimated value, entered on the form.
+    error_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     # Only for type set collections: which member series the coin belongs to.
     coin_type_id: int | None = None
     lookup_raw: dict | None = None
@@ -325,6 +339,7 @@ class CoinIn(CoinFields):
 class CoinUpdate(CoinFields):
     collection_id: int
     grading: GradingChoice | None = None
+    error_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     coin_type_id: int | None = None
 
 
@@ -551,6 +566,9 @@ class SharedCoin(BaseModel):
     toning_reverse: bool
     toning_dual: bool
     toning_rainbow: bool
+    toning_rim: bool = False
+    is_error: bool = False
+    error_description: str | None = None
     value_estimate: Decimal | None = None  # only when the owner chose to show values
     photo_urls: list[str]
     thumb_url: str | None = None

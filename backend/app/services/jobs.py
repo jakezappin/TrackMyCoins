@@ -95,6 +95,11 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
                 continue
             job.current = _label(coin)
             is_set = greysheet.is_set(coin)  # mint & proof sets: CPG in OGP, no grade, no PCGS data
+            if coin.is_error:
+                job.skipped += 1
+                job.messages.append(f"{job.current}: skipped, error coin (your own value)")
+                job.done += 1
+                continue
             if not details.price_grade(coin) and not is_set:
                 job.skipped += 1
                 job.messages.append(f"{job.current}: skipped, no numeric grade")

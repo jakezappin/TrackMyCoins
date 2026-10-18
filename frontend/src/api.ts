@@ -222,6 +222,10 @@ export interface CoinFields {
   toning_reverse: boolean;
   toning_dual: boolean;
   toning_rainbow: boolean;
+  toning_rim: boolean;
+  /** Mint error: described and valued by the owner (no catalog, CPG or auction data). */
+  is_error: boolean;
+  error_description: string | null;
   price_paid: string | null;
   /** Your own estimated value at purchase; blank: worked out (see CoinDetail.purchase_value). */
   purchase_value_custom: string | null;

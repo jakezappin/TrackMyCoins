@@ -234,6 +234,7 @@ export default function CoinDetailPage() {
             {dateMint(coin)} {coinType?.name ?? ""} {isSet ? (setLineName(coin.variety) === "Main set" ? "" : setLineName(coin.variety)) : gradeLabel(coin)}
             {coin.is_sold && <span className="tag sold big">Sold</span>}
             {coin.location === "grading" && <span className="tag grading big">At Grading</span>}
+            {coin.is_error && <span className="tag error big">Error</span>}
           </h1>
           <p className="muted">
             {coin.inventory_number} ·{" "}
@@ -365,6 +366,12 @@ export default function CoinDetailPage() {
           <dl className="facts">
             <dt>Grade</dt>
             <dd>{gradeLabel(coin)}</dd>
+            {coin.is_error && (
+              <>
+                <dt>Error</dt>
+                <dd>{coin.error_description}</dd>
+              </>
+            )}
             <dt>Graded by</dt>
             <dd>
               {coin.grading_service === "RAW" ? "Raw (ungraded)" : coin.grading_service}
@@ -455,6 +462,7 @@ export default function CoinDetailPage() {
 
       <div className="coin-row">
         <EstimatedValueCard coin={coin} onChange={update} />
+        {!coin.is_error && (
         <section className="card">
           <div className="section-head">
             <h2>CPG Value</h2>
@@ -528,9 +536,10 @@ export default function CoinDetailPage() {
             </table>
           )}
         </section>
+        )}
       </div>
 
-      {isSet ? (
+      {coin.is_error ? null : isSet ? (
         <div className="coin-row">
           <SetMeltCard melt={coin.set_melt} />
           <AttachmentsCard inventoryNumber={coin.inventory_number} />
@@ -572,7 +581,7 @@ export default function CoinDetailPage() {
       {!isSet && (
       <div className={`coin-row${coin.is_sold ? " single" : ""}`}>
         <AttachmentsCard inventoryNumber={coin.inventory_number} />
-        {!coin.is_sold && <EbayCard inv={coin.inventory_number} />}
+        {!coin.is_sold && !coin.is_error && <EbayCard inv={coin.inventory_number} />}
       </div>
       )}
     </div>

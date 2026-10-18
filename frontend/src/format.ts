@@ -69,7 +69,8 @@ export const DETAILS_PROBLEMS: Record<string, string> = {
   whizzed: "Whizzed",
   other: "Other",
 };
-type ToningFields = Pick<CoinFields, "toning_obverse" | "toning_reverse" | "toning_dual" | "toning_rainbow">;
+type ToningFields = Pick<CoinFields, "toning_obverse" | "toning_reverse" | "toning_dual" | "toning_rainbow"> &
+  Partial<Pick<CoinFields, "toning_rim">>;
 type SlabFields = Pick<
   CoinFields,
   | "slab_soapbox" | "slab_ngc_fatty" | "slab_rattler" | "slab_ogh" | "gsa_hard_pack" | "gsa_soft_pack" | "ike_blue_pack"
@@ -99,6 +100,7 @@ export function toningLabel(c: ToningFields): string[] {
   if (c.toning_reverse) t.push("Reverse");
   if (c.toning_dual) t.push("Dual");
   if (c.toning_rainbow) t.push("Rainbow");
+  if (c.toning_rim) t.push("Rim");
   return t;
 }
 

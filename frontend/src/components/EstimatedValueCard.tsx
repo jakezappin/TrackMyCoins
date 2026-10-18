@@ -11,7 +11,8 @@ const PREMIUMS: { key: PremiumKey; label: string; hint: string }[] = [
 /** The coin's estimated value: CPG plus optional toner/holder premiums, or the owner's own figure. */
 export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetail; onChange: (c: CoinDetail) => void }) {
   const saved = { toner: coin.toner_premium ?? "", holder: coin.holder_premium ?? "" };
-  const [source, setSource] = useState<"cpg" | "custom">(coin.value_source);
+  const own = coin.is_error ? "custom" : coin.value_source; // error coins have only the owner's value
+  const [source, setSource] = useState<"cpg" | "custom">(own);
   const [on, setOn] = useState({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium) });
   const [amount, setAmount] = useState(saved);
   const [custom, setCustom] = useState(coin.custom_value ?? "");
@@ -20,11 +21,11 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSource(coin.value_source);
+    setSource(own);
     setOn({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium) });
     setAmount({ toner: coin.toner_premium ?? "", holder: coin.holder_premium ?? "" });
     setCustom(coin.custom_value ?? "");
-  }, [coin.value_source, coin.toner_premium, coin.holder_premium, coin.custom_value]);
+  }, [coin.value_source, coin.toner_premium, coin.holder_premium, coin.custom_value, coin.is_error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A Details coin's CPG-based value is its share of the straight-grade CPG.
   const cpg = coin.details ? coin.details_value : coin.latest_cpg?.value ?? null;
@@ -40,12 +41,12 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
         ? Number(cpg) + (amt(premium("toner")) ?? 0) + (amt(premium("holder")) ?? 0)
         : null;
   const dirty =
-    source !== coin.value_source ||
+    source !== own ||
     (source === "custom" && custom !== (coin.custom_value ?? "")) ||
     (source === "cpg" && (premium("toner") !== saved.toner || premium("holder") !== saved.holder));
 
   function reset() {
-    setSource(coin.value_source);
+    setSource(own);
     setOn({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium) });
     setAmount(saved);
     setCustom(coin.custom_value ?? "");
@@ -117,7 +118,8 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
               ["cpg", "From CPG"],
               ["custom", "My own value"],
             ] as const
-          ).map(([v, label]) => (
+          ).filter(([v]) => !(coin.is_error && v === "cpg")) // error coins: only your own value
+          .map(([v, label]) => (
             <button
               key={v}
               type="button"
@@ -180,6 +182,9 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
         {error && <p className="error small">{error}</p>}
       </form>
       {coin.details && coin.details_basis && <DetailsNote basis={coin.details_basis} />}
+      {coin.is_error && (
+        <p className="muted small">Error coins aren't in the price guides, so their value is the one you enter.</p>
+      )}
     </section>
   );
 }

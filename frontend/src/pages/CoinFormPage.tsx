@@ -61,6 +61,9 @@ const EMPTY: CoinFields = {
   toning_reverse: false,
   toning_dual: false,
   toning_rainbow: false,
+  toning_rim: false,
+  is_error: false,
+  error_description: null,
   price_paid: null,
   purchase_value_custom: null,
   purchase_date: null,
@@ -191,6 +194,7 @@ export default function CoinFormPage() {
   // At Grading: which submission (an open one, or "new" for a new one with this company).
   const [grading, setGrading] = useState<GradingPick>({ submission: "", company: "NGC", expected: "", declared: "" });
   const [currentGrading, setCurrentGrading] = useState<Coin["grading"]>(null);
+  const [errorValue, setErrorValue] = useState(""); // error coins: the owner's estimated value
 
   useEffect(() => {
     if (editInv === null) return;
@@ -204,6 +208,7 @@ export default function CoinFormPage() {
         setMemberTypeId(c.coin_type_id);
         setInventoryNumber(c.inventory_number);
         setCurrentGrading(c.grading);
+        if (c.is_error && c.value_source === "custom") setErrorValue(c.custom_value ?? "");
         if (c.grading) setGrading((g) => ({ ...g, submission: String(c.grading!.id), expected: c.grading!.expected_grade ?? "" }));
       })
       .catch((e) => setError(e.message))
@@ -633,6 +638,17 @@ export default function CoinFormPage() {
         return;
       }
     }
+    const errValue = parseMoney(errorValue);
+    if (form.is_error) {
+      if (!form.error_description) {
+        setError("Describe the error, e.g. Off-center 20%, Double struck.");
+        return;
+      }
+      if ("error" in errValue) {
+        setError(`Estimated value ${errValue.error}.`);
+        return;
+      }
+    }
     const declared = parseMoney(grading.declared);
     if (form.location === "grading" && "error" in declared) {
       setError(`Declared value ${declared.error}.`);
@@ -650,6 +666,7 @@ export default function CoinFormPage() {
       purchase_value_custom: atPurchase.value,
       sale_price: sold.value,
       collection_id: collectionId ?? 0,
+      error_value: form.is_error && "value" in errValue ? errValue.value : null,
       new_collection: !collectionId && newCollection ? { coin_type_id: newCollection.coin_type_id, finish: newCollection.finish } : undefined,
       coin_type_id: isTypeSet ? memberTypeId : undefined,
       year: form.year ? Number(form.year) : null,
@@ -1139,6 +1156,46 @@ export default function CoinFormPage() {
             </>
           )}
         </div>
+        <div className="grid-4 details-row">
+          <div className="field">
+            <span>Mint error</span>
+            <label className="checks">
+              <input
+                type="checkbox"
+                checked={form.is_error}
+                onChange={(e) => setForm((f) => ({ ...f, is_error: e.target.checked }))}
+              />{" "}
+              Error coin
+              <span
+                className="info-tip"
+                tabIndex={0}
+                title="Off-center strikes, double strikes, broadstrikes and the like aren't in the price guides (no PCGS number, CPG or auction data), so their value is the one you enter here."
+              >
+                ⓘ
+              </span>
+            </label>
+          </div>
+          {form.is_error && (
+            <>
+              <label className="field span-2">
+                <span>Describe the error</span>
+                <input
+                  value={form.error_description ?? ""}
+                  onChange={(e) => set("error_description", e.target.value || null)}
+                  placeholder="e.g. Off-center 20%, Double struck, Broadstrike"
+                  maxLength={200}
+                />
+              </label>
+              <label className="field">
+                <span>Estimated value ($)</span>
+                <input value={errorValue} onChange={(e) => setErrorValue(e.target.value)} inputMode="decimal" placeholder="0.00" />
+              </label>
+            </>
+          )}
+        </div>
+        {form.is_error && (
+          <p className="muted small">Error coins skip CPG, the PCGS price guide and auctions; the value you enter is its value.</p>
+        )}
         {findMsg && <p className="small muted find-msg">{findMsg}</p>}
         {candidates.length > 0 && (
           <div className="candidates">
@@ -1152,26 +1209,6 @@ export default function CoinFormPage() {
           </div>
         )}
           </>
-        )}
-      </section>
-
-      <LocationCard
-        location={form.location}
-        onLocation={(l) => set("location", l)}
-        pick={grading}
-        onPick={setGrading}
-        current={editInv ? currentGrading : null}
-      />
-
-      <section className="card form-section">
-        <h2>Storage</h2>
-        <StoragePicker
-          storageId={form.storage_id}
-          position={form.storage_position}
-          onChange={(id, pos) => setForm((f) => ({ ...f, storage_id: id, storage_position: pos }))}
-        />
-        {form.location === "grading" && form.storage_id != null && (
-          <p className="muted small">It keeps this spot while it's at grading, so you know where it goes back.</p>
         )}
       </section>
 
@@ -1263,9 +1300,32 @@ export default function CoinFormPage() {
             <label>
               <input type="checkbox" {...check("toning_rainbow")} /> Rainbow
             </label>
+            <label>
+              <input type="checkbox" {...check("toning_rim")} /> Rim toner
+            </label>
           </div>
         </section>
       </div>
+
+      <LocationCard
+        location={form.location}
+        onLocation={(l) => set("location", l)}
+        pick={grading}
+        onPick={setGrading}
+        current={editInv ? currentGrading : null}
+      />
+
+      <section className="card form-section">
+        <h2>Storage</h2>
+        <StoragePicker
+          storageId={form.storage_id}
+          position={form.storage_position}
+          onChange={(id, pos) => setForm((f) => ({ ...f, storage_id: id, storage_position: pos }))}
+        />
+        {form.location === "grading" && form.storage_id != null && (
+          <p className="muted small">It keeps this spot while it's at grading, so you know where it goes back.</p>
+        )}
+      </section>
 
       {/* ---- Purchase / sale ---- */}
       <div className="grid-2">

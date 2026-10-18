@@ -52,7 +52,8 @@ def _validate(body: CoinFields, collection: Collection, coin_type: CoinType) -> 
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"Mint mark must be one of {', '.join(marks)} for {coin_type.name}",
         )
-    data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw", "grading", "new_collection"})
+    data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw", "grading", "new_collection",
+                                    "error_value"})
     if body.location == "grading" and (body.sale_price is not None or body.sale_date is not None):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "A coin at grading can't be sold. Mark it In Inventory once it's back.")
@@ -131,9 +132,23 @@ def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depend
     db.add(coin)
     db.flush()
     _apply_location(db, user, coin, body)
+    _apply_error_value(db, coin, body)
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)
+
+
+def _apply_error_value(db: Session, coin: Coin, body: CoinIn | CoinUpdate) -> None:
+    """An error coin's value is the owner's: entered on the form, recorded in its price history when it changes."""
+    if not body.is_error or body.error_value is None:
+        return
+    if coin.value_source == "custom" and coin.custom_value == body.error_value:
+        return
+    from ..models import PriceQuote
+
+    coin.value_source, coin.custom_value = "custom", body.error_value
+    db.add(PriceQuote(coin_id=coin.id, source="CUSTOM", value=body.error_value, grade_used=None,
+                      description="Your own estimate (error coin)"))
 
 
 def _new_collection(db: Session, user: User, coin_type_id: int, finish: str) -> Collection:
@@ -228,6 +243,7 @@ def update_coin(inventory_number: str, body: CoinUpdate, db: Session = Depends(g
         setattr(coin, key, value)
     coin.collection_id = col.id
     _apply_location(db, user, coin, body)
+    _apply_error_value(db, coin, body)
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)

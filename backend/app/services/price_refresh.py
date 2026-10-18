@@ -15,9 +15,15 @@ from .coins import CPG, GREYSHEET, PCGS_GUIDE, PREMIUM, coin_melt, latest_quote
 from .lookups import pcgs
 
 
+def _not_error(coin: Coin) -> None:
+    if coin.is_error:
+        raise greysheet.PricingError("Error coins aren't in the price guides. Enter your own estimated value.")
+
+
 def refresh_cpg(db: Session, coin: Coin) -> bool:
     """Record the coin's current CPG. Returns True if Greysheet was called (False: priced from a sheet saved for
     the same issue in the last day)."""
+    _not_error(coin)
     greysheet.require_grade(coin)
     gsid = None
     if not coin.pcgs_number:
@@ -71,6 +77,7 @@ def premium_quote(coin: Coin, cpg: Decimal) -> PriceQuote:
 
 def refresh_pcgs(db: Session, coin: Coin) -> bool:
     """PCGS Price Guide, population and last 10 auction sales. Uses 2 of PCGS's 1,000 daily API calls."""
+    _not_error(coin)
     greysheet.require_grade(coin)
     if not coin.pcgs_number:
         catalog.resolve_for_coin(db, coin)

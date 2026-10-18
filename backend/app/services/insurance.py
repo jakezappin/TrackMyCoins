@@ -98,6 +98,8 @@ def _value_note(c: Coin) -> str:
 def _coin_row(c: Coin, type_name: str) -> list:
     desc = f"<b>{_date_mint(c)} {_e(type_name)}</b>"
     extras = [_e(x) for x in (c.variety, c.vam) if x]
+    if c.is_error:
+        extras.append(f"Error: {_e(c.error_description)}")
     if extras:
         desc += "<br/>" + " · ".join(extras)
     slab = [s for on, s in ((c.slab_rattler, "Rattler"), (c.slab_ngc_fatty, "NGC Fatty"), (c.slab_ogh, "OGH"),

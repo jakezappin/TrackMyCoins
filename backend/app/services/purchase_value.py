@@ -58,7 +58,7 @@ def _grade(coin: Coin) -> tuple[int | None, bool]:
 def auction_key(coin: Coin) -> str | None:
     """What an auction average depends on; None if the coin can't have one (no PCGS # or numeric grade)."""
     grade, plus = _grade(coin)
-    if not coin.pcgs_number or not grade:
+    if not coin.pcgs_number or not grade or getattr(coin, "is_error", False):
         return None
     return f"{coin.pcgs_number}|{grade}|{int(plus)}|{int(bool(coin.cac))}|{purchase_day(coin).isoformat()}"
 
@@ -112,6 +112,9 @@ def _estimate(db: Session, coin: Coin) -> Estimate:
     start = purchase_day(coin)
     if coin.purchase_value_custom is not None:
         return Estimate(coin.purchase_value_custom, "custom", "Your own value")
+    if getattr(coin, "is_error", False):
+        # No catalog prices or auction sales for an error coin: what was paid.
+        return Estimate(coin.price_paid, "paid", "Price paid") if coin.price_paid is not None else Estimate(None, None, "")
     q = _own_cpg(coin, start)
     if q is not None:
         return Estimate(q.value, "cpg", f"CPG on {_fmt(_day(q.fetched_at) or date.today())}")

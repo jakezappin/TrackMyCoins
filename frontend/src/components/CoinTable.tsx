@@ -176,6 +176,11 @@ export default function CoinTable({ coins, mode }: Props) {
                     <td className="c-tags">
                       <div className="tags">
                         {c.location === "grading" && <span className="tag grading">At grading</span>}
+                        {c.is_error && (
+                          <span className="tag error" title={c.error_description ?? undefined}>
+                            Error
+                          </span>
+                        )}
                         {c.storage_name && (
                           <span className="tag storage" title={c.storage_position ? `${c.storage_name} · ${c.storage_position}` : c.storage_name}>
                             {c.storage_name}

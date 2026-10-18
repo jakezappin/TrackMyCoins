@@ -39,7 +39,9 @@ def find(db: Session, col: Collection, mode: str = "full") -> dict:
         if not row.coins:
             continue
         # Coins come best grade first; a problem-free coin beats a Details one.
-        best: Coin = next((c for c in row.coins if not c.details), row.coins[0])
+        best: Coin = next((c for c in row.coins if not c.details and not c.is_error), row.coins[0])
+        if best.is_error:
+            continue  # no price ladder for error coins
         grade = details.price_grade(best)
         if not grade:
             continue

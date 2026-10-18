@@ -305,6 +305,10 @@ class Coin(Base):
     storage_position: Mapped[str | None] = mapped_column(String(60))
     # Where the coin is: "inventory" (with the owner) or "grading" (out at a grader, in a GradingSubmission).
     location: Mapped[str] = mapped_column(String(12), default="inventory", server_default="inventory")
+    # Mint error (off-center, double struck, broadstrike...): no catalog or PCGS number, so no CPG, price guide or
+    # auction data; the owner's own value is its value.
+    is_error: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    error_description: Mapped[str | None] = mapped_column(String(200))
     # Details grade ("AU Details – Cleaned"): genuine but with a problem, so not priced like a straight grade.
     # The grade number is optional (PCGS and NGC usually give only AU, XF...).
     details: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -332,6 +336,7 @@ class Coin(Base):
     toning_reverse: Mapped[bool] = mapped_column(Boolean, default=False)
     toning_dual: Mapped[bool] = mapped_column(Boolean, default=False)
     toning_rainbow: Mapped[bool] = mapped_column(Boolean, default=False)
+    toning_rim: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # a "rim toner"
 
     # Estimated value used in totals: "cpg" = latest CPG + premiums below, or "custom" = custom_value.
     value_source: Mapped[str] = mapped_column(String(10), default="cpg", server_default="cpg")

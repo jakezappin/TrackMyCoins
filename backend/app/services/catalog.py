@@ -449,6 +449,8 @@ def match(
 
 def resolve_for_coin(db: Session, coin: Coin) -> Candidate:
     """Find (and remember) the PCGS number for a coin. Raises PricingError if it isn't unique."""
+    if coin.is_error:
+        raise PricingError("Error coins aren't in the catalog.")
     ensure_synced(db, coin.coin_type)
     gsa = "hard" if coin.gsa_hard_pack else "soft" if coin.gsa_soft_pack else None
     result = match(

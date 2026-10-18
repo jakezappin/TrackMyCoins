@@ -37,6 +37,8 @@ def build_pdf(user: User, spot: StorageSpot, coins: list[Coin], items: list[Bull
         v = value_estimate(c)
         desc = f"<b>{_date_mint(c)} {_e(type_names.get(c.coin_type_id, ''))}</b>"
         extras = [_e(x) for x in (c.variety, c.vam) if x]
+        if c.is_error:
+            extras.append(f"Error: {_e(c.error_description)}")
         if extras:
             desc += "<br/>" + " · ".join(extras)
         if c.location == "grading":
