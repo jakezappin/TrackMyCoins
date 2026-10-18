@@ -71,7 +71,7 @@ export default function SharedCollectionPage() {
                     <div className="shared-coin-body">
                       <strong>{dateMint(c)}</strong>
                       <span>
-                        {serviceLabel(c.grading_service)} {gradeLabel(c).replace(/^Raw ?/, "")}
+                        {serviceLabel(c.grading_service, c.other_service)} {gradeLabel(c).replace(/^Raw ?/, "")}
                       </span>
                       <CoinTags c={c} />
                       {data.show_values && c.value_estimate && <span className="muted small">{money(c.value_estimate)}</span>}
@@ -148,7 +148,7 @@ function CoinModal({ c, typeName, showValue, onClose }: { c: SharedCoin; typeNam
           <dt>Grade</dt>
           <dd>{gradeLabel(c)}</dd>
           <dt>Graded by</dt>
-          <dd>{c.grading_service === "RAW" ? "Ungraded" : `${c.grading_service}${c.cert_number ? ` #${c.cert_number}` : ""}`}</dd>
+          <dd>{c.grading_service === "RAW" ? "Ungraded" : `${serviceLabel(c.grading_service, c.other_service)}${c.cert_number ? ` #${c.cert_number}` : ""}`}</dd>
           {c.cac && (
             <>
               <dt>CAC</dt>

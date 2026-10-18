@@ -138,7 +138,7 @@ def label_lines(c: Coin, type_name: str, opts: Options, user: User, asking: Deci
         bits = []
         if opts.grade:
             g = grade_text(c)
-            bits.append(f"{g} {c.grading_service}".strip() if c.grading_service != "RAW" else f"Raw {g}".strip())
+            bits.append(f"{g} {c.service_name}".strip() if c.grading_service != "RAW" else f"Raw {g}".strip())
         if opts.cac and (c.cac or c.cac_sticker):
             bits.append("CAC Gold" if c.cac_sticker == "gold" else "CAC")
         if bits:

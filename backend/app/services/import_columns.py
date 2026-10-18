@@ -18,8 +18,9 @@ COLUMNS: list[tuple[str, str, str, str, str]] = [
      "fine. Or use separate Year and Mint columns.", "1881-S; 1921; 1880/79-CC; 1882-O/S"),
     ("Variety", "variety", OPTIONAL, "Variety, issue or pedigree.", "8TF; 7TF Reverse of 1878; Type 2"),
     ("VAM", "vam", OPTIONAL, "VAM number (Morgan and Peace dollars).", "VAM-3"),
-    ("Grading service", "grading_service", SOMETIMES, "Needed when there's a Cert #. Leave blank (or Raw) for "
-     "ungraded coins.", "PCGS; NGC; ANACS; CACG; ICG; Raw"),
+    ("Grading service", "grading_service", SOMETIMES, "Needed when there's a Cert # (or it's worked out from the cert's "
+     "format). Any other company's name works too. Leave blank (or Raw) for ungraded coins.",
+     "PCGS; NGC; ANACS; CACG; ICG; PCI; Raw"),
     ("Cert #", "cert_number", SOMETIMES, "The slab's certification number. Needed for graded coins.",
      "12345678; 1234567-001"),
     ("Grade", "grade", OPTIONAL, "Grade with any plus, star or designation. Details grades: add Details and the "

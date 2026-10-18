@@ -35,6 +35,7 @@ const EMPTY: CoinFields = {
   variety: null,
   pcgs_number: null,
   grading_service: "PCGS",
+  other_service: null,
   cert_number: null,
   grade_prefix: "MS",
   grade: null,
@@ -79,7 +80,7 @@ const EMPTY: CoinFields = {
   notes: null,
 };
 
-const SERVICES: GradingService[] = ["PCGS", "NGC", "ANACS", "CACG", "ICG", "RAW"];
+const SERVICES: GradingService[] = ["PCGS", "NGC", "ANACS", "CACG", "ICG", "OTHER", "RAW"];
 const CIRC_PREFIXES = ["MS", "SP", "AU", "XF", "VF", "F", "VG", "G", "AG", "FR", "PO"];
 
 /** A grade typed the way NGC and the others write it: "MS64", "64", "AU 58", "PF69", "64+", "65★". */
@@ -820,11 +821,17 @@ export default function CoinFormPage() {
             <select {...text("grading_service")}>
               {SERVICES.filter((s) => s !== "RAW").map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {s === "OTHER" ? "Other grading service" : s}
                 </option>
               ))}
             </select>
           </label>
+          {form.grading_service === "OTHER" && (
+            <label className="field">
+              <span>Grading company</span>
+              <input {...text("other_service")} placeholder="e.g. PCI, TruGrade, SEGS" maxLength={60} required />
+            </label>
+          )}
           <label className="field grow">
             <span>Cert number</span>
             <input

@@ -101,7 +101,7 @@ def _title(c: Coin) -> str:
 
 def _item(c: Coin, asking: Decimal | None) -> dict:
     g = svc.grade_text(c)
-    grade = f"Raw {g}".strip() if c.grading_service == "RAW" else f"{g} {c.grading_service}".strip()
+    grade = f"Raw {g}".strip() if c.grading_service == "RAW" else f"{g} {c.service_name}".strip()
     return {"inventory_number": c.inventory_number, "title": _title(c), "grade": grade,
             "asking_price": str(asking) if asking is not None else None,
             "price_paid": str(c.price_paid) if c.price_paid is not None else None, "raw": c.grading_service == "RAW", "purchase_date": c.purchase_date, "public_page": c.public_page,

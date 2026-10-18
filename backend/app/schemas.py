@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from .designations import canonical, unknown
 from .urls import absolute_url
 
-GradingService = Literal["PCGS", "NGC", "ANACS", "CACG", "ICG", "RAW"]
+GradingService = Literal["PCGS", "NGC", "ANACS", "CACG", "ICG", "OTHER", "RAW"]
 CacSticker = Literal["green", "gold"]
 
 
@@ -155,6 +155,8 @@ class CoinFields(BaseModel):
     pcgs_number: str | None = Field(default=None, max_length=20)
 
     grading_service: GradingService
+    # OTHER: the grading company's name (PCI, TruGrade, SEGS...).
+    other_service: str | None = Field(default=None, max_length=60)
     cert_number: str | None = Field(default=None, max_length=30)
     grade_prefix: str | None = Field(default=None, max_length=5)
     grade: int | None = Field(default=None, ge=1, le=70)
@@ -268,6 +270,15 @@ class CoinFields(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _other_service(self):
+        if self.grading_service == "OTHER":
+            if not self.other_service:
+                raise ValueError("Enter the name of the grading company.")
+        else:
+            self.other_service = None
+        return self
+
+    @model_validator(mode="after")
     def _sale_after_purchase(self):
         if self.purchase_date and self.sale_date and self.sale_date < self.purchase_date:
             raise ValueError("The sale date is before the purchase date.")
@@ -306,7 +317,7 @@ class CoinFields(BaseModel):
         return v
 
     @field_validator("cert_number", "vam", "variety", "pcgs_number", "purchased_from", "sold_to", "notes",
-                     "storage_position", "error_description", mode="before")
+                     "storage_position", "error_description", "other_service", mode="before")
     @classmethod
     def _blank_to_none(cls, v):
         if isinstance(v, str):
@@ -425,6 +436,10 @@ class CoinOut(CoinFields, ORM):
 
     @model_validator(mode="after")
     def _sale_after_purchase(self):
+        return self
+
+    @model_validator(mode="after")
+    def _other_service(self):
         return self
 
     id: int
@@ -607,6 +622,7 @@ class SharedCoin(BaseModel):
     vam: str | None
     variety: str | None
     grading_service: str
+    other_service: str | None = None
     cert_number: str | None
     grade_prefix: str | None
     grade: int | None

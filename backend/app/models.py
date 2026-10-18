@@ -300,7 +300,9 @@ class Coin(Base):
     pcgs_number: Mapped[str | None] = mapped_column(String(20))
 
     # Grading
-    grading_service: Mapped[str] = mapped_column(String(10))  # PCGS|NGC|ANACS|CACG|ICG|RAW
+    grading_service: Mapped[str] = mapped_column(String(10))  # PCGS|NGC|ANACS|CACG|ICG|OTHER|RAW
+    # OTHER: the grading company's name (PCI, TruGrade, SEGS...).
+    other_service: Mapped[str | None] = mapped_column(String(60))
     cert_number: Mapped[str | None] = mapped_column(String(30), index=True)
     grade_prefix: Mapped[str | None] = mapped_column(String(5))  # MS, AU, XF, VF, PR ...
     grade: Mapped[int | None] = mapped_column(Integer)  # Sheldon 1-70
@@ -406,6 +408,13 @@ class Coin(Base):
     @property
     def is_sold(self) -> bool:
         return self.sale_date is not None or self.sale_price is not None
+
+    @property
+    def service_name(self) -> str:
+        """The grading company as shown: PCGS, NGC... or an Other one's own name; "Raw" for ungraded coins."""
+        if self.grading_service == "OTHER":
+            return self.other_service or "Other"
+        return "Raw" if self.grading_service == "RAW" else self.grading_service
 
 
 class CoinPhoto(Base):

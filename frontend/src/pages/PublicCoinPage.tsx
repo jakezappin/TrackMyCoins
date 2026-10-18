@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { api, type PublicCoin } from "../api";
 import Logo from "../components/Logo";
-import { coinPath, gradeLabel, slabLabel, toningLabel } from "../format";
+import { coinPath, gradeLabel, serviceLabel, slabLabel, toningLabel } from "../format";
 
 /** Where a coin label's QR code goes. The owner is taken to their coin; anyone else sees the coin's public page if
  * the owner turned it on, or that it's private. */
@@ -74,7 +74,7 @@ export default function PublicCoinPage() {
                 <dd>
                   {data.coin.grading_service === "RAW"
                     ? "Ungraded"
-                    : `${data.coin.grading_service}${data.coin.cert_number ? ` #${data.coin.cert_number}` : ""}`}
+                    : `${serviceLabel(data.coin.grading_service, data.coin.other_service)}${data.coin.cert_number ? ` #${data.coin.cert_number}` : ""}`}
                 </dd>
                 {data.coin.cac && (
                   <>

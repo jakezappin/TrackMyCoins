@@ -58,7 +58,8 @@ ALIASES = {
     "boughtfrom": "purchased_from", "vendor": "purchased_from", "purchasedat": "purchased_from",
     "pricebought": "price_paid", "costbasis": "price_paid", "amountpaid": "price_paid",
     "purchasedfrom": "purchased_from", "seller": "purchased_from", "source": "purchased_from",
-    "dealer": "purchased_from", "from": "purchased_from",
+    "dealer": "purchased_from", "from": "purchased_from", "wherepurchased": "purchased_from",
+    "wherebought": "purchased_from", "boughtfrom": "purchased_from", "purchasedat": "purchased_from", "vendor": "purchased_from",
     "saleprice": "sale_price", "soldfor": "sale_price",
     "saledate": "sale_date", "datesold": "sale_date",
     "soldto": "sold_to", "buyer": "sold_to",
@@ -92,9 +93,24 @@ _CELL_CERT = re.compile(r"(?:#\s*)?\b(\d{6,8}-\d{3}|\d{6,10})\b")
 _CELL_CAC = re.compile(r"\b(?:(green|gold)\s+)?CAC\b(?:\s+(green|gold))?(?:\s+(?:bean|sticker))?", re.I)
 
 
+# Grading companies TrackMyCoins doesn't track: their coins come in as raw, with the holder kept in Notes.
+_OTHER_GRADERS = re.compile(r"\b(PCI|TruGrade|SEGS|INB|ACG|NNC|SGS|PGA|HALLMARK|Global|NCI|IGC|CCG)\b", re.I)
+
+_CELL_HOLDERS = [
+    (re.compile(r"\brattler\b", re.I), "Rattler"), (re.compile(r"\bfatty\b", re.I), "NGC Fatty"),
+    (re.compile(r"\bsoap\s?box\b", re.I), "Soapbox"), (re.compile(r"\b(?:OGH|old green holder)\b", re.I), "OGH"),
+]
+_CELL_PACKS = [
+    (re.compile(r"\bGSA\s+(?:hard\s*(?:pack(?:age)?)?|slab|holder)\b", re.I), "GSA Hard Pack"),
+    (re.compile(r"\bGSA\s+soft\s*(?:pack(?:age)?)?\b", re.I), "GSA Soft Pack"),
+    (re.compile(r"\bOGP\b", re.I), "OGP"),
+]
+
+
 def split_grade_cell(text: str | None) -> tuple[str | None, dict]:
     """The grade, and anything else written in the Grade cell: ("FR02", {"grading_service": "PCGS",
-    "cert_number": "32611221"}) from "FR02 (32611221 PCGS)"."""
+    "cert_number": "32611221"}) from "FR02 (32611221 PCGS)"; also a CAC sticker, CAC Grading ("123456789 CAC"),
+    and holders ("Rattler", "NGC Fatty", "GSA Hard Pack")."""
     if not text:
         return text, {}
     found: dict = {}
@@ -102,26 +118,53 @@ def split_grade_cell(text: str | None) -> tuple[str | None, dict]:
     if (m := _CELL_SERVICE.search(rest)):
         found["grading_service"] = m.group(1).upper()
         rest = rest[: m.start()] + " " + rest[m.end():]
-    if (m := _CELL_CAC.search(rest)):
-        found["cac"] = (m.group(1) or m.group(2) or "yes").lower()
+    elif (m := _OTHER_GRADERS.search(rest)):
+        found["other_grader"] = m.group(1)
         rest = rest[: m.start()] + " " + rest[m.end():]
     # A cert is 6+ digits; a grade never is (and a grade's own digits come right after its letters).
-    if (m := _CELL_CERT.search(rest)):
-        found["cert_number"] = m.group(1)
-        rest = rest[: m.start()] + " " + rest[m.end():]
+    cert = _CELL_CERT.search(rest)
+    if cert:
+        found["cert_number"] = cert.group(1)
+    cac = _CELL_CAC.search(rest)
+    if cac:
+        if cert and "grading_service" not in found and cac.start() > cert.end():
+            # "(123456789 CAC)": CAC after the cert, and no other company, is CAC Grading's own slab.
+            found["grading_service"] = "CACG"
+        else:
+            found["cac"] = (cac.group(1) or cac.group(2) or "yes").lower()
+    spans = sorted((x.start(), x.end()) for x in (cert, cac) if x)
+    for a, b in reversed(spans):
+        rest = rest[:a] + " " + rest[b:]
+    for pattern, name in _CELL_HOLDERS:
+        if pattern.search(rest):
+            found.setdefault("slab", []).append(name)
+            rest = pattern.sub(" ", rest)
+    for pattern, name in _CELL_PACKS:
+        if pattern.search(rest):
+            found.setdefault("packaging", []).append(name)
+            rest = pattern.sub(" ", rest)
     rest = re.sub(r"[()\[\]{},;|#]", " ", rest)
     return " ".join(rest.split()) or None, found
 
 
-def service_from_cert(cert: str | None) -> tuple[str | None, bool]:
-    """The grading service a cert number's format points to, and whether that's certain. NGC's are 7 digits, a
-    dash and 3 (1234567-001); PCGS's are 7 or 8 digits (so are some ANACS certs, hence only "likely")."""
+def service_from_cert(cert: str | None) -> tuple[str | None, str | None]:
+    """The grading service a cert number's format points to, and a note when that's only likely (None: certain).
+    NGC: 7 digits, a dash and 3 (1234567-001). PCGS: 8 digits (or 7, like many ANACS certs). CAC Grading: 9 digits.
+    ICG: 10 digits."""
     c = (cert or "").strip()
     if re.fullmatch(r"\d{6,8}-\d{3}", c):
-        return "NGC", True
-    if re.fullmatch(r"\d{7,8}", c):
-        return "PCGS", False
-    return None, False
+        return "NGC", None
+    if re.fullmatch(r"\d{8}", c):
+        return "PCGS", "PCGS worked out from the 8-digit cert number. Check it."
+    if re.fullmatch(r"\d{7}", c):
+        return "PCGS", "PCGS worked out from the 7-digit cert number, but ANACS uses 7 digits too. Check it."
+    if re.fullmatch(r"\d{9}", c):
+        return "CACG", "CAC Grading worked out from the 9-digit cert number. Check it."
+    if re.fullmatch(r"\d{10}", c):
+        return "ICG", "ICG worked out from the 10-digit cert number. Check it."
+    if re.fullmatch(r"\d{6}", c):
+        return "ANACS", "ANACS worked out from the 6-digit cert number. Check it."
+    return None, None
 
 
 SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "ICG": "ICG", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
@@ -175,9 +218,13 @@ def _text(v) -> str | None:
     return s or None
 
 
+# What people write for "don't know": treated as blank, not an error.
+_UNKNOWN = {"unk", "unknown", "n/a", "na", "?", "??", "-", "--", "tbd", "none", "x"}
+
+
 def _money(v, errors: list[str], label: str) -> Decimal | None:
     s = _text(v)
-    if s is None:
+    if s is None or s.strip().lower() in _UNKNOWN:
         return None
     try:
         d = Decimal(re.sub(r"[$,\s]", "", s))
@@ -206,7 +253,7 @@ def _two_digit_year(d: date) -> date:
 
 
 def _date(v, errors: list[str], label: str) -> date | None:
-    if v is None or v == "":
+    if v is None or v == "" or (isinstance(v, str) and v.strip().lower() in _UNKNOWN):
         return None
     if isinstance(v, datetime):
         d = v.date()
@@ -279,6 +326,11 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     for k in ("grading_service", "cert_number"):
         if in_cell.get(k) and not _text(vals.get(k)):
             vals[k] = in_cell[k]
+    for k in ("slab", "packaging"):
+        if in_cell.get(k) and not _text(vals.get(k)):
+            vals[k] = ", ".join(in_cell[k])
+    if in_cell.get("other_grader") and not _text(vals.get("grading_service")):
+        vals["grading_service"] = in_cell["other_grader"]  # PCI, TruGrade...: an Other grading service
     if in_cell.get("cac") and not (_text(vals.get("cac")) or _text(vals.get("cac_sticker"))):
         vals["cac"] = in_cell["cac"]
     service = _text(vals.get("grading_service"))
@@ -303,6 +355,9 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
         except InvalidOperation:
             errors.append(f"Details % isn't a number: {vals.get('details_pct')}")
     if grade_text:
+        # "BU", "Brilliant Unc.", "Uncirculated": Mint State without a number.
+        grade_text = re.sub(r"^\s*(?:brilliant\s+)?unc(?:irculated|\.)?\b\.?", "MS ", grade_text, flags=re.I)
+        grade_text = re.sub(r"^\s*BU\b", "MS ", grade_text, flags=re.I)
         m = GRADE_RE.match(grade_text)
         if m and (m.group(2) or m.group(3) or m.group(1)):
             is_raw = bool(m.group(1))
@@ -329,24 +384,26 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     if service:
         svc = SERVICES.get(_key(service).upper())
         if svc is None:
-            errors.append(f"Unknown grading service: {service} (use PCGS, NGC, ANACS, CACG, ICG or Raw)")
-        f["grading_service"] = svc or "RAW"
+            # Any other company (PCI, TruGrade, SEGS...): an Other grading service, by its name.
+            svc = "OTHER"
+            f["other_service"] = " ".join(service.split())[:60]
+        f["grading_service"] = svc
     else:
         f["grading_service"] = "RAW" if is_raw or not _text(vals.get("cert_number")) else None
         if f["grading_service"] is None:
             # No service column: tell it from the cert number's format (1234567-001 is NGC, 12345678 PCGS).
-            guess, certain = service_from_cert(_text(vals.get("cert_number")))
+            guess, note = service_from_cert(_text(vals.get("cert_number")))
             if guess:
                 f["grading_service"] = guess
-                if not certain:
-                    f["service_guessed"] = True
+                if note:
+                    f["service_guessed"] = note
             else:
                 errors.append("There's a cert number but no grading service (add PCGS, NGC... after it or in a column)")
                 f["grading_service"] = "RAW"
     if is_raw:
         f["grading_service"] = "RAW"
     f["cert_number"] = _text(vals.get("cert_number"))
-    if f["grading_service"] != "RAW" and not f["cert_number"]:
+    if f["grading_service"] not in ("RAW", "OTHER") and not f["cert_number"]:  # some small graders have no certs
         errors.append(f"{f['grading_service']} coin without a cert number")
 
     # CAC: "Yes", or the sticker color in either column.
@@ -412,7 +469,7 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     valuation = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in valuation.items() if v is not None}
     hints = {k: v for k, v in (("text", hint), ("inventory", _text(vals.get("inventory_hint")))) if v}
     if service_guessed:
-        hints["service_guessed"] = True
+        hints["service_guessed"] = service_guessed
     hints.update(_placement(vals, errors, sold=bool(f.get("sale_price") or f.get("sale_date"))))
     return f, valuation, errors, hints
 

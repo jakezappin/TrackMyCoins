@@ -202,6 +202,7 @@ def _score(coin: Coin, query: str) -> int:
             coin.variety,
             coin.vam,
             coin.grading_service,
+            coin.other_service,
             f"{coin.grade_prefix or ''}{coin.grade or ''}",
             coin.strike_designation,
             coin.purchased_from,

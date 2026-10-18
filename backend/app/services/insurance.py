@@ -107,7 +107,7 @@ def _coin_row(c: Coin, type_name: str) -> list:
                             (c.gsa_soft_pack, "GSA Soft Pack")) if on]
     if slab:
         desc += f'<br/><font color="#666666">{", ".join(slab)}</font>'
-    service = "Raw (ungraded)" if c.grading_service == "RAW" else f"{c.grading_service} #{_e(c.cert_number) or '—'}"
+    service = "Raw (ungraded)" if c.grading_service == "RAW" else f"{_e(c.service_name)} #{_e(c.cert_number) or '—'}"
     cac = f"CAC ({c.cac_sticker.title()})" if c.cac and c.cac_sticker else ("CAC" if c.cac else "")
     bought = _money(c.price_paid)
     if c.purchase_date:

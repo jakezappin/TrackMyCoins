@@ -145,7 +145,7 @@ COIN_COLUMNS = [
     ("Mint", 6, lambda c: c.mint_mark),
     ("Variety", 18, lambda c: c.variety),
     ("VAM", 10, lambda c: c.vam),
-    ("Grading service", 10, lambda c: c.grading_service),
+    ("Grading service", 10, lambda c: c.service_name),
     ("Cert #", 14, lambda c: c.cert_number),
     ("Grade", 13, _grade),
     ("CAC", 6, lambda c: _yes(c.cac)),

@@ -1,4 +1,4 @@
-export type GradingService = "PCGS" | "NGC" | "ANACS" | "CACG" | "ICG" | "RAW";
+export type GradingService = "PCGS" | "NGC" | "ANACS" | "CACG" | "ICG" | "OTHER" | "RAW";
 export type CacSticker = "green" | "gold";
 
 export interface User {
@@ -219,6 +219,8 @@ export interface CoinFields {
   variety: string | null;
   pcgs_number: string | null;
   grading_service: GradingService;
+  /** OTHER: the grading company's name (PCI, TruGrade, SEGS...). */
+  other_service: string | null;
   cert_number: string | null;
   grade_prefix: string | null;
   grade: number | null;

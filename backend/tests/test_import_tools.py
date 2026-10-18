@@ -101,4 +101,36 @@ def test_cleanup_grade_cells_with_service_cert_and_designation(authed):
     assert rows[3]["cleaned"]["CAC sticker"] == "Green" and "Grade note: Toned" in rows[3]["cleaned"]["Notes"]
     assert rows[3]["notes"] and "cert number" in rows[3]["notes"][0]  # PCGS from an 8-digit cert: a guess, flagged
     assert not rows[4]["notes"]  # NGC's format is certain
-    assert any("no grading service" in p for p in rows[5]["problems"])  # 10 digits: can't tell
+    assert rows[5]["cleaned"]["Grading service"] == "ICG" and "10-digit" in rows[5]["notes"][0]
+
+
+def test_cleanup_cacg_holders_and_other_graders(authed):
+    text = ("Coin,Grade\n"
+            "1881-S Morgan Dollar,MS65 (123456789 CAC)\n"
+            "1882-S Morgan Dollar,MS64 CAC (1234567 PCGS Rattler)\n"
+            "1883-O Morgan Dollar,MS63 (1234567-001 NGC Fatty) (GSA Hard Pack)\n"
+            "1884-O Morgan Dollar,MS62 (123456 TruGrade)\n"
+            "1885 Morgan Dollar,MS64 (1234567 ANACS Soapbox)\n")
+    rows = authed.post("/api/import/cleanup", files=_csv(text)).json()["rows"]
+    c = [r["cleaned"] for r in rows]
+    assert (c[0]["Grading service"], c[0]["Cert #"], c[0]["CAC sticker"]) == ("CACG", "123456789", "")  # CAC Grading's slab
+    assert (c[1]["Grading service"], c[1]["CAC sticker"], c[1]["Collector slab"]) == ("PCGS", "Yes", "Rattler")  # a sticker
+    assert (c[2]["Grading service"], c[2]["Collector slab"], c[2]["Packaging"]) == ("NGC", "NGC Fatty", "GSA Hard Pack")
+    assert (c[3]["Grading service"], c[3]["Cert #"]) == ("TruGrade", "123456")  # an Other grading service
+    assert not rows[3]["problems"] and not rows[3]["notes"]
+    assert (c[4]["Grading service"], c[4]["Collector slab"]) == ("ANACS", "Soapbox")
+
+
+def test_other_grading_service(authed, morgan_collection):
+    from test_api import coin_payload
+
+    r = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], grading_service="OTHER", cert_number="555123"))
+    assert r.status_code == 422 and "name of the grading company" in r.text
+    c = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], grading_service="OTHER", other_service="PCI",
+                                                    cert_number="555123")).json()
+    assert (c["grading_service"], c["other_service"], c["cert_number"]) == ("OTHER", "PCI", "555123")
+    c2 = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], other_service="PCI")).json()
+    assert c2["other_service"] is None  # only kept for Other
+    # Imported by name.
+    rows = authed.post("/api/import/cleanup", files=_csv("Date,Type,Grading service,Cert #,Grade\n1881-S,Morgan Dollar,SEGS,77777,MS63\n")).json()["rows"]
+    assert rows[0]["cleaned"]["Grading service"] == "SEGS" and not rows[0]["problems"]

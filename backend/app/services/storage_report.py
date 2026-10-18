@@ -43,7 +43,7 @@ def build_pdf(user: User, spot: StorageSpot, coins: list[Coin], items: list[Bull
             desc += "<br/>" + " · ".join(extras)
         if c.location == "grading":
             desc += '<br/><font color="#b45a0c">At grading</font>'
-        service = "Raw" if c.grading_service == "RAW" else f"{c.grading_service} #{_e(c.cert_number) or '—'}"
+        service = "Raw" if c.grading_service == "RAW" else f"{_e(c.service_name)} #{_e(c.cert_number) or '—'}"
         cells = [Paragraph(_e(c.storage_position) or "", CELL), _thumb(c), Paragraph(c.inventory_number, CELL),
                  Paragraph(desc, CELL), Paragraph(f"<b>{_e(_grade(c)) or '—'}</b><br/>{service}", CELL)]
         rows.append((position_key(c.storage_position, c.inventory_number), cells, v))

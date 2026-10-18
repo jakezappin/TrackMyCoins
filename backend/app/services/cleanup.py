@@ -190,7 +190,8 @@ def clean(db: Session, user_id: int, rows: list[tuple[str, int, dict]], mapping:
             "Date": f"{f['year']}" + ("" if mint == "P" else f"-{mint}") if f.get("year") else _text(canon.get("Date")) or "",
             "Variety": f.get("variety") or "",
             "VAM": f.get("vam") or "",
-            "Grading service": "Raw" if f.get("grading_service") == "RAW" else (f.get("grading_service") or ""),
+            "Grading service": {"RAW": "Raw", "OTHER": f.get("other_service") or "Other"}.get(
+                f.get("grading_service") or "", f.get("grading_service") or ""),
             "Cert #": f.get("cert_number") or "",
             "Grade": _grade_text(f),
             "CAC sticker": (f.get("cac_sticker") or "").title() or ("Yes" if f.get("cac") else ""),
@@ -241,7 +242,7 @@ def clean(db: Session, user_id: int, rows: list[tuple[str, int, dict]], mapping:
         used |= {h for h, v in cleaned.items() if v}
         notes = []
         if hints.get("service_guessed"):
-            notes.append(f"Grading service {cleaned['Grading service']} worked out from the cert number's format. Check it.")
+            notes.append(hints["service_guessed"])
         out_rows.append({"sheet": sheet, "row": num, "cleaned": cleaned, "changes": changes, "problems": problems,
                          "notes": notes})
 

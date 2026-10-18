@@ -170,7 +170,7 @@ export default function CoinTable({ coins, mode }: Props) {
                     </td>
                     <td className="c-grade">{setTypeIds.has(c.coin_type_id) ? setLineName(c.variety) : gradeLabel(c)}</td>
                     <td className="c-svc">
-                      {setTypeIds.has(c.coin_type_id) ? "—" : serviceLabel(c.grading_service)}
+                      {setTypeIds.has(c.coin_type_id) ? "—" : serviceLabel(c.grading_service, c.other_service)}
                       {c.cert_number && <span className="sub mono"> {c.cert_number}</span>}
                     </td>
                     <td className="c-tags">

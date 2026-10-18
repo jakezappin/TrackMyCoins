@@ -17,7 +17,7 @@ const fromCoin = (h: SearchHit, metal: "gold" | "silver"): Hit => ({
   title: `${dateMint(h.coin)} ${h.type_name} ${gradeLabel(h.coin)}`,
   sub: [
     h.coin.inventory_number,
-    `${serviceLabel(h.coin.grading_service)}${h.coin.cert_number ? ` ${h.coin.cert_number}` : ""}`,
+    `${serviceLabel(h.coin.grading_service, h.coin.other_service)}${h.coin.cert_number ? ` ${h.coin.cert_number}` : ""}`,
     h.collection_name,
     h.coin.variety,
   ].filter(Boolean).join(" · "),

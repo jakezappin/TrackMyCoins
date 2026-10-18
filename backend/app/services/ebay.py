@@ -76,7 +76,7 @@ def query_for(c: Coin) -> str:
     if c.variety and "/" in c.variety:  # overdates / over-mintmarks are part of what's being bought
         parts.append(c.variety.split(",")[0].strip())
     if c.grading_service != "RAW":
-        parts.append(c.grading_service)
+        parts.append(c.service_name)
         if c.grade:
             parts.append(f"{c.grade_prefix or ''}{c.grade}")
     if c.strike_designation:
@@ -103,7 +103,7 @@ def _matches(c: Coin, title: str) -> bool:
         return False
     if c.grading_service == "RAW":
         return not any(w in t for ws in SERVICE_WORDS.values() for w in ws)
-    if not any(w in t for w in SERVICE_WORDS.get(c.grading_service, [c.grading_service])):
+    if not any(w in t for w in SERVICE_WORDS.get(c.grading_service, [c.service_name.upper()])):
         return False
     if c.grade:
         prefix = (c.grade_prefix or "").upper()

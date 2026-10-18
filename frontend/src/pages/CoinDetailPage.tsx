@@ -28,6 +28,7 @@ import {
   soldPath,
   parseMoney,
   toningLabel,
+  serviceLabel,
 } from "../format";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -238,7 +239,7 @@ export default function CoinDetailPage() {
           </h1>
           <p className="muted">
             {coin.inventory_number} ·{" "}
-            {isSet ? slabs.join(", ") || "Out of OGP" : coin.grading_service === "RAW" ? "Raw (ungraded)" : coin.grading_service}
+            {isSet ? slabs.join(", ") || "Out of OGP" : coin.grading_service === "RAW" ? "Raw (ungraded)" : serviceLabel(coin.grading_service, coin.other_service)}
             {coin.cert_number && ` #${coin.cert_number}`}
             {coin.vam && ` · ${coin.vam}`}
           </p>
@@ -379,7 +380,7 @@ export default function CoinDetailPage() {
             )}
             <dt>Graded by</dt>
             <dd>
-              {coin.grading_service === "RAW" ? "Raw (ungraded)" : coin.grading_service}
+              {coin.grading_service === "RAW" ? "Raw (ungraded)" : serviceLabel(coin.grading_service, coin.other_service)}
               {coin.cert_number && <span className="muted"> #{coin.cert_number}</span>}
             </dd>
             {coin.variety && (

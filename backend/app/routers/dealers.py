@@ -78,7 +78,7 @@ def apply_dealer_links(db: Session, user: User, obj: Coin | BullionItem) -> None
 
 def _coin_title(c: Coin) -> str:
     g = grade_text(c)
-    grade = f"Raw {g}".strip() if c.grading_service == "RAW" else f"{g} {c.grading_service}".strip()
+    grade = f"Raw {g}".strip() if c.grading_service == "RAW" else f"{g} {c.service_name}".strip()
     return f"{c.year}{'' if c.mint_mark == 'P' else '-' + c.mint_mark} {c.coin_type.name} {grade}".strip()
 
 

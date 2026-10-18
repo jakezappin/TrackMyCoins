@@ -178,7 +178,7 @@ def grade_label(c) -> str:
         g = f"{c.grade_prefix or ''}{c.grade or ''}{'+' if c.grade_plus else ''}{'★' if c.grade_star else ''}"
         if c.strike_designation:
             g += f" {c.strike_designation}"
-    out = f"{c.grading_service} {g}".strip()
+    out = f"{getattr(c, 'service_name', None) or c.grading_service} {g}".strip()
     if c.cac:
         out += f" CAC{f' ({c.cac_sticker})' if c.cac_sticker else ''}"
     return out + (f" #{c.cert_number}" if c.cert_number else "")

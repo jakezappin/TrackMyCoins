@@ -26,7 +26,7 @@ function CoinChip({ coin, isSet = false }: { coin: Coin; isSet?: boolean }) {
       ) : (
         <>
           <span className="status-grade">{gradeLabel(coin)}</span>
-          <span className="muted small">{serviceLabel(coin.grading_service)}</span>
+          <span className="muted small">{serviceLabel(coin.grading_service, coin.other_service)}</span>
         </>
       )}
       {coin.cac && <span className={`tag cac-${coin.cac_sticker ?? "green"}`}>CAC</span>}

@@ -92,7 +92,9 @@ export function gradeLabel(c: GradeFields): string {
   return s || "—";
 }
 
-export const serviceLabel = (service: string) => (service === "RAW" ? "Raw" : service);
+/** The grading company as shown: "Raw", PCGS, NGC... or an Other company's own name. */
+export const serviceLabel = (service: string, other?: string | null) =>
+  service === "RAW" ? "Raw" : service === "OTHER" ? other || "Other" : service;
 
 export function toningLabel(c: ToningFields): string[] {
   const t: string[] = [];
