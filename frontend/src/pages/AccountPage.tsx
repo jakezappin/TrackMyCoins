@@ -249,10 +249,12 @@ function PriceCodeCard() {
     if (!ready || !tryPrice.trim() || !Number.isFinite(n) || n < 0) return "";
     const dollars = String(Math.round(n));
     const code = [...dollars].map((d) => letters[(Number(d) - start! + 10) % 10]);
-    // Filler (the printed labels pick theirs per coin; this just shows the idea).
+    // Filler before and after the real letters (the printed labels pick their own per coin; this shows the idea).
     const filler = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].filter((c) => !letters.includes(c));
-    for (let i = 0; code.length < len; i++) code.splice((i * 3 + 1) % (code.length + 1), 0, filler[(i * 7 + dollars.length) % filler.length]);
-    return `${code.join("")} ($${Number(dollars).toLocaleString()})`;
+    const pad = Math.max(0, len - code.length);
+    const before = pad >= 2 ? Math.ceil(pad / 2) : 0;
+    const picks = Array.from({ length: pad }, (_, i) => filler[(i * 7 + dollars.length * 3) % filler.length]);
+    return `${[...picks.slice(0, before), ...code, ...picks.slice(before)].join("")} ($${Number(dollars).toLocaleString()})`;
   }
 
   async function save(e: React.FormEvent) {
@@ -281,8 +283,8 @@ function PriceCodeCard() {
         Pick a phrase with exactly 10 different letters, like I LOVE FRANK. Its letters stand for the digits in order
         (spaces and repeated letters don't count), starting at 0 or at 1, whichever you choose below. Prices are
         rounded to the nearest whole dollar (no cents), then each digit becomes its letter. If that's shorter than your
-        code length, letters that aren't in your phrase are mixed in as filler: when you read a code, skip any letter
-        that isn't in your phrase. Purchase dates are coded the same way as month, day and 2-digit year (03/15/25).
+        code length, letters that aren't in your phrase are added before and after it as filler (your letters stay
+        together): when you read a code, skip any letter that isn't in your phrase. Purchase dates are coded the same way as month, day and 2-digit year (03/15/25).
       </p>
       <div className="grid-2">
         <label className="field">

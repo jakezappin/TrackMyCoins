@@ -26,6 +26,11 @@ def test_price_code_both_starts():
     assert len(code) == 7 and price_code.decode(code, PHRASE, 0) == "145"
     assert code == price_code.encode_price(145, PHRASE, 0, 7, seed="42")
     assert sum(ch in "ILOVEFRANK" for ch in code) == 3
+    # The real letters stay together, with filler on both sides.
+    assert "LEF" in code and code[0] not in "ILOVEFRANK" and code[-1] not in "ILOVEFRANK"
+    code = price_code.encode_price(215, PHRASE, 0, 6, seed="7")
+    assert "OLF" in code and len(code) == 6 and code[0] not in "ILOVEFRANK" and code[-1] not in "ILOVEFRANK"
+    assert price_code.encode_price(215, PHRASE, 0, 3) == "OLF"  # no room: no filler
     # Dates: month, day, 2-digit year.
     assert price_code.encode_date(date(2025, 3, 15), PHRASE, 0) == "IV LF OF"
     assert price_code.decode("IV LF OF", PHRASE, 0) == "03 15 25"

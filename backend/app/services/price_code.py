@@ -3,7 +3,8 @@
 The owner picks a phrase with exactly 10 different letters, e.g. I LOVE FRANK. Its letters stand for the digits in
 order, starting at 0 (I=0 ... K=9) or at 1 (I=1 ... N=9, K=0), whichever the owner uses. Prices are rounded to the
 nearest whole dollar (no cents), each digit becomes its letter, and the code is filled out to the owner's code length
-with letters that aren't in the phrase, mixed in among the real ones. A reader skips any letter not in the phrase.
+with letters that aren't in the phrase, before and after the real ones (which stay together): $215 -> W T [OLF] Q.
+A reader skips any letter not in the phrase.
 Dates are month, day and 2-digit year, coded the same way without filler: 03/15/25 -> "IV LF OF".
 """
 
@@ -53,10 +54,11 @@ def encode_price(value: Decimal | float | int, phrase: str, start: int, length: 
     code = [to_letter[d] for d in str(abs(whole_dollars(value)))]
     filler = [c for c in string.ascii_uppercase if c not in to_letter.values()]
     h = hashlib.sha256(f"{seed}|{''.join(code)}".encode()).digest()
-    i = 0
-    while len(code) < max(MIN_LENGTH, min(MAX_LENGTH, length)):
-        code.insert(h[i] % (len(code) + 1), filler[h[i + 1] % len(filler)])
-        i += 2
+    pad = max(0, max(MIN_LENGTH, min(MAX_LENGTH, length)) - len(code))
+    # The real letters stay together, with filler before and after (at least one on each side when there's room).
+    before = 1 + h[0] % (pad - 1) if pad >= 2 else h[0] % 2 * pad
+    picks = [filler[b % len(filler)] for b in h[1:1 + pad]]
+    code = picks[:before] + code + picks[before:]
     return "".join(code)
 
 
