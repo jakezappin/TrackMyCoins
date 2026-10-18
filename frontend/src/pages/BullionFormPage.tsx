@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, type BullionItemIn, type BullionMeta } from "../api";
-import { useApp } from "../App";
+import { useApp, useNavCollection } from "../App";
 import { FACE_NOTE, FACE_OZ, METAL_LABEL, PACKAGING_LABEL, purityLabel, pureOz } from "../bullionFormat";
 import { money, parseMoney, todayISO } from "../format";
 
@@ -59,6 +59,7 @@ export default function BullionFormPage() {
   }, [bullionCollections, collectionId]);
 
   const col = bullionCollections.find((c) => c.id === collectionId);
+  useNavCollection("bullion", collectionId);
   const metal = col?.metal ?? "silver";
   const purities = meta?.purities[metal] ?? [];
   const faceAllowed = metal === "silver";

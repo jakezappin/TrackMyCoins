@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type CoinDetail } from "../api";
-import { useApp } from "../App";
+import { useApp, useNavCollection } from "../App";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import { ngcCertUrl } from "../ngcButton";
 import PhotoButtons from "../components/PhotoButtons";
@@ -54,6 +54,7 @@ export default function CoinDetailPage() {
   const [pcgsBusy, setPcgsBusy] = useState(false);
   const [pcgsError, setPcgsError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  useNavCollection("coin", coin && !coin.is_sold ? coin.collection_id : null);
 
   useEffect(() => {
     api.coin(inv).then(setCoin).catch((e) => setError(e.message));

@@ -27,11 +27,25 @@ interface AppState {
   coinTypes: CoinType[];
   collections: Collection[];
   bullionCollections: BullionCollection[];
+  /** The collection the current page belongs to (an item or its form), so the sidebar keeps it highlighted. */
+  navCollection: NavCollection | null;
+  setNavCollection: (c: NavCollection | null) => void;
   /** Re-fetch collections (and their totals) after anything changes. */
   refresh: () => Promise<void>;
 }
 
+export type NavCollection = { kind: "coin" | "bullion"; id: number };
+
 const AppContext = createContext<AppState | null>(null);
+
+/** Pages for one item (or its form) call this so the sidebar keeps its collection highlighted. */
+export function useNavCollection(kind: NavCollection["kind"], id: number | null | undefined) {
+  const { setNavCollection } = useApp();
+  useEffect(() => {
+    setNavCollection(id ? { kind, id } : null);
+    return () => setNavCollection(null);
+  }, [kind, id, setNavCollection]);
+}
 
 export function useApp(): AppState {
   const ctx = useContext(AppContext);
@@ -45,6 +59,7 @@ export default function App() {
   const [coinTypes, setCoinTypes] = useState<CoinType[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [bullionCollections, setBullionCollections] = useState<BullionCollection[]>([]);
+  const [navCollection, setNavCollection] = useState<NavCollection | null>(null);
 
   useEffect(() => {
     api
@@ -75,7 +90,7 @@ export default function App() {
   if (checking) return <div className="center-screen muted">Loading…</div>;
 
   return (
-    <AppContext.Provider value={{ user, setUser, coinTypes, collections, bullionCollections, refresh }}>
+    <AppContext.Provider value={{ user, setUser, coinTypes, collections, bullionCollections, navCollection, setNavCollection, refresh }}>
       <Routes>
         <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
         <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />

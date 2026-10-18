@@ -8,7 +8,10 @@ import NewBullionDialog from "./NewBullionDialog";
 import NewCollectionDialog from "./NewCollectionDialog";
 
 export default function Layout() {
-  const { user, setUser, coinTypes, collections, bullionCollections } = useApp();
+  const { user, setUser, coinTypes, collections, bullionCollections, navCollection } = useApp();
+  // Item pages and forms aren't under their collection's address: highlight it anyway.
+  const navClass = (kind: "coin" | "bullion", id: number) => ({ isActive }: { isActive: boolean }) =>
+    `nav-item${isActive || (navCollection?.kind === kind && navCollection.id === id) ? " active" : ""}`;
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [creatingBullion, setCreatingBullion] = useState(false);
@@ -60,7 +63,7 @@ export default function Layout() {
             <div key={type.id} className="nav-group">
               <div className="nav-heading">{type.plural}</div>
               {cols.map((c) => (
-                <NavLink key={c.id} to={collectionPath(c)} className="nav-item">
+                <NavLink key={c.id} to={collectionPath(c)} className={navClass("coin", c.id)}>
                   <span className="truncate">
                     {c.name}
                     {c.finish !== "MS" && <span className="finish-tag">{FINISH_LABEL[c.finish]}</span>}
@@ -77,7 +80,7 @@ export default function Layout() {
           <div className="nav-group">
             <div className="nav-heading">Bullion</div>
             {bullionCollections.map((c) => (
-              <NavLink key={c.id} to={`/bullion/${c.id}`} className="nav-item">
+              <NavLink key={c.id} to={`/bullion/${c.id}`} className={navClass("bullion", c.id)}>
                 <span className="truncate">{c.name}</span>
                 <span className="count">{c.summary.count}</span>
               </NavLink>

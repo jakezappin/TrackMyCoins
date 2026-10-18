@@ -15,7 +15,7 @@ import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
-import { useApp } from "../App";
+import { useApp, useNavCollection } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, FINISH_LABEL, money, parseMoney, todayISO } from "../format";
 
 const EMPTY: CoinFields = {
@@ -196,6 +196,7 @@ export default function CoinFormPage() {
   const isRaw = form.grading_service === "RAW";
   // Mint & proof sets: not graded; pick the set, keep it in OGP (or a Capital holder).
   const isSetSeries = Boolean(coinType?.is_set);
+  useNavCollection("coin", collectionId);
   useEffect(() => {
     if (!isSetSeries) return;
     setForm((f) => ({ ...f, grading_service: "RAW", cert_number: null, ...(editInv ? {} : { ogp: true }) }));

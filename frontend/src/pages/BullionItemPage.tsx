@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type BullionItem } from "../api";
-import { useApp } from "../App";
+import { useApp, useNavCollection } from "../App";
 import { METAL_LABEL, ozLabel, purityLabel, quantityLabel, weightLabel } from "../bullionFormat";
 import CoinPlaceholder from "../components/CoinPlaceholder";
 import PhotoButtons from "../components/PhotoButtons";
@@ -27,6 +27,7 @@ export default function BullionItemPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [selling, setSelling] = useState(false);
   const busyRef = useRef(false);
+  useNavCollection("bullion", item?.collection_id);
 
   useEffect(() => {
     setItem(null);
