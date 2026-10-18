@@ -41,7 +41,7 @@ def refresh_cpg(db: Session, coin: Coin) -> bool:
     record(coin, PriceQuote(source=CPG, **q))
     if grey is not None:
         record(coin, PriceQuote(source=GREYSHEET, **{**q, "value": grey}))
-    if coin.value_source != "custom" and (coin.toner_premium or coin.holder_premium) and q["value"] is not None:
+    if coin.value_source != "custom" and (coin.toner_premium or coin.holder_premium or coin.lowball_premium) and q["value"] is not None:
         record(coin, premium_quote(coin, q["value"]))
     return cached is None
 
@@ -57,8 +57,9 @@ def record(coin: Coin, quote: PriceQuote) -> None:
 
 
 def premium_quote(coin: Coin, cpg: Decimal) -> PriceQuote:
-    """A price-history row for CPG (a Details coin's share of it) plus the coin's toner and/or holder premium."""
+    """A price-history row for CPG (a Details coin's share of it) plus the coin's toner, holder and lowball premiums."""
     toner, holder = coin.toner_premium or Decimal(0), coin.holder_premium or Decimal(0)
+    lowball = coin.lowball_premium or Decimal(0)
     if coin.details:
         cpg = details.adjust(coin, cpg, coin_melt(coin))
     parts = [f"{'Details value' if coin.details else 'CPG'} ${cpg:,.2f}"]
@@ -66,10 +67,12 @@ def premium_quote(coin: Coin, cpg: Decimal) -> PriceQuote:
         parts.append(f"toner premium ${toner:,.2f}")
     if holder:
         parts.append(f"holder premium ${holder:,.2f}")
+    if lowball:
+        parts.append(f"lowball premium ${lowball:,.2f}")
     return PriceQuote(
         coin_id=coin.id,
         source=PREMIUM,
-        value=cpg + toner + holder,
+        value=cpg + toner + holder + lowball,
         grade_used=details.label(coin),
         description="Estimate: " + " + ".join(parts),
     )

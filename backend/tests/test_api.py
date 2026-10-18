@@ -363,9 +363,18 @@ def test_estimated_value(authed, morgan_collection):
     assert s["est_wholesale_value"] == "418.50"  # 90% of estimated value
     assert authed.get("/api/dashboard").json()["totals"]["total_estimated_value"] == "465.00"
 
+    # A lowball premium too (a low grade the lowball registry sets want)
+    d = authed.put(f"/api/coins/{ia}/valuation", json={"source": "cpg", "toner_premium": "150.00", "holder_premium": "40.00",
+                                                        "lowball_premium": "25.00"}).json()
+    assert (d["lowball_premium"], d["value_estimate"]) == ("25.00", "415.00")
+    assert next(q for q in d["price_quotes"] if q["source"] == "PREMIUM")["description"].endswith("+ lowball premium $25.00")
+    s = authed.get(f"/api/collections/{cid}").json()["summary"]
+    assert (s["lowball_count"], s["lowball_premium_total"], s["total_estimated_value"]) == (1, "25.00", "490.00")
+
     # Back to plain CPG
     d = authed.put(f"/api/coins/{ia}/valuation", json={"source": "cpg"}).json()
-    assert d["toner_premium"] is None and d["holder_premium"] is None and d["value_estimate"] == "200.00"
+    assert d["toner_premium"] is None and d["holder_premium"] is None and d["lowball_premium"] is None
+    assert d["value_estimate"] == "200.00"
 
 
 def test_purchase_and_sale_dates_must_be_sensible(authed, morgan_collection):

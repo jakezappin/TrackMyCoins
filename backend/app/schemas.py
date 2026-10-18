@@ -118,6 +118,8 @@ class CollectionSummary(BaseModel):
     toner_premium_total: Decimal = Decimal(0)
     holder_count: int = 0  # coins whose value includes a holder premium
     holder_premium_total: Decimal = Decimal(0)
+    lowball_count: int = 0  # coins whose value includes a lowball premium
+    lowball_premium_total: Decimal = Decimal(0)
     custom_count: int = 0  # coins valued at the owner's own figure
 
 
@@ -454,6 +456,7 @@ class CoinOut(CoinFields, ORM):
     custom_value: Decimal | None = None
     toner_premium: Decimal | None = None
     holder_premium: Decimal | None = None
+    lowball_premium: Decimal | None = None
     value_estimate: Decimal | None = None  # what totals use for this coin
     details_basis: str | None = None  # how a Details coin's value was worked out
     details_value: Decimal | None = None  # a Details coin's share of CPG (before premiums)
@@ -551,6 +554,7 @@ class ValuationIn(BaseModel):
     custom_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     toner_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)  # cpg only
     holder_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)  # cpg only
+    lowball_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)  # cpg only
 
 
 class ImportValuation(BaseModel):
@@ -560,6 +564,7 @@ class ImportValuation(BaseModel):
     custom_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     toner_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     holder_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    lowball_premium: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
 
 
 class ManualQuoteIn(BaseModel):

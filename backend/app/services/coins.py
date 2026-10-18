@@ -14,7 +14,7 @@ from . import details, metals
 from .lookups.pcgs import coin_facts as pcgs_specs
 
 CPG = "CPG"
-PREMIUM = "PREMIUM"  # CPG + toner and/or holder premium, recorded as an estimate
+PREMIUM = "PREMIUM"  # CPG + toner, holder and/or lowball premium, recorded as an estimate
 CUSTOM = "CUSTOM"  # a value the owner entered themselves
 GREYSHEET = "GREYSHEET"  # wholesale; only on Greysheet's Advanced API tier
 PCGS_GUIDE = "PCGS"  # PCGS Price Guide value
@@ -118,13 +118,13 @@ def value_estimate(coin: Coin) -> Decimal | None:
     base = market_value(coin)
     if base is None:
         return None
-    return base + (coin.toner_premium or Decimal(0)) + (coin.holder_premium or Decimal(0))
+    return base + (coin.toner_premium or Decimal(0)) + (coin.holder_premium or Decimal(0)) + (coin.lowball_premium or Decimal(0))
 
 
 def value_totals(coins) -> dict:
     """Totals used by collection and dashboard cards."""
-    est = cpg = toner = holder = Decimal(0)
-    unpriced = toner_count = holder_count = custom_count = 0
+    est = cpg = toner = holder = lowball = Decimal(0)
+    unpriced = toner_count = holder_count = lowball_count = custom_count = 0
     for c in coins:
         v = value_estimate(c)
         if v is None:
@@ -141,6 +141,9 @@ def value_totals(coins) -> dict:
             if c.holder_premium:
                 holder += c.holder_premium
                 holder_count += 1
+            if c.lowball_premium:
+                lowball += c.lowball_premium
+                lowball_count += 1
     discount = Decimal(str(get_settings().wholesale_discount))
     return dict(
         total_estimated_value=est.quantize(CENTS),
@@ -151,6 +154,8 @@ def value_totals(coins) -> dict:
         toner_premium_total=toner.quantize(CENTS),
         holder_count=holder_count,
         holder_premium_total=holder.quantize(CENTS),
+        lowball_count=lowball_count,
+        lowball_premium_total=lowball.quantize(CENTS),
         custom_count=custom_count,
     )
 

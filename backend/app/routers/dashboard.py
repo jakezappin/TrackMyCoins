@@ -33,6 +33,8 @@ class Totals(BaseModel):
     toner_premium_total: Decimal = Decimal(0)
     holder_count: int = 0
     holder_premium_total: Decimal = Decimal(0)
+    lowball_count: int = 0
+    lowball_premium_total: Decimal = Decimal(0)
     custom_count: int = 0
 
 

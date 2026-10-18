@@ -65,7 +65,7 @@ ALIASES = {
     "saledate": "sale_date", "datesold": "sale_date",
     "soldto": "sold_to", "buyer": "sold_to",
     "notes": "notes", "note": "notes", "comments": "notes",
-    "tonerpremium": "toner_premium", "holderpremium": "holder_premium",
+    "tonerpremium": "toner_premium", "holderpremium": "holder_premium", "lowballpremium": "lowball_premium",
     "type": "series_hint", "series": "series_hint", "cointype": "series_hint", "seriesname": "series_hint",
     "denomination": "series_hint", "denom": "series_hint", "collectiontype": "series_hint",
     "inventory": "inventory_hint", "inventorynumber": "inventory_hint", "inventoryno": "inventory_hint",
@@ -535,6 +535,7 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     valuation = {
         "toner_premium": _money(vals.get("toner_premium"), errors, "Toner premium"),
         "holder_premium": _money(vals.get("holder_premium"), errors, "Holder premium"),
+        "lowball_premium": _money(vals.get("lowball_premium"), errors, "Lowball premium"),
     }
     own = (_text(vals.get("value_source")) or "").lower().startswith("own")
     est = _money(vals.get("estimated_value"), errors, "Estimated value")

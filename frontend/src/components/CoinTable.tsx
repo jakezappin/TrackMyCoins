@@ -201,17 +201,18 @@ export default function CoinTable({ coins, mode }: Props) {
                         {money(c.value_estimate)}
                         {c.value_source === "custom" ? (
                           <span className="value-tag" title="Your own value">own</span>
-                        ) : c.toner_premium || c.holder_premium ? (
+                        ) : c.toner_premium || c.holder_premium || c.lowball_premium ? (
                           <span
                             className="value-tag"
                             title={[
                               c.toner_premium && `toner premium ${money(c.toner_premium)}`,
                               c.holder_premium && `holder premium ${money(c.holder_premium)}`,
+                              c.lowball_premium && `lowball premium ${money(c.lowball_premium)}`,
                             ]
                               .filter(Boolean)
                               .join(" + ")}
                           >
-                            {[c.toner_premium && "+toner", c.holder_premium && "+holder"].filter(Boolean).join(" ")}
+                            {[c.toner_premium && "+toner", c.holder_premium && "+holder", c.lowball_premium && "+lowball"].filter(Boolean).join(" ")}
                           </span>
                         ) : null}
                       </td>

@@ -168,6 +168,7 @@ COIN_COLUMNS = [
     ("CPG as of", 12, lambda c: (q.fetched_at.date() if (q := latest_quote(c, CPG)) else None)),
     ("Toner premium", 12, lambda c: c.toner_premium),
     ("Holder premium", 12, lambda c: c.holder_premium),
+    ("Lowball premium", 12, lambda c: c.lowball_premium),
     ("Details %", 9, lambda c: details.pct(c) if c.details else None),
     ("Value source", 10, lambda c: "Own value" if c.value_source == "custom" else "CPG"),
     ("Estimated value", 14, lambda c: value_estimate(c)),
@@ -198,7 +199,7 @@ def _sheet(ws, columns, coins):
     for coin in coins:
         ws.append([fn(coin) for _, _, fn in columns])
     _style(ws, [w for _, w, _ in columns], money_cols={n for n, _, _ in columns if n in (
-        "Price paid", "CPG value", "Sale price", "Profit / loss", "Toner premium", "Holder premium", "Estimated value",
+        "Price paid", "CPG value", "Sale price", "Profit / loss", "Toner premium", "Holder premium", "Lowball premium", "Estimated value",
         "Est. value at purchase")}, header=[n for n, _, _ in columns])
 
 
@@ -255,6 +256,7 @@ def export_collection(
         ("Coins valued at your own figure", s.custom_count),
         ("Coins with a toner premium", s.toner_count),
         ("Coins with a holder premium", s.holder_count),
+        ("Coins with a lowball premium", s.lowball_count),
         ("Coins without a value yet", s.unpriced_count),
         ("Coins sold from this collection", len(gone)),
     ]:

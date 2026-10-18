@@ -2,18 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { api, type CoinDetail } from "../api";
 import { money, parseMoney } from "../format";
 
-type PremiumKey = "toner" | "holder";
+type PremiumKey = "toner" | "holder" | "lowball";
 const PREMIUMS: { key: PremiumKey; label: string; hint: string }[] = [
-  { key: "toner", label: "Toner premium", hint: "Extra for attractive toning" },
-  { key: "holder", label: "Holder premium", hint: "Extra for a Rattler, Fatty, OGH, GSA or other desirable holder" },
+  { key: "toner", label: "Toner Premium", hint: "Extra for attractive toning" },
+  { key: "holder", label: "Holder Premium", hint: "Extra for a Rattler, Fatty, OGH, GSA or other desirable holder" },
+  { key: "lowball", label: "Lowball Premium", hint: "Extra for a low-grade coin collectors want, e.g. a PO1 or FR2 for lowball sets" },
 ];
+const KEYS: PremiumKey[] = ["toner", "holder", "lowball"];
+const FIELD = { toner: "toner_premium", holder: "holder_premium", lowball: "lowball_premium" } as const;
 
-/** The coin's estimated value: CPG plus optional toner/holder premiums, or the owner's own figure. */
+/** The coin's estimated value: CPG plus optional toner, holder and lowball premiums, or the owner's own figure. */
 export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetail; onChange: (c: CoinDetail) => void }) {
-  const saved = { toner: coin.toner_premium ?? "", holder: coin.holder_premium ?? "" };
+  const savedOf = () => ({ toner: coin.toner_premium ?? "", holder: coin.holder_premium ?? "", lowball: coin.lowball_premium ?? "" });
+  const onOf = () => ({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium), lowball: Boolean(coin.lowball_premium) });
+  const saved = savedOf();
   const own = coin.is_error ? "custom" : coin.value_source; // error coins have only the owner's value
   const [source, setSource] = useState<"cpg" | "custom">(own);
-  const [on, setOn] = useState({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium) });
+  const [on, setOn] = useState(onOf);
   const [amount, setAmount] = useState(saved);
   const [custom, setCustom] = useState(coin.custom_value ?? "");
   const [busy, setBusy] = useState(false);
@@ -22,10 +27,10 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
 
   useEffect(() => {
     setSource(own);
-    setOn({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium) });
-    setAmount({ toner: coin.toner_premium ?? "", holder: coin.holder_premium ?? "" });
+    setOn(onOf());
+    setAmount(savedOf());
     setCustom(coin.custom_value ?? "");
-  }, [coin.value_source, coin.toner_premium, coin.holder_premium, coin.custom_value, coin.is_error]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [coin.value_source, coin.toner_premium, coin.holder_premium, coin.lowball_premium, coin.custom_value, coin.is_error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A Details coin's CPG-based value is its share of the straight-grade CPG.
   const cpg = coin.details ? coin.details_value : coin.latest_cpg?.value ?? null;
@@ -38,16 +43,16 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
     source === "custom"
       ? amt(custom)
       : cpg != null
-        ? Number(cpg) + (amt(premium("toner")) ?? 0) + (amt(premium("holder")) ?? 0)
+        ? Number(cpg) + KEYS.reduce((t, k) => t + (amt(premium(k)) ?? 0), 0)
         : null;
   const dirty =
     source !== own ||
     (source === "custom" && custom !== (coin.custom_value ?? "")) ||
-    (source === "cpg" && (premium("toner") !== saved.toner || premium("holder") !== saved.holder));
+    (source === "cpg" && KEYS.some((k) => premium(k) !== saved[k]));
 
   function reset() {
     setSource(own);
-    setOn({ toner: Boolean(coin.toner_premium), holder: Boolean(coin.holder_premium) });
+    setOn(onOf());
     setAmount(saved);
     setCustom(coin.custom_value ?? "");
     setError(null);
@@ -58,7 +63,7 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
     if (saving.current) return; // ignore a second tap while saving
     // "1,250" and "$1250" are fine; anything unreadable is reported instead of being dropped.
     const fields: [string, string][] =
-      source === "custom" ? [["Your estimated value", custom]] : [["Toner premium", premium("toner")], ["Holder premium", premium("holder")]];
+      source === "custom" ? [["Your estimated value", custom]] : PREMIUMS.map((p) => [p.label, premium(p.key)] as [string, string]);
     const parsed: Record<string, string | null> = {};
     for (const [label, text] of fields) {
       const r = parseMoney(text);
@@ -76,8 +81,7 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
         await api.setValuation(coin.inventory_number, {
           source,
           custom_value: source === "custom" ? parsed["Your estimated value"] : null,
-          toner_premium: source === "cpg" ? parsed["Toner premium"] : null,
-          holder_premium: source === "cpg" ? parsed["Holder premium"] : null,
+          ...Object.fromEntries(PREMIUMS.map((p) => [FIELD[p.key], source === "cpg" ? parsed[p.label] : null])),
         }),
       );
     } catch (err) {
@@ -92,6 +96,7 @@ export default function EstimatedValueCard({ coin, onChange }: { coin: CoinDetai
     cpg ? `${coin.details ? "Details value" : "CPG"} ${money(cpg)}` : null,
     coin.toner_premium ? `toner premium ${money(coin.toner_premium)}` : null,
     coin.holder_premium ? `holder premium ${money(coin.holder_premium)}` : null,
+    coin.lowball_premium ? `lowball premium ${money(coin.lowball_premium)}` : null,
   ].filter(Boolean);
 
   return (

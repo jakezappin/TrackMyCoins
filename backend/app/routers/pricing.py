@@ -131,7 +131,7 @@ def get_pcgs_market(inventory_number: str, db: Session = Depends(get_db), user: 
 def set_valuation(
     inventory_number: str, body: ValuationIn, db: Session = Depends(get_db), user: User = Depends(current_user)
 ):
-    """Choose how the coin's estimated value is set: from CPG (plus optional toner and holder premiums) or your own
+    """Choose how the coin's estimated value is set: from CPG (plus optional toner, holder and lowball premiums) or your own
     value. Each change is recorded in the price history.
     """
     coin = get_owned_coin(db, user, inventory_number)
@@ -145,7 +145,8 @@ def set_valuation(
         coin.value_source = "cpg"
         coin.toner_premium = body.toner_premium or None
         coin.holder_premium = body.holder_premium or None
-        if coin.toner_premium or coin.holder_premium:
+        coin.lowball_premium = body.lowball_premium or None
+        if coin.toner_premium or coin.holder_premium or coin.lowball_premium:
             cpg = latest_quote(coin)
             if cpg is None or cpg.value is None:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "Get a CPG price first; premiums are added on top of CPG.")

@@ -362,6 +362,8 @@ class Coin(Base):
     toner_premium: Mapped[Decimal | None] = mapped_column(Money)
     # Extra value for a desirable holder (Rattler, Fatty, OGH, GSA...) ("holder tax"). None = no premium.
     holder_premium: Mapped[Decimal | None] = mapped_column(Money)
+    # What a lowball (very low grade, e.g. a PO1 for the low-ball registry sets) brings over CPG.
+    lowball_premium: Mapped[Decimal | None] = mapped_column(Money)
 
     # Purchase
     price_paid: Mapped[Decimal | None] = mapped_column(Money)

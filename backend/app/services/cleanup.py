@@ -30,7 +30,7 @@ NOTES = "notes_append"  # mapping choice: keep this column's text in Notes
 # Fields the importer reads that the standard columns don't cover, with the heading they get.
 EXTRA = {"year": "Year", "mint_mark": "Mint", "strike_designation": "Designation", "cac": "CAC", "ogp": "OGP",
          "details": "Details", "details_problem": "Problem", "details_pct": "Details %", "toner_premium": "Toner premium",
-         "holder_premium": "Holder premium", "value_source": "Value source", "estimated_value": "Estimated value",
+         "holder_premium": "Holder premium", "lowball_premium": "Lowball premium", "value_source": "Value source", "estimated_value": "Estimated value",
          "inventory_hint": "Inventory #", "purchase_value_from": "Value at purchase from"}
 FIELD_HEADER = {**{f: h for h, f, *_ in COLUMNS}, **EXTRA}
 CHOICES = [{"field": f, "label": h} for h, f, *_ in COLUMNS] + [{"field": f, "label": h} for f, h in EXTRA.items()] + [
@@ -178,6 +178,7 @@ def clean(db: Session, user_id: int, rows: list[tuple[str, int, dict]], mapping:
             "Submitted to": hints.get("submit_company") or "",
             "Toner premium": _money(valuation.get("toner_premium")),
             "Holder premium": _money(valuation.get("holder_premium")),
+            "Lowball premium": _money(valuation.get("lowball_premium")),
             "Value source": "Own value" if valuation.get("value_source") == "custom" else "",
             "Estimated value": _money(valuation.get("custom_value")),
         }
@@ -207,7 +208,7 @@ def clean(db: Session, user_id: int, rows: list[tuple[str, int, dict]], mapping:
                          "notes": notes})
 
     columns = [h for h in HEADERS if h in used or h in ("Type", "Date", "Grading service", "Cert #", "Grade")]
-    columns += [h for h in ("Toner premium", "Holder premium", "Value source", "Estimated value") if h in used]
+    columns += [h for h in ("Toner premium", "Holder premium", "Lowball premium", "Value source", "Estimated value") if h in used]
     return {
         "headers": [{"header": h, "field": fields_for.get(h) or "", "auto": auto_field(h) or "", "samples": samples[h]}
                     for h in headers],

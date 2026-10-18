@@ -92,6 +92,8 @@ def _value_note(c: Coin) -> str:
         parts.append(f"+ toner {_money(c.toner_premium)}")
     if c.holder_premium:
         parts.append(f"+ holder {_money(c.holder_premium)}")
+    if c.lowball_premium:
+        parts.append(f"+ lowball {_money(c.lowball_premium)}")
     return " ".join(parts) or "Not yet valued"
 
 

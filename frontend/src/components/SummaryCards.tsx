@@ -1,7 +1,7 @@
 import type { Summary } from "../api";
 import { money } from "../format";
 
-/** "CPG $1,200 · 2 own values · 1 toner premium · 1 holder premium" plus coins still without a value. */
+/** "CPG $1,200 · 2 own values · 1 toner premium · 1 holder premium · 1 lowball premium" plus coins still without a value. */
 export function ValueNote({ summary }: { summary: Summary }) {
   const parts = [`CPG ${money(summary.total_cpg_value)}`];
   if (summary.custom_count) parts.push(`${summary.custom_count} own value${summary.custom_count === 1 ? "" : "s"}`);
@@ -9,6 +9,8 @@ export function ValueNote({ summary }: { summary: Summary }) {
     parts.push(`${summary.toner_count} toner premium${summary.toner_count === 1 ? "" : "s"} (${money(summary.toner_premium_total)})`);
   if (summary.holder_count)
     parts.push(`${summary.holder_count} holder premium${summary.holder_count === 1 ? "" : "s"} (${money(summary.holder_premium_total)})`);
+  if (summary.lowball_count)
+    parts.push(`${summary.lowball_count} lowball premium${summary.lowball_count === 1 ? "" : "s"} (${money(summary.lowball_premium_total)})`);
   return (
     <div className="stat-note">
       {parts.join(" · ")}

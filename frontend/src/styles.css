@@ -4140,3 +4140,17 @@ fieldset.field .check {
 .lookup-bar .field.grade-mini.ngc-grade {
   width: 150px;
 }
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 16px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  font-size: 0.9rem;
+}

@@ -52,6 +52,8 @@ export interface Summary {
   toner_premium_total: string;
   holder_count: number;
   holder_premium_total: string;
+  lowball_count: number;
+  lowball_premium_total: string;
   custom_count: number;
 }
 
@@ -309,6 +311,7 @@ export interface Coin extends CoinFields {
   custom_value: string | null;
   toner_premium: string | null;
   holder_premium: string | null;
+  lowball_premium: string | null;
   value_estimate: string | null;
   /** How a Details coin's value was worked out. */
   details_basis: string | null;
@@ -1033,8 +1036,9 @@ const FIELD_LABELS: Record<string, string> = {
   sale_price: "Sale price",
   sale_date: "Sale date",
   custom_value: "Your estimated value",
-  toner_premium: "Toner premium",
-  holder_premium: "Holder premium",
+  toner_premium: "Toner Premium",
+  holder_premium: "Holder Premium",
+  lowball_premium: "Lowball Premium",
   value: "Value",
   notes: "Notes",
 };
@@ -1463,7 +1467,7 @@ export const api = {
   getPcgs: (inv: string) => request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/pcgs`),
   setValuation: (
     inv: string,
-    b: { source: "cpg" | "custom"; custom_value?: string | null; toner_premium?: string | null; holder_premium?: string | null },
+    b: { source: "cpg" | "custom"; custom_value?: string | null; toner_premium?: string | null; holder_premium?: string | null; lowball_premium?: string | null },
   ) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/valuation`, b),
   getCpg: (inv: string) => request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/cpg`),

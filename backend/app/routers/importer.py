@@ -478,6 +478,7 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
             coin.value_source, coin.custom_value = "custom", v.custom_value
         coin.toner_premium = v.toner_premium
         coin.holder_premium = v.holder_premium
+        coin.lowball_premium = v.lowball_premium
         db.add(coin)
         db.flush()
         places.apply(coin, r.hints)  # Stored in / At Grading, only if the file had those columns

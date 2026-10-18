@@ -5,6 +5,7 @@ import { useApp } from "../App";
 import { collectionPath, collectionsBySeries, FINISH_LABEL, soldPath } from "../format";
 import Logo from "./Logo";
 import NewCollectionDialog from "./NewCollectionDialog";
+import UpdateBanner from "./UpdateBanner";
 
 export default function Layout() {
   const { user, setUser, coinTypes, collections, bullionCollections, navCollection } = useApp();
@@ -130,6 +131,7 @@ export default function Layout() {
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
 
       <main className="content">
+        <UpdateBanner />
         <Outlet />
       </main>
 
