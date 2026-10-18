@@ -178,7 +178,8 @@ def read_label(data: bytes, user_id: int | None = None) -> dict:
     return result
 
 
-def _ask_claude(content: list, retry_hint: str) -> dict:
+def _ask_claude(content: list, retry_hint: str, schema: dict | None = None, clean=None) -> dict:
+    """Ask Claude to fill in `schema` (the slab label's, by default) from a photo or text."""
     settings = get_settings()
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=90.0)
     try:
@@ -187,7 +188,7 @@ def _ask_claude(content: list, retry_hint: str) -> dict:
             max_tokens=4000,
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema or SCHEMA}},
             messages=[{"role": "user", "content": content}],
         )
     except anthropic.RateLimitError as e:
@@ -207,7 +208,7 @@ def _ask_claude(content: list, retry_hint: str) -> dict:
         result = json.loads(text or "")
     except json.JSONDecodeError as e:
         raise LabelError(f"Couldn't read the details. {retry_hint}") from e
-    return _clean(result)
+    return (clean or _clean)(result)
 
 
 # ---- NGC cert page (sent by the "Add to TrackMyCoins" bookmark from the user's own browser) ----------

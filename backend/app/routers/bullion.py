@@ -22,6 +22,7 @@ from ..services import bullion as svc
 from ..services import bullion_io as bio
 from ..services.importer import ImportError_
 from ..services import photos as store
+from .dealers import apply_dealer_links
 from .storage import check_spot
 
 router = APIRouter(prefix="/api/bullion", tags=["bullion"])
@@ -57,6 +58,8 @@ class ItemIn(BaseModel):
     asking_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     purchase_date: date | None = None
     purchased_from: str | None = Field(default=None, max_length=200)
+    purchased_from_dealer_id: int | None = None
+    sold_to_dealer_id: int | None = None
     sale_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     sale_date: date | None = None
     sold_to: str | None = Field(default=None, max_length=200)
@@ -140,7 +143,8 @@ def _item_out(item: BullionItem, series: svc.SpotSeries | None, spot_now: Decima
         "face_value": str(item.face_value) if item.face_value is not None else None,
         "price_paid": str(cost) if cost is not None else None, "purchase_date": item.purchase_date,
         "asking_price": str(item.asking_price) if item.asking_price is not None else None,
-        "purchased_from": item.purchased_from, "sale_price": str(item.sale_price) if item.sale_price is not None else None,
+        "purchased_from": item.purchased_from, "purchased_from_dealer_id": item.purchased_from_dealer_id,
+        "sold_to_dealer_id": item.sold_to_dealer_id, "sale_price": str(item.sale_price) if item.sale_price is not None else None,
         "sale_date": item.sale_date, "sold_to": item.sold_to, "notes": item.notes, "is_sold": sold,
         "created_at": item.created_at,
         "oz": str(v.oz), "spot_now": str(v.spot_now.quantize(svc.CENTS)) if v.spot_now is not None else None,
@@ -287,6 +291,7 @@ def create_item(body: ItemIn, db: Session = Depends(get_db), user: User = Depend
     item = BullionItem(user_id=user.id, collection_id=col.id,
                        inventory_number=svc.next_inventory_number(db, user.id, col.metal))
     _apply(item, body)
+    apply_dealer_links(db, user, item)
     db.add(item)
     db.commit()
     return _item_out(_item(db, user, item.inventory_number), svc.SpotSeries.load(db, col.metal), None)
@@ -308,6 +313,7 @@ def update_item(inv: str, body: ItemIn, db: Session = Depends(get_db), user: Use
     check_spot(db, user, body.storage_id)
     item.collection_id = target.id
     _apply(item, body)
+    apply_dealer_links(db, user, item)
     db.commit()
     db.expire_all()
     return get_item(inv, db, user)

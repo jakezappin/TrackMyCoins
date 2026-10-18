@@ -365,11 +365,16 @@ class Coin(Base):
     price_paid: Mapped[Decimal | None] = mapped_column(Money)
     purchase_date: Mapped[date | None] = mapped_column(Date)
     purchased_from: Mapped[str | None] = mapped_column(String(200))
+    # The dealer it came from / went to, when picked from the user's Dealers (purchased_from / sold_to keep the name).
+    purchased_from_dealer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dealers.id", ondelete="SET NULL", name="fk_coins_purchased_from_dealer"), index=True)
 
     # Sale (both null = on hand)
     sale_price: Mapped[Decimal | None] = mapped_column(Money)
     sale_date: Mapped[date | None] = mapped_column(Date)
     sold_to: Mapped[str | None] = mapped_column(String(200))
+    sold_to_dealer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dealers.id", ondelete="SET NULL", name="fk_coins_sold_to_dealer"), index=True)
 
     notes: Mapped[str | None] = mapped_column(Text)
     lookup_raw: Mapped[dict | None] = mapped_column(JSON)
@@ -471,9 +476,13 @@ class BullionItem(Base):
     price_paid: Mapped[Decimal | None] = mapped_column(Money)
     purchase_date: Mapped[date | None] = mapped_column(Date)
     purchased_from: Mapped[str | None] = mapped_column(String(200))
+    purchased_from_dealer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dealers.id", ondelete="SET NULL", name="fk_bullion_purchased_from_dealer"), index=True)
     sale_price: Mapped[Decimal | None] = mapped_column(Money)
     sale_date: Mapped[date | None] = mapped_column(Date)
     sold_to: Mapped[str | None] = mapped_column(String(200))
+    sold_to_dealer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dealers.id", ondelete="SET NULL", name="fk_bullion_sold_to_dealer"), index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     # Where it's kept (see StorageSpot) and where in it.
@@ -640,3 +649,29 @@ class LabelQueueItem(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     coin: Mapped[Coin] = relationship()
+
+
+class Dealer(Base):
+    """A coin dealer the user buys from or sells to: contact details, specialties, notes and a photo of their card
+    or banner. Coins and bullion link to it through purchased_from_dealer_id / sold_to_dealer_id."""
+
+    __tablename__ = "dealers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE", name="fk_dealers_user"), index=True)
+    business: Mapped[str | None] = mapped_column(String(200))
+    contact_name: Mapped[str | None] = mapped_column(String(200))
+    phone: Mapped[str | None] = mapped_column(String(60))
+    email: Mapped[str | None] = mapped_column(String(200))
+    website: Mapped[str | None] = mapped_column(String(300))
+    address: Mapped[str | None] = mapped_column(String(300))
+    social: Mapped[str | None] = mapped_column(String(200))
+    specialties: Mapped[list] = mapped_column(JSON, default=list)
+    notes: Mapped[str | None] = mapped_column(Text)
+    photo_file: Mapped[str | None] = mapped_column(String(80))  # the card or banner photo (stored JPEG)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    @property
+    def display_name(self) -> str:
+        return self.business or self.contact_name or "Dealer"

@@ -64,6 +64,9 @@ export default function Layout() {
           <NavLink to="/labels" className="nav-item">
             Labels
           </NavLink>
+          <NavLink to="/dealers" className="nav-item">
+            Dealers
+          </NavLink>
 
           <button className="nav-item nav-action" onClick={() => setCreating(true)}>
             + New collection

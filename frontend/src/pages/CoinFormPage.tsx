@@ -22,6 +22,7 @@ import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import StoragePicker from "../components/StoragePicker";
+import DealerInput from "../components/DealerInput";
 import CoinSearch from "../components/CoinSearch";
 import { COMPANIES as GRADING_COMPANIES } from "./GradingPage";
 import { useApp, useNavCollection } from "../App";
@@ -67,6 +68,8 @@ const EMPTY: CoinFields = {
   error_description: null,
   price_paid: null,
   asking_price: null,
+  purchased_from_dealer_id: null,
+  sold_to_dealer_id: null,
   purchase_value_custom: null,
   purchase_date: null,
   purchased_from: null,
@@ -1389,7 +1392,12 @@ export default function CoinFormPage() {
           </div>
           <label className="field">
             <span>Purchased from</span>
-            <input {...text("purchased_from")} placeholder="Dealer, show, auction…" />
+            <DealerInput
+              text={form.purchased_from}
+              dealerId={form.purchased_from_dealer_id}
+              onChange={(t, id) => setForm((f) => ({ ...f, purchased_from: t, purchased_from_dealer_id: id }))}
+              placeholder="Dealer, show, auction…"
+            />
           </label>
           <label className="field">
             <span>Est. value at purchase (optional)</span>
@@ -1422,7 +1430,11 @@ export default function CoinFormPage() {
           </div>
           <label className="field">
             <span>Sold to</span>
-            <input {...text("sold_to")} />
+            <DealerInput
+              text={form.sold_to}
+              dealerId={form.sold_to_dealer_id}
+              onChange={(t, id) => setForm((f) => ({ ...f, sold_to: t, sold_to_dealer_id: id }))}
+            />
           </label>
           <p className="muted small">Filling in a sale moves the coin to the Sold list.</p>
         </section>

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api, type BullionItemIn, type BullionMeta } from "../api";
 import { useApp, useNavCollection } from "../App";
 import { useUnsavedGuard } from "../components/useUnsavedGuard";
+import DealerInput from "../components/DealerInput";
 import { FACE_NOTE, FACE_OZ, METAL_LABEL, PACKAGING_LABEL, PRESETS, parsePurity, purityLabel, pureOz } from "../bullionFormat";
 import { money, parseMoney, todayISO } from "../format";
 import StoragePicker from "../components/StoragePicker";
@@ -17,6 +18,8 @@ const EMPTY: Omit<BullionItemIn, "collection_id"> = {
   face_value: null,
   price_paid: null,
   asking_price: null,
+  purchased_from_dealer_id: null,
+  sold_to_dealer_id: null,
   purchase_date: null,
   purchased_from: null,
   sale_price: null,
@@ -69,6 +72,8 @@ export default function BullionFormPage() {
           weight_unit: i.weight_unit, purity: String(Number(i.purity)), face_value: i.face_value, price_paid: i.price_paid,
           asking_price: copy ? null : i.asking_price,
           purchase_date: i.purchase_date, purchased_from: i.purchased_from,
+          purchased_from_dealer_id: i.purchased_from_dealer_id ?? null,
+          sold_to_dealer_id: copy ? null : i.sold_to_dealer_id ?? null,
           sale_price: copy ? null : i.sale_price, sale_date: copy ? null : i.sale_date, sold_to: copy ? null : i.sold_to,
           notes: copy ? null : i.notes,
           storage_id: i.storage_id ?? null,
@@ -370,7 +375,12 @@ export default function BullionFormPage() {
           </div>
           <label className="field">
             <span>Purchased from</span>
-            <input {...text("purchased_from")} placeholder="Dealer, show, online…" />
+            <DealerInput
+              text={form.purchased_from}
+              dealerId={form.purchased_from_dealer_id}
+              onChange={(t, id) => setForm((f) => ({ ...f, purchased_from: t, purchased_from_dealer_id: id }))}
+              placeholder="Dealer, show, online…"
+            />
           </label>
         </section>
         <section className="card form-section">
@@ -394,7 +404,11 @@ export default function BullionFormPage() {
           </div>
           <label className="field">
             <span>Sold to</span>
-            <input {...text("sold_to")} />
+            <DealerInput
+              text={form.sold_to}
+              dealerId={form.sold_to_dealer_id}
+              onChange={(t, id) => setForm((f) => ({ ...f, sold_to: t, sold_to_dealer_id: id }))}
+            />
           </label>
           <p className="muted small">Selling only part of a roll or tube? Use Sell on the item's page instead.</p>
         </section>

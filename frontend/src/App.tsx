@@ -22,6 +22,8 @@ import { LoginPage, SignupPage } from "./pages/AuthPages";
 import SharedCollectionPage from "./pages/SharedCollectionPage";
 import PublicCoinPage from "./pages/PublicCoinPage";
 import LabelsPage from "./pages/LabelsPage";
+import DealersPage from "./pages/DealersPage";
+import DealerPage from "./pages/DealerPage";
 import SoldPage from "./pages/SoldPage";
 import StatusPage from "./pages/StatusPage";
 import BullionCollectionPage from "./pages/BullionCollectionPage";
@@ -175,6 +177,8 @@ export default function App() {
           <Route path="/storage" element={<StoragePage />} />
           <Route path="/storage/:id" element={<Fresh><StorageSpotPage /></Fresh>} />
           <Route path="/labels" element={<Fresh><LabelsPage /></Fresh>} />
+          <Route path="/dealers" element={<DealersPage />} />
+          <Route path="/dealers/:id" element={<Fresh><DealerPage /></Fresh>} />
           <Route path="/collections/:typeSlug/:number/upgrades" element={<Fresh><UpgradesPage /></Fresh>} />
           {NGC_BOOKMARK_ENABLED && <Route path="/ngc-button" element={<NgcButtonPage />} />}
           <Route path="/collections/:typeSlug/sold" element={<Fresh><SoldPage /></Fresh>} />

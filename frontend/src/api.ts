@@ -262,6 +262,9 @@ export interface CoinFields {
   purchase_value_custom: string | null;
   purchase_date: string | null;
   purchased_from: string | null;
+  /** Picked from your Dealers: the coin is linked to that dealer. */
+  purchased_from_dealer_id: number | null;
+  sold_to_dealer_id: number | null;
   sale_price: string | null;
   sale_date: string | null;
   sold_to: string | null;
@@ -423,6 +426,8 @@ export interface BullionItemIn {
   asking_price: string | null;
   purchase_date: string | null;
   purchased_from: string | null;
+  purchased_from_dealer_id: number | null;
+  sold_to_dealer_id: number | null;
   sale_price: string | null;
   sale_date: string | null;
   sold_to: string | null;
@@ -1209,6 +1214,25 @@ export const api = {
   coinPublic: (inv: string) => request<CoinPublicState>("GET", `/api/labels/coins/${encodeURIComponent(inv)}/public`),
   setCoinPublic: (inv: string, public_page: boolean) =>
     request<CoinPublicState>("PUT", `/api/labels/coins/${encodeURIComponent(inv)}/public`, { public_page }),
+  dealers: () => request<Dealer[]>("GET", "/api/dealers"),
+  dealer: (id: number) => request<DealerDetail>("GET", `/api/dealers/${id}`),
+  createDealer: (b: DealerIn) => request<Dealer>("POST", "/api/dealers", b),
+  updateDealer: (id: number, b: DealerIn) => request<DealerDetail>("PUT", `/api/dealers/${id}`, b),
+  deleteDealer: (id: number) => request<void>("DELETE", `/api/dealers/${id}`),
+  readDealerCard(file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<DealerCard>("POST", "/api/dealers/read-card", fd);
+  },
+  uploadDealerPhoto(id: number, file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<Dealer>("POST", `/api/dealers/${id}/photo`, fd);
+  },
+  removeDealerPhoto: (id: number) => request<Dealer>("DELETE", `/api/dealers/${id}/photo`),
+  dealerVcardUrl: (id: number) => `/api/dealers/${id}/vcard`,
+  dealerLinkSuggestions: (id: number) => request<DealerLinkSuggestion[]>("GET", `/api/dealers/${id}/link-suggestions`),
+  linkDealerItems: (id: number, items: string[]) => request<DealerDetail>("POST", `/api/dealers/${id}/link`, { items }),
   alignmentTestUrl: (square: number) => `/api/labels/alignment-test?square=${square}`,
   newCoinLink: (inv: string) => request<CoinPublicState>("POST", `/api/labels/coins/${encodeURIComponent(inv)}/public/new-link`),
   publicCoin: (token: string) => request<PublicCoin>("GET", `/api/c/${encodeURIComponent(token)}`),
@@ -1523,3 +1547,64 @@ export type PublicCoin =
   | { owner: true; inventory_number: string }
   | { owner: false; private: true }
   | { owner: false; private: false; title: string; coin_type_name: string; coin: SharedCoin };
+
+// ---- Dealers ------------------------------------------------------------------------------------------------
+
+export interface DealerIn {
+  business: string | null;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  address: string | null;
+  social: string | null;
+  specialties: string[];
+  notes: string | null;
+}
+
+export interface Dealer extends DealerIn {
+  id: number;
+  display_name: string;
+  photo_url: string | null;
+  bought_count?: number;
+  bought_total?: string;
+  sold_count?: number;
+  sold_total?: string;
+}
+
+export interface DealerItem {
+  kind: "coin" | "bullion";
+  inventory_number: string;
+  title: string;
+  /** Bought from this dealer / sold to them (or both). */
+  bought: boolean;
+  sold_to_them: boolean;
+  purchase_date: string | null;
+  price_paid: string | null;
+  sale_date: string | null;
+  sale_price: string | null;
+  is_sold: boolean;
+  value_now: string | null;
+}
+
+export interface DealerDetail extends Dealer {
+  items: DealerItem[];
+  held_count: number;
+  held_value: string | null;
+  held_unvalued: number;
+  link_suggestions: number;
+}
+
+export interface DealerCard extends Omit<DealerIn, "specialties"> {
+  found: boolean;
+  specialties: string[];
+}
+
+export interface DealerLinkSuggestion {
+  kind: "coin" | "bullion";
+  inventory_number: string;
+  title: string;
+  fields: ("purchased_from" | "sold_to")[];
+  purchased_from: string | null;
+  sold_to: string | null;
+}

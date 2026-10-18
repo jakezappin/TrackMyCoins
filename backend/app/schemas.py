@@ -199,6 +199,9 @@ class CoinFields(BaseModel):
     purchase_value_custom: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     purchase_date: date | None = None
     purchased_from: str | None = Field(default=None, max_length=200)
+    # Picked from the user's Dealers: links the coin to the dealer (the text above then shows the dealer's name).
+    purchased_from_dealer_id: int | None = None
+    sold_to_dealer_id: int | None = None
 
     sale_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     sale_date: date | None = None

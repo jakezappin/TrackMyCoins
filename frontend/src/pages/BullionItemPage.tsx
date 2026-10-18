@@ -216,7 +216,13 @@ export default function BullionItemPage() {
               {money(item.price_paid)} {item.purchase_date && <span className="muted">on {shortDate(item.purchase_date)}</span>}
             </dd>
             <dt>From</dt>
-            <dd>{item.purchased_from ?? "—"}</dd>
+            <dd>
+              {item.purchased_from_dealer_id ? (
+                <Link to={`/dealers/${item.purchased_from_dealer_id}`}>{item.purchased_from}</Link>
+              ) : (
+                item.purchased_from ?? "—"
+              )}
+            </dd>
             {item.asking_price != null && !sold && (
               <>
                 <dt>Asking</dt>

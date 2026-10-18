@@ -425,7 +425,13 @@ export default function CoinDetailPage() {
               {money(coin.price_paid)} {coin.purchase_date && <span className="muted">on {shortDate(coin.purchase_date)}</span>}
             </dd>
             <dt>From</dt>
-            <dd>{coin.purchased_from ?? "—"}</dd>
+            <dd>
+              {coin.purchased_from_dealer_id ? (
+                <Link to={`/dealers/${coin.purchased_from_dealer_id}`}>{coin.purchased_from}</Link>
+              ) : (
+                coin.purchased_from ?? "—"
+              )}
+            </dd>
             {coin.asking_price != null && !coin.is_sold && (
               <>
                 <dt>Asking</dt>
