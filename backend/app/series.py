@@ -41,6 +41,10 @@ class Series:
     # Type sets only: one checklist line per design, as (label, Greysheet node). The coins themselves belong
     # to the series that own those nodes, chosen when each coin is added.
     type_rows: tuple[tuple[str, int], ...] = ()
+    # Catalog sections shared with another series (modern Morgan & Peace): keep entries whose name matches
+    # `only` and not `skip` (regexes).
+    only: str | None = None
+    skip: str | None = None
     finishes: tuple[str, ...] = field(init=False)
 
     def __post_init__(self):
@@ -112,6 +116,12 @@ SERIES: list[Series] = [
     Series("morgan-dollars", "Morgan Dollar", "Morgan Dollars", "MOR", DOL, ("P", "CC", "O", "S", "D"),
            (8971,), (8972,)),
     Series("peace-dollars", "Peace Dollar", "Peace Dollars", "PEA", DOL, ("P", "D", "S"), (8973,)),
+    # The U.S. Mint's Morgan and Peace dollars from 2021 on (Greysheet lists both in one section; two-coin
+    # sets are left out). Enhanced Uncirculated, privies and Reverse Proofs are lines of their own.
+    Series("modern-morgan-dollars", "Modern Morgan Dollar", "Modern Morgan Dollars", "MMD", DOL,
+           ("P", "D", "S", "W"), (10536,), (15351,), only=r"\bMorgan\b", skip=r"\bPeace\b|\bSet\b"),
+    Series("modern-peace-dollars", "Modern Peace Dollar", "Modern Peace Dollars", "MPD", DOL,
+           ("P", "D", "S", "W"), (10536,), (15351,), only=r"\bPeace\b", skip=r"\bMorgan\b|\bSet\b"),
     Series("ike-dollars", "Ike Dollar", "Ike Dollars", "IKE", DOL, ("P", "D", "S"), (8974,), (8975,),
            silver_proofs=True),
     # Includes Native American dollars (2009-), which share the Sacagawea obverse.

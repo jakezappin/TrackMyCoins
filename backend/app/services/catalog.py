@@ -68,7 +68,7 @@ _DATE_RE = re.compile(
     r"(?:\s+(?P<extra>.+))?$"
 )
 # Varieties that don't distinguish a coin (1921 "Morgan" just separates it from the Peace dollar).
-_IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE", "5OZ SILVER"}
+_IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE", "5OZ SILVER", "PEACE", "S$1 MORGAN", "S$1 PEACE", "S$1"}
 
 
 def parse_collectible(d: dict) -> dict | None:
@@ -115,9 +115,13 @@ def parse_collectible(d: dict) -> dict | None:
         parts.append(f"{m.group('mint')}{m.group('mint_over')}")
     if m.group("struck"):
         parts.append(f"({m.group('struck')})")  # no mint mark on the coin
-    if m.group("dual") and _clean(d.get("DenominationShort")):
-        parts.append(_clean(d.get("DenominationShort")))  # America 250 mixes denominations: "25c Mayflower Compact"
+    denom = _clean(d.get("DenominationShort"))
+    with_denom = bool(m.group("dual") and denom and re.fullmatch(r"\d+c|\$\d+", denom))
+    if with_denom:
+        parts.append(denom)  # America 250 mixes denominations: "25c Mayflower Compact"
     for v in (m.group("extra"), _clean(d.get("Variety")), _clean(d.get("Variety2"))):
+        # "Morgan, Liberty Bell Privy" (the modern dollars): the series name isn't part of the variety.
+        v = re.sub(r"^(?:S\$1 )?(?:Morgan|Peace)(?:, |$)", "", v or "").strip() or None
         if v and v.upper() not in _IGNORED_VARIETIES:
             parts.append(v)
     if finish_note:
@@ -131,7 +135,7 @@ def parse_collectible(d: dict) -> dict | None:
         "mint_mark": m.group("mint") or "P",
         "designation": designation,
         "strike": strike[:5],
-        "variety": re.sub(r"^(\S+), ", r"\1 ", ", ".join(parts))[:255] if m.group("dual") and len(parts) > 1
+        "variety": re.sub(r"^(\S+), ", r"\1 ", ", ".join(parts))[:255] if with_denom and len(parts) > 1
         else (", ".join(parts)[:255] or None),
         "name": name[:255],
     }
@@ -152,6 +156,7 @@ def series_nodes(coin_type: CoinType) -> list[int]:
 
 def sync(db: Session, coin_type: CoinType) -> SyncResult:
     nodes = series_nodes(coin_type)
+    series = BY_SLUG.get(coin_type.slug)
     raw: list[tuple[int, dict]] = []
     with greysheet.client() as c:
         for nid in nodes:
@@ -163,6 +168,10 @@ def sync(db: Session, coin_type: CoinType) -> SyncResult:
         if d.get("Gsid") is None:
             continue
         parsed = parse_collectible(d)
+        if parsed and series is not None:
+            name = parsed["name"]
+            if (series.only and not re.search(series.only, name)) or (series.skip and re.search(series.skip, name)):
+                continue
         if parsed:
             rows.setdefault(parsed["gsid"], {**parsed, "node_id": nid})
     if not rows:

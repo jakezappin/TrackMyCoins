@@ -46,8 +46,11 @@ YEARS: dict[str, tuple[tuple[int, int | None], ...]] = {
     "kennedy-half-dollars": ((1964, 1974), (1976, None)),  # 1975: all dated 1776-1976
     "seated-liberty-dollars": ((1840, 1873),),
     "trade-dollars": ((1873, 1885),),
-    "morgan-dollars": ((1878, 1904), (1921, 1921), (2021, 2021), (2023, None)),
-    "peace-dollars": ((1921, 1928), (1934, 1935), (2021, 2021), (2023, None)),
+    "morgan-dollars": ((1878, 1904), (1921, 1921)),
+    "peace-dollars": ((1921, 1928), (1934, 1935)),
+    # The U.S. Mint's modern issues (none in 2022).
+    "modern-morgan-dollars": ((2021, 2021), (2023, None)),
+    "modern-peace-dollars": ((2021, 2021), (2023, None)),
     "ike-dollars": ((1971, 1974), (1976, 1978)),
     "sacagawea-dollars": ((2000, None),),
     "early-quarter-eagles": ((1796, 1798), (1802, 1802), (1804, 1808), (1821, 1821), (1824, 1827), (1829, 1834)),
@@ -88,7 +91,7 @@ FACE: dict[str, int] = {
     "seated-liberty-half-dollars": 50, "barber-half-dollars": 50, "kennedy-half-dollars": 50,
     "modern-commemorative-halves": 50, "modern-commemorative-dollars": 100,
     "seated-liberty-dollars": 100, "trade-dollars": 100, "morgan-dollars": 100, "peace-dollars": 100,
-    "ike-dollars": 100, "sacagawea-dollars": 100, "american-silver-eagles": 100, "gold-dollars": 100,
+    "ike-dollars": 100, "sacagawea-dollars": 100, "modern-morgan-dollars": 100, "modern-peace-dollars": 100, "american-silver-eagles": 100, "gold-dollars": 100,
     "early-quarter-eagles": 250, "classic-head-quarter-eagles": 250, "liberty-quarter-eagles": 250,
     "indian-quarter-eagles": 250, "three-dollar-gold": 300, "four-dollar-stella": 400,
     "early-half-eagles": 500, "classic-head-half-eagles": 500, "liberty-half-eagles": 500, "indian-half-eagles": 500,
@@ -152,6 +155,8 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "trade-dollars": ("trade", "t$1"),
     "morgan-dollars": ("morgan",),
     "peace-dollars": ("peace",),
+    "modern-morgan-dollars": ("morgan",),
+    "modern-peace-dollars": ("peace",),
     "ike-dollars": ("ike", "eisenhower"),
     "sacagawea-dollars": ("sacagawea", "native american"),
     "early-quarter-eagles": ("bust",),
@@ -337,11 +342,14 @@ def from_text(text: str | None, year: int | None) -> Match:
         return Match(None)
     # The series' own name ("Morgan Dollars", "$2.50 Indian") first.
     t = _norm(text)
+    exact_miss = None  # named exactly, but not struck that year (a 2024 "Peace Dollar" is a Modern Peace Dollar)
     for s in SERIES:
         if s.is_type_set:
             continue
         if t.strip() in (_norm(s.name).strip(), _norm(s.plural).strip(), s.slug.replace("-", " ")):
-            return Match(s) if year_ok(s.slug, year) else Match(None, _wrong_year(s, year))
+            if year_ok(s.slug, year):
+                return Match(s)
+            exact_miss = exact_miss or s
     found = _candidates(text, year)
     if len(found) == 1:
         return Match(found[0])
@@ -350,8 +358,13 @@ def from_text(text: str | None, year: int | None) -> Match:
         return Match(None, f"'{text.strip()}' could be {names}. Add a Type column naming the series.")
     # Named a series, but not one struck that year?
     loose = [s for s in SERIES if not s.is_type_set and any(_has(t, k) for k in KEYWORDS.get(s.slug, ()))]
+    if exact_miss is not None:
+        return Match(None, _wrong_year(exact_miss, year))
     if len(loose) == 1:
         return Match(None, _wrong_year(loose[0], year))
+    if loose and year is not None:
+        named = " or ".join(f"{s.plural} ({years_label(s.slug)})" for s in loose[:3])
+        return Match(None, f"No {named} are dated {year}.")
     return Match(None)
 
 

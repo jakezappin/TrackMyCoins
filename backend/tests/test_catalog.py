@@ -394,3 +394,41 @@ def test_new_series_dates():
     assert "isn't an America the Beautiful" in date_problem(atb, 2022, "P", "MS")
     assert date_problem(a250, 2026, "D", "MS") is None
     assert "no 2026-S America 250" in date_problem(a250, 2026, "S", "MS") or "proofs" in date_problem(a250, 2026, "S", "MS")
+
+
+def test_silver_eagle_and_modern_dollar_lines():
+    from app.services.checklist import _silver_eagle_issue as issue
+
+    assert issue("Silver Eagle, Burnished") == "Burnished"
+    assert issue("Silver Eagle, Reverse Proof, Type 1") == "Reverse Proof, Type 1"
+    assert issue("(P), Star Privy") == "Star Privy"
+    assert issue("$1 Silver Eagle, Liberty Bell Privy, 250th Anniversary") == "Liberty Bell Privy, 250th Anniversary"
+    # "Struck at" bullion varieties go on the date's own line (keeping Type 1 / Type 2 apart)
+    assert issue("(S), Struck at San Francisco Mint") is None
+    assert issue("(W), Silver Eagle, Type 2, Emergency West Point Strike") == "Type 2"
+
+    def d(date, variety, name, desg="MS"):
+        return {"Gsid": 1, "Name": name, "CoinDate": date, "Desg": desg, "Variety": variety, "DenominationShort": "S$1"}
+
+    p = parse_collectible(d("1776~2026-(W)", "Morgan, Liberty Bell Privy, Enhanced Uncirculated",
+                            "1776~2026-(W) S$1 Morgan, Liberty Bell Privy, Enhanced Uncirculated MS"))
+    assert (p["year"], p["mint_mark"], p["variety"]) == (2026, "P", "(W), Liberty Bell Privy, Enhanced Uncirculated")
+    p = parse_collectible(d("2023-S", "Peace, Reverse Proof", "2023-S S$1 Peace, Reverse Proof PR", desg="PR"))
+    assert p["variety"] == "Reverse Proof"
+
+
+def test_modern_morgans_split_from_shared_section(client, monkeypatch):
+    from app.db import SessionLocal
+    from app.models import CatalogEntry, CoinType
+    from app.services import catalog as cat
+
+    items = [{"Gsid": 1, "Name": "2024 S$1 Morgan MS", "CoinDate": "2024", "Desg": "MS"},
+             {"Gsid": 2, "Name": "2024 S$1 Peace MS", "CoinDate": "2024", "Desg": "MS", "Variety": "Peace"},
+             {"Gsid": 3, "Name": "2024-S Set S$1 Morgan & Peace Dollars, Reverse Proof, 2 Coins PR",
+              "CoinDate": "2024-S", "Desg": "PR"}]
+    monkeypatch.setattr(greysheet, "get", lambda c, path, **kw: items if kw["NodeId"] == 10536 else [])
+    with SessionLocal() as db:
+        for slug, gsids in (("modern-morgan-dollars", [1]), ("modern-peace-dollars", [2])):
+            t = db.query(CoinType).filter_by(slug=slug).one()
+            cat.sync(db, t)
+            assert [e.gsid for e in db.query(CatalogEntry).filter_by(coin_type_id=t.id)] == gsids

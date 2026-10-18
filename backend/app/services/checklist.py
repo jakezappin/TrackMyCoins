@@ -3,8 +3,8 @@
 The list of date/mints comes from the cached Greysheet catalog. Most series are checked off by year and
 mint. Where one year has several designs or major varieties collected separately, they're checked off by
 issue instead: commemoratives (e.g. "1936 Boone"), Washington quarters from 1999 on (State, Territories, ATB,
-American Women), ATB 5 oz silver designs, the America 250 coins and the 1878 Philadelphia Morgan tail-feather
-varieties.
+American Women), ATB 5 oz silver designs, the America 250 coins, Silver Eagle special issues, modern Morgan and
+Peace dollar issues and the 1878 Philadelphia Morgan tail-feather varieties.
 """
 
 import re
@@ -48,6 +48,17 @@ def _full(variety: str) -> str:
     return variety.strip()
 
 
+def _silver_eagle_issue(variety: str) -> str | None:
+    """Silver Eagle issues collected on their own line: Burnished, Reverse Proof, Enhanced, privies, Type 1 / 2,
+    anniversaries. The "struck at" bullion varieties (no mint mark; emergency strikes) go on the date's line."""
+    parts = [p.strip() for p in variety.split(",") if p.strip()]
+    if any(re.match(r"(Struck at|Emergency)", p, re.I) for p in parts):
+        kept = [p for p in parts if re.fullmatch(r"Type \d", p)]
+    else:
+        kept = [p for p in parts if not re.fullmatch(r"(\$1 )?SILVER EAGLE|\([PSW]\)", p, re.I)]
+    return ", ".join(kept) or None
+
+
 # Where to check off by issue instead of just year + mint: series -> [(applies(year, mint), issue name from variety)].
 ISSUE_RULES = {
     "classic-commemoratives": [(lambda y, m: True, _variety_with_overdate)],
@@ -58,6 +69,10 @@ ISSUE_RULES = {
     "atb-5oz-silver": [(lambda y, m: True, _full)],
     # Mixed denominations and designs, all dated 2026: "25c Mayflower Compact", "50c Enduring Liberty, ... Privy".
     "america-250": [(lambda y, m: True, _full)],
+    "american-silver-eagles": [(lambda y, m: True, _silver_eagle_issue)],
+    # 2021 CC and O privies, Enhanced Uncirculated, Diamond Field, Reverse Proofs: lines of their own.
+    "modern-morgan-dollars": [(lambda y, m: True, _full)],
+    "modern-peace-dollars": [(lambda y, m: True, _full)],
     # 8TF, 7TF Reverse of 1878, 7TF Reverse of 1879, 7/8TF Strong, 7/8TF Weak are collected as separate coins.
     "morgan-dollars": [(lambda y, m: y == 1878 and m == "P", _full)],
 }

@@ -144,7 +144,7 @@ def test_sort_mixed_file_into_collections(authed):
     assert (rows[3]["target"], rows[3]["target_new"]) == ("Peace Dollar Collection 1", True)
     assert rows[4]["target"] == "Barber Dime Collection 1"
     assert rows[5]["target"] == "Morgan Dollar Proof Collection 1"
-    assert "1910 isn't a Morgan Dollar date" in rows[6]["errors"][0]
+    assert "Morgan Dollars (1878–1904, 1921)" in rows[6]["errors"][0] and "1910" in rows[6]["errors"][0]
     assert rows[7]["errors"] and rows[8]["errors"]  # a series we don't track; "$1" alone is ambiguous
     assert "Type column" in rows[9]["errors"][0]  # nothing says what it is
     assert rows[10]["target"] == "Peace Dollar Collection 1"
@@ -204,7 +204,7 @@ def test_year_gaps_are_invalid(authed):
     for slug, year in [("mercury-dimes", 1922), ("peace-dollars", 1930), ("kennedy-half-dollars", 1975),
                        ("morgan-dollars", 2022), ("indian-eagles", 1925), ("buffalo-nickels", 1932), ("large-cents", 1815)]:
         assert year_problem(BY_SLUG[slug], year), (slug, year)
-    for slug, year in [("mercury-dimes", 1921), ("peace-dollars", 1934), ("morgan-dollars", 2023),
+    for slug, year in [("mercury-dimes", 1921), ("peace-dollars", 1934), ("modern-morgan-dollars", 2023),
                        ("early-quarter-eagles", 1802), ("liberty-double-eagles", 1849)]:
         assert year_problem(BY_SLUG[slug], year) is None, (slug, year)
     assert "future" in year_problem(BY_SLUG["lincoln-cents"], 2999)
@@ -225,7 +225,8 @@ def test_date_and_mint_must_exist():
     assert "only struck as proofs" in date_problem(morgan, 1895, "P", "MS")
     assert date_problem(morgan, 1895, "P", "PR") is None and date_problem(morgan, 1895, "O", "AU") is None
     assert "no 1921-S Peace" in date_problem(peace, 1921, "S", "MS")
-    assert date_problem(morgan, 2023, "S", "MS") is None  # newer than the catalog: year check only
+    assert date_problem(morgan, 2023, "S", "MS")  # a 2023 Morgan is a Modern Morgan Dollar
+    assert date_problem(BY_SLUG["modern-morgan-dollars"], 2023, "P", "MS") is None
     assert date_problem(BY_SLUG["early-quarter-eagles"], 1802, "P", "MS") is None  # real, missing from Greysheet
     assert date_problem(BY_SLUG["jefferson-nickels"], 2020, "W", "PR") is None
     assert date_problem(BY_SLUG["kennedy-half-dollars"], 1970, "P", "MS")  # 1970 halves: D (business), S (proof)
