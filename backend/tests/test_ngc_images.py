@@ -126,3 +126,15 @@ def test_downloads_capped(monkeypatch):
         lambda req: httpx.Response(200, content=big, headers={"content-type": "image/jpeg"})), **kw))
     with _pytest.raises(photos.PhotoError, match="too large"):
         photos.download_image("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/x/NGC1-001_OBV.jpg")
+
+
+def test_photo_type_from_the_file_when_the_server_sends_none(tmp_path, monkeypatch):
+    """NGC's newer photos come with an empty Content-Type: the file itself says it's a JPEG."""
+    monkeypatch.setattr(photos.settings, "photo_dir", tmp_path)
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 40), "white").save(buf, "JPEG")
+    name, ctype = photos.save_bytes(1, buf.getvalue(), "")
+    assert ctype == "image/jpeg" and name.endswith(".jpg")
+    assert photos.sniff_type(b"not an image") is None
+    with pytest.raises(photos.PhotoError):
+        photos.save_bytes(1, b"not an image", "")

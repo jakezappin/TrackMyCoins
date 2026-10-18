@@ -84,9 +84,26 @@ def _compress(data: bytes, content_type: str) -> tuple[bytes, str]:
         raise PhotoError("That file isn't a photo we can read. Try a JPEG, PNG or HEIC.") from e
 
 
+def sniff_type(data: bytes) -> str | None:
+    """What kind of image the bytes are, from the file itself. Some servers send no type, or a wrong one (NGC's
+    newer photos come with an empty Content-Type)."""
+    head = data[:16]
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "image/webp"
+    if head[4:8] == b"ftyp" and head[8:12] in (b"heic", b"heix", b"hevc", b"heim", b"heis", b"mif1", b"msf1"):
+        return "image/heic"
+    return None
+
+
 def save_bytes(coin_id: int, data: bytes, content_type: str) -> tuple[str, str]:
     """Store a photo (compressed) and its thumbnail; returns (file name, content type actually stored)."""
-    content_type = content_type.split(";")[0].strip().lower()
+    content_type = sniff_type(data) or content_type.split(";")[0].strip().lower()
     if content_type == "image/heif":
         content_type = "image/heic"
     if content_type not in ALLOWED_TYPES:
