@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type BullionSummary, type Metal } from "../api";
+import { api, type BullionMeta, type BullionSummary, type Metal } from "../api";
 import { useApp } from "../App";
 import { METAL_LABEL, ozLabel } from "../bullionFormat";
 import { money } from "../format";
@@ -10,8 +10,11 @@ import ValueHistoryChart from "./ValueHistoryChart";
 export default function BullionDashboard() {
   const { bullionCollections } = useApp();
   const [s, setS] = useState<BullionSummary | null>(null);
+  const [spot, setSpot] = useState<BullionMeta["spot"]>({});
   useEffect(() => {
-    if (bullionCollections.length) api.bullionSummary().then(setS).catch(() => setS(null));
+    if (!bullionCollections.length) return;
+    api.bullionSummary().then(setS).catch(() => setS(null));
+    api.bullionMeta().then((m) => setSpot(m.spot)).catch(() => undefined);
   }, [bullionCollections]);
   if (!bullionCollections.length || !s) return null;
   const change = Number(s.change);
@@ -20,7 +23,15 @@ export default function BullionDashboard() {
     <section className="bullion-dash">
       <div className="section-head">
         <h2>Bullion</h2>
-        <span className="muted small">Melt value at today's spot · separate from your coin totals</span>
+        <span className="spot-strip small">
+          {(Object.keys(METAL_LABEL) as Metal[])
+            .filter((m) => spot[m])
+            .map((m) => (
+              <span key={m}>
+                <span className="muted">{METAL_LABEL[m]}</span> <strong>{money(spot[m]!)}</strong>
+              </span>
+            ))}
+        </span>
       </div>
       <div className="coin-summary">
         <div className="card stat">

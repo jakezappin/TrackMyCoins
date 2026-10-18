@@ -104,9 +104,6 @@ export default function QuickSearch() {
           aria-autocomplete="list"
           aria-label="Search your coins"
         />
-        <kbd className="qs-kbd" aria-hidden>
-          /
-        </kbd>
       </div>
       {showList && (
         <ul className="qs-list" id={listId} role="listbox">

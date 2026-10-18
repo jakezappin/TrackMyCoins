@@ -81,7 +81,6 @@ export default function DashboardPage() {
       {bullionCollections.length > 0 && (
         <div className="section-head dash-group-head">
           <h2>Numismatics</h2>
-          <span className="muted small">Coins and sets, valued from CPG or your own estimates</span>
         </div>
       )}
       {/* Row 1: totals across every collection */}

@@ -3294,3 +3294,10 @@ table {
   padding-top: 18px;
   border-top: 1px solid var(--border);
 }
+
+.spot-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-variant-numeric: tabular-nums;
+}
