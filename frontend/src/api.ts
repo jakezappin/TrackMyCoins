@@ -1209,6 +1209,7 @@ export const api = {
   coinPublic: (inv: string) => request<CoinPublicState>("GET", `/api/labels/coins/${encodeURIComponent(inv)}/public`),
   setCoinPublic: (inv: string, public_page: boolean) =>
     request<CoinPublicState>("PUT", `/api/labels/coins/${encodeURIComponent(inv)}/public`, { public_page }),
+  alignmentTestUrl: (square: number) => `/api/labels/alignment-test?square=${square}`,
   newCoinLink: (inv: string) => request<CoinPublicState>("POST", `/api/labels/coins/${encodeURIComponent(inv)}/public/new-link`),
   publicCoin: (token: string) => request<PublicCoin>("GET", `/api/c/${encodeURIComponent(token)}`),
   changePassword: (current_password: string, new_password: string) =>
@@ -1476,6 +1477,8 @@ export interface LabelItem {
   purchase_date: string | null;
   public_page: boolean;
   is_sold: boolean;
+  /** Ungraded: 2x2 flip inserts are only for raw coins. */
+  raw: boolean;
 }
 
 export interface LabelQueue {
@@ -1497,6 +1500,10 @@ export interface LabelPreview {
   labels: string[];
   /** Sheets: the first pages, showing where the labels fall. */
   pages: string[];
+  /** 2x2 inserts: labels come in front/back pairs, and pages as a page of fronts then a page of backs. */
+  two_sided: boolean;
+  /** Slabbed coins left off 2x2 inserts. */
+  skipped: string[];
   page_count: number;
   label_count: number;
   smallest_font: number;

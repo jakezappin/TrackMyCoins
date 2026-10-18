@@ -3852,6 +3852,16 @@ fieldset.field .check {
 .preview-pages {
   grid-template-columns: repeat(2, minmax(0, 220px));
 }
+.preview-labels figure,
+.preview-pages figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.label-queue li.skipped .label-queue-main > a {
+  color: var(--muted);
+}
 .preview-labels img,
 .preview-pages img {
   display: block;

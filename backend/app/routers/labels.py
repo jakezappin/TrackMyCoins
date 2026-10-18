@@ -104,7 +104,7 @@ def _item(c: Coin, asking: Decimal | None) -> dict:
     grade = f"Raw {g}".strip() if c.grading_service == "RAW" else f"{g} {c.grading_service}".strip()
     return {"inventory_number": c.inventory_number, "title": _title(c), "grade": grade,
             "asking_price": str(asking) if asking is not None else None,
-            "price_paid": str(c.price_paid) if c.price_paid is not None else None, "purchase_date": c.purchase_date, "public_page": c.public_page,
+            "price_paid": str(c.price_paid) if c.price_paid is not None else None, "raw": c.grading_service == "RAW", "purchase_date": c.purchase_date, "public_page": c.public_page,
             "is_sold": c.sale_date is not None or c.sale_price is not None}
 
 
@@ -220,37 +220,52 @@ def _build(db: Session, user: User, body: JobIn, request: Request, assign_tokens
         raise HTTPException(status.HTTP_400_BAD_REQUEST, NEEDS_CODE)
     site = _site(request, body.site)
     data = []
+    skipped: list[str] = []
     for it in body.items:
         c = get_owned_coin(db, user, it.inventory_number)
+        if opts.size == "2x2" and c.grading_service != "RAW":
+            skipped.append(c.inventory_number)  # flip inserts are for raw coins; slabs have their own label
+            continue
         if assign_tokens:
             ensure_token(db, c)
         # The preview shows a stand-in link for coins that don't have one yet (the QR code looks the same).
         url = coin_link(site, c) if c.public_token else f"{site}/c/{'x' * 12}"
-        data.append(svc.label_lines(c, c.coin_type.name, svc.Options(**opts.model_dump()), user, it.asking_price, url))
-    return data
+        data.append(svc.label_lines(c, c.coin_type.name, svc.Options(**opts.model_dump()), user, it.asking_price, url,
+                                    slug=c.coin_type.slug))
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "2x2 flip inserts are for raw coins, and none of these are raw. "
+                            "Choose Avery or thermal labels for slabbed coins.")
+    return data, skipped
 
 
 @router.post("/preview")
 def preview(body: JobIn, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """The labels as they'll print: the first pages (SVG), with any warnings."""
-    data = _build(db, user, body, request, assign_tokens=False)
+    data, skipped = _build(db, user, body, request, assign_tokens=False)
     opts = svc.Options(**body.options.model_dump())
     pages, smallest = svc.pages(data, opts, preview=True)
-    # Sheets: close-ups of the first few labels, and the first pages to show where they fall.
+    # Close-ups of the first few labels (2x2s: front and back), and for sheets the first pages (2x2s: the first
+    # sheet's fronts and backs) to show where they fall.
     shown = [] if body.options.size == "thermal2x1" else pages[:2]
-    closeups = [svc.closeup(d, opts) for d in data[:4]]
+    closeups = [side for d in data[:4] for side in svc.closeup(d, opts)]
     warnings = []
+    if skipped:
+        n = len(skipped)
+        warnings.append(f"{n} slabbed coin{'s are' if n != 1 else ' is'} left off: 2x2 flip inserts are for raw coins. "
+                        "Print slabs on Avery or thermal labels.")
     if smallest < svc.MIN_FONT:
         warnings.append(f"Some text prints very small ({smallest:.1f} pt) to fit everything. Turning off a field or "
                         "two, or a bigger label size, makes it easier to read.")
+    sheets = len(pages) // 2 if body.options.size == "2x2" else len(pages)
     return {"labels": [svc.svg(p) for p in closeups], "pages": [svc.svg(p) for p in shown],
-            "page_count": len(pages), "label_count": len(data),
+            "two_sided": body.options.size == "2x2", "skipped": skipped,
+            "page_count": sheets, "label_count": len(data),
             "smallest_font": round(smallest, 1), "warnings": warnings}
 
 
 @router.post("/pdf")
 def print_pdf(body: JobIn, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    data = _build(db, user, body, request, assign_tokens=True)
+    data, skipped = _build(db, user, body, request, assign_tokens=True)
     if body.public_page:
         for it in body.items:
             get_owned_coin(db, user, it.inventory_number).public_page = True
@@ -260,6 +275,13 @@ def print_pdf(body: JobIn, request: Request, db: Session = Depends(get_db), user
     name = "Label" if len(data) == 1 else "Labels"
     return Response(svc.pdf(pages, "Coin labels"), media_type="application/pdf", headers={
         "Content-Disposition": f'attachment; filename="Coin_{name}_{date.today():%Y-%m-%d}.pdf"'})
+
+
+@router.get("/alignment-test")
+def alignment_test(square: Literal["2", "1.875"] = "2", user: User = Depends(current_user)):
+    """A double-sided test sheet for 2x2 inserts: checks that backs line up with fronts on this printer."""
+    return Response(svc.pdf(svc.alignment_test(float(square)), "2x2 alignment test"), media_type="application/pdf",
+                    headers={"Content-Disposition": 'attachment; filename="2x2_Alignment_Test.pdf"'})
 
 
 # ---- A coin's own link ------------------------------------------------------------------------------------------

@@ -12,10 +12,11 @@ import {
   type StorageSpotSummary,
 } from "../api";
 import { useApp } from "../App";
+import DownloadLink from "../components/DownloadLink";
 import { coinPath, money, parseMoney } from "../format";
 
 const SIZES: { key: LabelSize; label: string; note: string }[] = [
-  { key: "2x2", label: "2x2 on letter paper", note: "20 squares a page, with cut lines" },
+  { key: "2x2", label: "2x2 flip inserts", note: "Raw coins · 20 a sheet, printed both sides" },
   { key: "avery5160", label: "Avery address labels", note: '1" × 2⅝", 30 a sheet (5160, 8160)' },
   { key: "thermal2x1", label: 'Thermal 2" × 1"', note: "One label at a time, for label printers" },
 ];
@@ -170,6 +171,7 @@ export default function LabelsPage() {
                     key={it.inventory_number}
                     it={it}
                     showAsking={opts.asking}
+                    slabOn2x2={opts.size === "2x2" && !it.raw}
                     onAsking={async (v) => {
                       setItems(items.map((x) => (x.inventory_number === it.inventory_number ? { ...x, asking_price: v } : x)));
                       if (!only) {
@@ -311,25 +313,37 @@ export default function LabelsPage() {
             <>
               <div className={`preview-labels size-${opts.size}`}>
                 {preview.labels.map((svg, i) => (
-                  <img key={i} src={svgUrl(svg)} alt={`Label ${i + 1}: ${items[i]?.title ?? ""}`} />
+                  <figure key={i}>
+                    <img src={svgUrl(svg)} alt={preview.two_sided ? `${i % 2 ? "Back" : "Front"} of label ${Math.floor(i / 2) + 1}` : `Label ${i + 1}`} />
+                    {preview.two_sided && <figcaption className="small muted">{i % 2 ? "Back" : "Front"}</figcaption>}
+                  </figure>
                 ))}
               </div>
               <p className="small muted">
-                {preview.label_count > preview.labels.length
-                  ? `The first ${preview.labels.length} of ${preview.label_count} labels, shown larger than life.`
-                  : `${preview.label_count === 1 ? "Your label" : `All ${preview.label_count} labels`}, shown larger than life.`}
+                {(() => {
+                  const shown = preview.two_sided ? preview.labels.length / 2 : preview.labels.length;
+                  return preview.label_count > shown
+                    ? `The first ${shown} of ${preview.label_count} labels, shown larger than life.`
+                    : `${preview.label_count === 1 ? "Your label" : `All ${preview.label_count} labels`}, shown larger than life.`;
+                })()}
+                {preview.two_sided && " The circle on the front shows where the coin sits; it doesn't print."}
               </p>
               {preview.pages.length > 0 && (
                 <>
                   <h3 className="details-sub">Where They Print</h3>
                   <div className="preview-pages">
                     {preview.pages.map((svg, i) => (
-                      <img key={i} src={svgUrl(svg)} alt={`Page ${i + 1}`} />
+                      <figure key={i}>
+                        <img src={svgUrl(svg)} alt={preview.two_sided ? (i ? "Backs" : "Fronts") : `Page ${i + 1}`} />
+                        {preview.two_sided && <figcaption className="small muted">{i ? "Backs (other side)" : "Fronts"}</figcaption>}
+                      </figure>
                     ))}
                   </div>
                   <p className="small muted">
-                    {preview.page_count} page{preview.page_count === 1 ? "" : "s"}
-                    {preview.page_count > preview.pages.length ? `, showing the first ${preview.pages.length}` : ""}.
+                    {preview.page_count} {preview.two_sided ? "sheet" : "page"}
+                    {preview.page_count === 1 ? "" : "s"}
+                    {preview.two_sided ? " (fronts and backs)" : ""}
+                    {!preview.two_sided && preview.page_count > preview.pages.length ? `, showing the first ${preview.pages.length}` : ""}.
                   </p>
                 </>
               )}
@@ -349,8 +363,16 @@ export default function LabelsPage() {
           <p className="small muted">
             {opts.size === "thermal2x1"
               ? 'Downloads a PDF of 2" × 1" pages. Print it to your label printer at Actual size (100%).'
-              : "Downloads a PDF. Print it at Actual size (100%), not Fit to page, so the labels line up."}
+              : opts.size === "2x2"
+                ? "Downloads a PDF: a page of fronts, then a page of backs. Print double-sided (flip on long edge) at Actual size (100%). No double-sided printing? Print the fronts, put the sheet back in to print on its other side, then print the backs."
+                : "Downloads a PDF. Print it at Actual size (100%), not Fit to page, so the labels line up."}
           </p>
+          {opts.size === "2x2" && (
+            <p className="small">
+              <DownloadLink href={api.alignmentTestUrl(opts.square)}>Print an alignment test</DownloadLink>{" "}
+              <span className="muted">first: hold it up to a light and each back's cross should sit on its front's.</span>
+            </p>
+          )}
           {printed && (
             <div className="printed-note">
               <p className="small ok">Labels downloaded.</p>
@@ -388,18 +410,19 @@ function CodeSelect({ label, value, onChange }: { label: string; value: CodeMode
   );
 }
 
-function QueueRow({ it, showAsking, onAsking, onRemove }: { it: LabelItem; showAsking: boolean; onAsking: (v: string | null) => void; onRemove?: () => void }) {
+function QueueRow({ it, showAsking, slabOn2x2, onAsking, onRemove }: { it: LabelItem; showAsking: boolean; slabOn2x2: boolean; onAsking: (v: string | null) => void; onRemove?: () => void }) {
   const [asking, setAsking] = useState(it.asking_price ?? "");
   const [bad, setBad] = useState(false);
   useEffect(() => setAsking(it.asking_price ?? ""), [it.asking_price]);
   return (
-    <li>
+    <li className={slabOn2x2 ? "skipped" : ""}>
       <div className="label-queue-main">
         <Link to={coinPath(it.inventory_number)}>{it.title}</Link>
         <span className="small muted">
           {it.inventory_number} · {it.grade}
           {it.price_paid ? ` · paid ${money(it.price_paid)}` : ""}
           {it.public_page && <span className="tag">Public page on</span>}
+          {slabOn2x2 && <span className="tag">Slab: not on 2x2s</span>}
         </span>
       </div>
       {showAsking && (

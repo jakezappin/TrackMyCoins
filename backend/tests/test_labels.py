@@ -90,13 +90,16 @@ def test_labels_queue_preview_and_print(authed, morgan_collection):
     assert authed.post("/api/labels/pdf", json=_job(items, purchase_date="code")).status_code == 400
     authed.put("/api/auth/price-code", json={"phrase": PHRASE, "start": 0, "length": 3})
 
-    for size in labels.SIZES:
+    for size in ("avery5160", "thermal2x1"):
         r = authed.post("/api/labels/preview", json=_job(items, size=size, price="code", purchase_date="code", start=3))
         assert r.status_code == 200, r.text
         p = r.json()
-        assert p["label_count"] == 2 and p["page_count"] == (2 if size == "thermal2x1" else 1)
+        assert p["label_count"] == 2 and p["page_count"] == (2 if size == "thermal2x1" else 1) and not p["two_sided"]
         assert p["labels"][0].startswith("<?xml") and "LER" in p["labels"][0] and "IV LF OF" in p["labels"][0]
         assert "$325" in p["labels"][0] and not p["warnings"]
+    # 2x2 flip inserts are for raw coins: slabs are left off (and with only slabs, there's nothing to print).
+    r = authed.post("/api/labels/preview", json=_job(items, size="2x2"))
+    assert r.status_code == 400 and "raw coins" in r.json()["detail"]
     # Previewing doesn't make links; printing does, and remembers the options.
     assert authed.get(f"/api/labels/coins/{c1['inventory_number']}/public").json()["path"] is None
     r = authed.post("/api/labels/pdf", json=_job(items, size="avery5160", price="plain"))
@@ -139,3 +142,42 @@ def test_coin_link_owner_stranger_private(client, morgan_collection):
     new = client.post(f"/api/labels/coins/{inv}/public/new-link").json()["path"]
     assert new != path and client.get(api_path).status_code == 404
     assert client.get(f"/api{new}").json()["owner"] is True
+
+
+def test_2x2_front_and_back(authed, morgan_collection):
+    from app.services.short_names import short_name
+
+    assert short_name("morgan-dollars", "Morgan Dollar", 1878, None) == "Morgan"
+    assert short_name("washington-quarters", "Washington Quarter", 1999, "Delaware, Silver") == "Delaware Quarter"
+    assert short_name("washington-quarters", "Washington Quarter", 1965, "Doubled Die Obverse") == "Washington"
+    assert short_name("classic-commemoratives", "Classic Commemorative", 1925, "Stone Mountain") == "Stone Mountain Comm. Half"
+    assert short_name("classic-commemoratives", "Classic Commemorative", 1935, "1935/34, Boone") == "Boone Comm. Half"
+    assert short_name("classic-commemoratives", "Classic Commemorative", 1893, "Isabella") == "Isabella Comm. Quarter"
+    assert short_name("american-silver-eagles", "American Silver Eagle", 2021, "Type 2") == "ASE"
+    assert short_name("america-250", "America 250 (2026)", 2026, "25c Mayflower Compact, Silver") == "Mayflower Compact Quarter"
+
+    raw = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1878, mint_mark="CC", grading_service="RAW",
+                                                       cert_number=None, grade_prefix="VF", grade=20, price_paid="145")).json()
+    ungraded = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1880, grading_service="RAW",
+                                                            cert_number=None, grade_prefix=None, grade=None)).json()
+    slab = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1881)).json()
+    items = [(c["inventory_number"], "325") for c in (raw, ungraded, slab)]
+    p = authed.post("/api/labels/preview", json=_job(items, size="2x2", price="plain")).json()
+    assert p["two_sided"] and p["label_count"] == 2 and p["skipped"] == [slab["inventory_number"]] and p["warnings"]
+    front, back = p["labels"][0], p["labels"][1]
+    assert "1878-CC" in front and "Morgan" in front and "VF20" in front and "$" not in front  # nothing private
+    assert all(w in back for w in ("1878-CC", "Morgan", "Dollar", "Raw VF20", "$145", "$325"))
+    assert "VF20" not in p["labels"][2]  # no grade entered: none on the front
+    assert len(p["pages"]) == 2  # the first sheet's fronts and backs
+
+    # The PDF: fronts, then backs mirrored (the first back sits in the right-hand column).
+    opts = labels.Options(size="2x2")
+    data = [labels.LabelData([labels.Text("x")], None, labels.Front("1878-CC", "Morgan", "VF20"))]
+    pages, _ = labels.pages(data, opts)
+    assert len(pages) == 2
+    sheet = labels.sheet_for("2x2")
+    assert labels._slot(sheet, 0, mirror=True)[0] == labels._slot(sheet, 3)[0]
+    r = authed.post("/api/labels/pdf", json=_job(items, size="2x2"))
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    r = authed.get("/api/labels/alignment-test?square=1.875")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")

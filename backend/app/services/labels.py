@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from reportlab.graphics import renderPDF, renderSVG
 from reportlab.graphics.barcode.qr import QrCodeWidget
-from reportlab.graphics.shapes import Drawing, Line as SLine, Rect, String
+from reportlab.graphics.shapes import Circle, Drawing, Line as SLine, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -21,10 +21,11 @@ from reportlab.pdfgen import canvas as pdfcanvas
 
 from ..models import Coin, User
 from . import details, price_code
+from .short_names import short_name
 
 IN = 72.0
 SIZES = ("2x2", "avery5160", "thermal2x1")
-SIZE_LABELS = {"2x2": '2x2 squares on letter paper (20 per page)', "avery5160": 'Avery address labels, 1" × 2⅝" '
+SIZE_LABELS = {"2x2": '2x2 flip inserts on letter paper (20 per sheet, printed both sides)', "avery5160": 'Avery address labels, 1" × 2⅝" '
                '(5160 / 8160, 30 per sheet)', "thermal2x1": 'Thermal 2" × 1"'}
 MIN_FONT = 5.0  # below this, the preview warns that the text is very small
 FLOOR_FONT = 3.5
@@ -51,7 +52,7 @@ def sheet_for(size: str, square: float = 2.0) -> Sheet:
     if size == "2x2":
         s = square * IN
         return Sheet(letter, (s, s), 4, 5, (letter[0] - 4 * s) / 2, (letter[1] - 5 * s) / 2, (s, s), (9, 9),
-                     0.7 * IN, 13)
+                     0.7 * IN, 11)
     if size == "avery5160":
         return Sheet(letter, (2.625 * IN, IN), 3, 10, 0.1875 * IN, 0.5 * IN, (2.75 * IN, IN), (7, 5), 0.62 * IN, 10,
                      ("side", "corner"))
@@ -91,9 +92,19 @@ class Text:
 
 
 @dataclass
+class Front:
+    """The front of a 2x2 flip insert: date and mint top left, the coin's short name top right, grade bottom right."""
+
+    date: str
+    name: str
+    grade: str = ""
+
+
+@dataclass
 class LabelData:
-    lines: list[Text]
+    lines: list[Text]  # 2x2: the back
     url: str | None
+    front: Front | None = None
 
 
 def _money(v: Decimal) -> str:
@@ -111,8 +122,10 @@ def grade_text(c: Coin) -> str:
     return g
 
 
-def label_lines(c: Coin, type_name: str, opts: Options, user: User, asking: Decimal | None, url: str | None) -> LabelData:
-    title = f"{c.year}{'' if c.mint_mark == 'P' else '-' + c.mint_mark} {type_name}"
+def label_lines(c: Coin, type_name: str, opts: Options, user: User, asking: Decimal | None, url: str | None,
+                slug: str = "") -> LabelData:
+    date_mint = f"{c.year}{'' if c.mint_mark == 'P' else '-' + c.mint_mark}"
+    title = f"{date_mint} {type_name}"
     lines = [Text(title, bold=True, scale=1.2)]
     if opts.variety:
         bits = [x for x in (c.variety, c.vam) if x]
@@ -153,7 +166,11 @@ def label_lines(c: Coin, type_name: str, opts: Options, user: User, asking: Deci
     ask = _money(asking) if opts.asking and asking is not None else ""
     if coded or ask:
         lines.append(Text(" · ".join(coded), ask, mono=mono, right_bold=True, scale=1.0))
-    return LabelData(lines, url if opts.qr else None)
+    front = None
+    if opts.size == "2x2":
+        has_grade = bool(c.grade or c.grade_prefix or c.details)
+        front = Front(date_mint, short_name(slug, type_name, c.year, c.variety), grade_text(c) if has_grade else "")
+    return LabelData(lines, url if opts.qr else None, front)
 
 
 # ---- Laying text out ------------------------------------------------------------------------------------------
@@ -299,54 +316,144 @@ def draw_label(d: Drawing, data: LabelData, x0: float, y0: float, sheet: Sheet) 
     return fs
 
 
+def draw_front(d: Drawing, f: Front, x0: float, y0: float, sheet: Sheet) -> None:
+    """Small text in the top corners (the coin shows through the middle of the flip), grade bottom right."""
+    w, h = sheet.label
+    px = py = 8.0
+    inner = w - 2 * px
+    bold = "Helvetica-Bold"
+    date_size = 8.0
+    while stringWidth(f.date, bold, date_size) > inner * 0.45 and date_size > 5:
+        date_size -= 0.25
+    date_w = stringWidth(f.date, bold, date_size)
+    d.add(String(x0 + px, y0 + h - py - date_size * 0.78, f.date, fontName=bold, fontSize=date_size))
+    # The name: right-aligned beside the date, wrapping to a second line (a third only if it must).
+    room = inner - date_w - 8
+    rows: list[str] | None = None
+    size = 8.0
+    for max_rows in (2, 3):
+        size = 8.0
+        while size >= 5.5:
+            rows = _wrap(f.name, bold, size, room, split_words=False)
+            if rows is not None and len(rows) <= max_rows:
+                break
+            size -= 0.25
+            rows = None
+        if rows is not None:
+            break
+    if rows is None:
+        size = 5.5
+        rows = _wrap(f.name, bold, size, room, split_words=True) or [f.name]
+    top = y0 + h - py - size * 0.78
+    for i, row in enumerate(rows):
+        d.add(String(x0 + w - px, top - i * size * 1.15, row, fontName=bold, fontSize=size, textAnchor="end"))
+    if f.grade:
+        g = 7.5
+        while stringWidth(f.grade, bold, g) > inner * 0.6 and g > 5:
+            g -= 0.25
+        d.add(String(x0 + w - px, y0 + py, f.grade, fontName=bold, fontSize=g, textAnchor="end"))
+
+
 # ---- Pages ----------------------------------------------------------------------------------------------------
 
 
 GUIDE = colors.HexColor("#9a9a9a")
 
 
+def _slot(sheet: Sheet, i: int, mirror: bool = False) -> tuple[float, float]:
+    col, row = i % sheet.cols, i // sheet.cols
+    if mirror:  # the back of a double-sided sheet: columns run right to left so each back lands behind its front
+        col = sheet.cols - 1 - col
+    return sheet.left + col * sheet.pitch[0], sheet.page[1] - sheet.top - row * sheet.pitch[1] - sheet.label[1]
+
+
+def _page(sheet: Sheet) -> Drawing:
+    d = Drawing(*sheet.page)
+    d.add(Rect(0, 0, *sheet.page, fillColor=colors.white, strokeColor=None))
+    return d
+
+
 def pages(labels: list[LabelData], opts: Options, preview: bool = False) -> tuple[list[Drawing], float]:
-    """One Drawing per page (per label for thermal), and the smallest font size used."""
+    """One Drawing per page (per label for thermal), and the smallest font size used. 2x2s print double-sided: each
+    sheet is a page of fronts followed by a page of backs."""
     sheet = sheet_for(opts.size, opts.square)
     per_page = sheet.cols * sheet.rows
     skip = max(0, min(per_page - 1, opts.start - 1)) if per_page > 1 else 0
     slots = [None] * skip + labels
     out: list[Drawing] = []
     smallest = 99.0
+    two_sided = opts.size == "2x2"
     for first in range(0, max(1, len(slots)), per_page):
-        d = Drawing(*sheet.page)
-        d.add(Rect(0, 0, *sheet.page, fillColor=colors.white, strokeColor=None))
         chunk = slots[first:first + per_page]
+        d = _page(sheet)
+        back = _page(sheet) if two_sided else None
         for i in range(per_page):
-            col, row = i % sheet.cols, i // sheet.cols
-            x = sheet.left + col * sheet.pitch[0]
-            y = sheet.page[1] - sheet.top - row * sheet.pitch[1] - sheet.label[1]
+            x, y = _slot(sheet, i)
             data = chunk[i] if i < len(chunk) else None
             if preview and opts.size == "avery5160":
                 d.add(Rect(x, y, *sheet.label, rx=6, ry=6, fillColor=None if data else colors.HexColor("#f1f1f1"),
                            strokeColor=GUIDE, strokeWidth=0.5, strokeDashArray=[2, 2]))
-            if data is not None:
+            if data is None:
+                continue
+            if back is not None:
+                if data.front is not None:
+                    draw_front(d, data.front, x, y, sheet)
+                smallest = min(smallest, draw_label(back, data, *_slot(sheet, i, mirror=True), sheet))
+            else:
                 smallest = min(smallest, draw_label(d, data, x, y, sheet))
-        if opts.size == "2x2" and opts.cut_lines:
+        if two_sided and opts.cut_lines:
             _cut_lines(d, sheet)
+            if preview and back is not None:
+                _cut_lines(back, sheet)  # only to show where things fall; the back prints without lines
         elif preview and opts.size == "thermal2x1":
             d.add(Rect(0.5, 0.5, sheet.page[0] - 1, sheet.page[1] - 1, rx=5, ry=5, fillColor=None, strokeColor=GUIDE,
                        strokeWidth=0.5, strokeDashArray=[2, 2]))
         out.append(d)
+        if back is not None:
+            out.append(back)
     return out, smallest
 
 
-def closeup(data: LabelData, opts: Options) -> Drawing:
-    """One label on its own, outlined: the preview's close-up of what each label looks like."""
+def alignment_test(square: float = 2.0) -> list[Drawing]:
+    """Two pages to print double-sided: numbered fronts with a cross in each square, and the backs (mirrored) with the
+    same numbers and crosses. Held up to a light, each back's cross should sit on its front's."""
+    sheet = sheet_for("2x2", square)
+    out = []
+    for back in (False, True):
+        d = _page(sheet)
+        for i in range(sheet.cols * sheet.rows):
+            x, y = _slot(sheet, i, mirror=back)
+            w, h = sheet.label
+            cx, cy = x + w / 2, y + h / 2
+            d.add(SLine(cx - 12, cy, cx + 12, cy, strokeColor=colors.black, strokeWidth=0.5))
+            d.add(SLine(cx, cy - 12, cx, cy + 12, strokeColor=colors.black, strokeWidth=0.5))
+            d.add(String(x + 8, y + h - 16, f"{'Back' if back else 'Front'} {i + 1}", fontName="Helvetica-Bold", fontSize=8))
+        if not back:
+            _cut_lines(d, sheet)
+        out.append(d)
+    return out
+
+
+def closeup(data: LabelData, opts: Options) -> list[Drawing]:
+    """One label on its own, outlined: the preview's close-up (2x2s: its front and its back)."""
     sheet = sheet_for(opts.size, opts.square)
     w, h = sheet.label
-    d = Drawing(w, h)
-    d.add(Rect(0, 0, w, h, fillColor=colors.white, strokeColor=None))
-    draw_label(d, data, 0, 0, sheet)
-    r = 0 if opts.size == "2x2" else 5
-    d.add(Rect(0.5, 0.5, w - 1, h - 1, rx=r, ry=r, fillColor=None, strokeColor=GUIDE, strokeWidth=0.5,
-               strokeDashArray=[2, 2]))
-    return d
+    sides = []
+    for side in (("front", "back") if opts.size == "2x2" else ("label",)):
+        d = Drawing(w, h)
+        d.add(Rect(0, 0, w, h, fillColor=colors.white, strokeColor=None))
+        if side == "front" and data.front is not None:
+            draw_front(d, data.front, 0, 0, sheet)
+            # Where the coin shows (preview only).
+            d.add(Circle(w / 2, h / 2 - 6, w * 0.3, fillColor=None, strokeColor=colors.HexColor("#d0d0d0"),
+                         strokeWidth=0.5, strokeDashArray=[2, 2]))
+        else:
+            draw_label(d, data, 0, 0, sheet)
+        r = 0 if opts.size == "2x2" else 5
+        d.add(Rect(0.5, 0.5, w - 1, h - 1, rx=r, ry=r, fillColor=None, strokeColor=GUIDE, strokeWidth=0.5,
+                   strokeDashArray=[2, 2]))
+        sides.append(d)
+    return sides
 
 
 def _cut_lines(d: Drawing, sheet: Sheet) -> None:
