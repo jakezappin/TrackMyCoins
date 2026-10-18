@@ -462,3 +462,32 @@ def test_proof_cameo_designations_and_pcgs_numbers(authed):
     assert cameo_pcgs_number("149553", "CAM") is None  # newer numbers don't follow the rule
     # PCGS's own codes for them.
     assert canonical("CA") == "CAM" and from_pcgs({"Designation": "DC"}) == "DCAM"
+
+
+def test_prooflike_designations_and_unlisted_pl(authed):
+    """Business strikes offer PL and DMPL; a PL coin Greysheet doesn't list is priced as the regular coin, with a note."""
+    tid = type_id(authed)
+    opts = authed.get(f"/api/coin-types/{tid}/designations", params={"finish": "MS"}).json()
+    assert {"PL", "DMPL"} <= set(opts)
+    m = authed.get("/api/catalog/match", params={"coin_type_id": tid, "year": 1881, "mint_mark": "S", "designation": "PL"}).json()
+    assert m["best"]["pcgs_number"] == "7131"  # listed
+    m = authed.get("/api/catalog/match", params={"coin_type_id": tid, "year": 1888, "mint_mark": "O", "designation": "DMPL"}).json()
+    assert m["best"]["pcgs_number"] == "7184" and "doesn't list a DMPL" in m["message"]
+
+
+def test_designation_sub_listings_kept_attributions_skipped():
+    """Greysheet files PL/DMPL, cameo and plain-proof listings under another coin; keep those, not attributions."""
+    from app.services.catalog import designation_child
+
+    top = {"Gsid": 1, "Name": "1969-S 10c PR DCAM", "Desg": "PR", "CoinDate": "1969-S"}
+    assert designation_child({"Name": "1969-S 10c PR", "Desg": "PR", "CoinDate": "1969-S"}, top)  # plain under DCAM
+    plain = {"Gsid": 2, "Name": "1907 $20 Liberty MS", "Desg": "MS", "CoinDate": "1907", "Variety": "Liberty"}
+    assert designation_child({"Name": "1907 $20 Liberty MS PL", "Desg": "MS", "CoinDate": "1907", "Variety": "Liberty"}, plain)
+    atb = {"Name": "2010 S25c 5oz Silver, Hot Springs MS", "Desg": "MS", "CoinDate": "2010", "Variety2": "Hot Springs"}
+    assert designation_child({"Name": "2010 S25c 5oz Silver, Hot Springs MS DMPL", "Desg": "MS", "CoinDate": "2010",
+                              "Variety2": "Hot Springs"}, atb)
+    morgan = {"Name": "1878 8TF $1 MS", "Desg": "MS", "CoinDate": "1878 8TF"}
+    for child in ({"Name": "1878 8TF $1 Spear Point, VAM-1 MS PL", "Desg": "MS", "Variety2": "VAM-1"},
+                  {"Name": "1836 $5 HM-8 MS", "Desg": "MS", "Variety": "HM-8"},
+                  {"Name": "1878 8TF $1 MS", "Desg": "MS", "CoinDate": "1878 8TF"}):  # a duplicate
+        assert not designation_child(child, morgan)

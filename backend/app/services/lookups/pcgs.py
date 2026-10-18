@@ -64,13 +64,20 @@ def lookup(cert: str) -> LookupResult:
         verify_url=f"https://www.pcgs.com/cert/{cert}",
         raw=facts,
     )
-    parse_grade(str(facts.get("Grade") or ""), res)
+    grade = str(facts.get("Grade") or "")
+    parse_grade(grade, res)
+    # PCGS gives the designation three ways, sometimes only partly in each: the Designation field ("DC", "RD"),
+    # the end of the grade ("PR65DC", "MS64DM") and the name ("1937 1C, CAM"). Merge them all.
     set_designation(facts.get("Designation"), res)
-    if res.strike_designation is None and not res.details:
-        # Variety numbers in the name ("FS-101", "DDO FS-801", "VAM-3") aren't designations: FS-101 isn't
-        # Full Steps.
-        name = re.sub(r"\b(?:FS|DDO|DDR|RPM|OMM|VAM|FS-\d+)[-\s]?\d[\w./-]*", " ", str(facts.get("Name") or ""), flags=re.I)
-        set_designation(name, res)
+    tail = re.match(r"^\s*[A-Z]{1,3}\s*\d{1,2}\+?\s*([A-Z]{2,4})\s*$", grade.upper())
+    if tail:
+        set_designation(tail.group(1), res)
+    if not res.details:
+        # Only the name's parts after the first comma ("1895-O $1, DMPL"), and not variety numbers ("FS-101",
+        # "DDO FS-801", "VAM-3": FS-101 isn't Full Steps).
+        rest = ",".join(str(facts.get("Name") or "").split(",")[1:])
+        rest = re.sub(r"\b(?:FS|DDO|DDR|RPM|OMM|VAM|FS-\d+)[-\s]?\d[\w./-]*", " ", rest, flags=re.I)
+        set_designation(rest, res)
     vam = facts.get("DieVariety") or facts.get("MinorVariety")
     if vam and "VAM" in str(vam).upper():
         res.vam = str(vam)

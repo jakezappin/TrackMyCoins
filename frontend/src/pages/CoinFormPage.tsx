@@ -554,7 +554,7 @@ export default function CoinFormPage() {
       if (m.best?.pcgs_number) {
         set("pcgs_number", m.best.pcgs_number);
         if (m.best.variety) set("variety", m.best.variety);
-        setFindMsg(`Matched ${m.best.name}${m.best.variety ? ` (${m.best.variety})` : ""}`);
+        setFindMsg(`Matched ${m.best.name}${m.best.variety ? ` (${m.best.variety})` : ""}.${m.message ? ` ${m.message}` : ""}`);
       } else {
         setFindMsg(m.message);
         setCandidates(m.candidates);

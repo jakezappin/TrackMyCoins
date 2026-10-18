@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from app.schemas import LookupResult
 from app.services.greysheet import _money, _pick
 from app.services.lookups.base import normalize_mint_mark, parse_grade
@@ -49,3 +51,23 @@ def test_pick_prefers_cac_and_plus():
     assert _pick(rows, coin)["CpgVal"] == "300"
     coin.grade = 62
     assert _pick(rows, coin) is None
+
+
+@pytest.mark.parametrize("facts,want", [
+    ({"Name": "1895 $1, DCAM", "Grade": "PR65DC", "Designation": "DC"}, "DCAM"),
+    ({"Name": "1895 $1, CAM", "Grade": "PR64CA", "Designation": "CA"}, "CAM"),
+    ({"Name": "1895-O $1, DMPL", "Grade": "MS62DM", "Designation": "DM"}, "DMPL"),
+    ({"Name": "1937 1C, CAM", "Grade": "PR65RD", "Designation": "RD"}, "RD CAM"),  # color in one field, cameo in the name
+    ({"Name": "1895 $1", "Grade": "PR65+DC", "Designation": ""}, "DCAM"),  # only in the grade
+    ({"Name": "1878 8TF $1, VAM-14.8 FS-401", "Grade": "MS63", "Designation": ""}, None),  # variety numbers aren't designations
+])
+def test_pcgs_cert_designations(monkeypatch, facts, want):
+    """PCGS writes designations as codes (CA, DC, DM) and spreads them over the Designation field, the grade and the name."""
+    from contextlib import nullcontext
+
+    from app.services.lookups import pcgs
+
+    data = {"PCGSNo": "7330", "Year": 1895, "MintMark": "", **facts}
+    monkeypatch.setattr(pcgs, "_client", lambda: nullcontext())
+    monkeypatch.setattr(pcgs, "_get", lambda c, path, **k: data if "Facts" in path else {"Images": []})
+    assert pcgs.lookup("12345678").strike_designation == want

@@ -74,22 +74,41 @@ _DATE_RE = re.compile(
 _IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE", "5OZ SILVER", "PEACE", "S$1 MORGAN", "S$1 PEACE", "S$1"}
 
 
-def _cameo_child(d: dict, name: str) -> bool:
-    if _clean(d.get("Variety2")):
-        return False  # a VAM or die variety (which may also be a cameo): still a sub-variety
-    if (_clean(d.get("Desg")) or "").upper() not in ("PR", "PF"):
+# Die-marriage and attribution numbers: sub-listings carrying one are varieties for specialists, not separate issues.
+# Any "letters-number" code: VAM-3, FS-101, JD-1, BD-2, HM-8, O-101 (Overton), B-3 (Bolender), S-189, C-1, N-10...
+_ATTRIBUTION = re.compile(r"\b[A-Z]{1,4}-\s*\d")
+
+
+def _designation_of(d: dict) -> str | None:
+    name = (_clean(d.get("Name")) or "").upper()
+    strike = (_clean(d.get("Desg")) or "MS").upper()
+    tail = re.search(rf"\b{re.escape(strike)}((?:\s+[A-Z0-9]+)*)\s*$", name)
+    return canonical(tail.group(1)) if tail else None
+
+
+def designation_child(d: dict, top: dict | None) -> bool:
+    """Greysheet files many priced listings under another coin: designations (PL, DMPL, CAM, DCAM, FB, FH, RD...),
+    sometimes several levels deep (DCAM under CAM under PR), the plain proof under a modern DCAM listing (1969-S
+    10c PR under PR DCAM), named varieties (1964 "Blunt 9" PR) and the odd misfiled date. Those are kept. Sub-listings
+    for attributions (VAMs, FS numbers, Sheldon / Cohen / JD die marriages) aren't. `top` is the top-level ancestor."""
+    if top is None:
         return False
-    tail = re.search(r"\b(?:PR|PF)((?:\s+[A-Z0-9]+)*)\s*$", name.upper())
-    words = (canonical(tail.group(1)) or "").split() if tail else []
-    return "CAM" in words or "DCAM" in words
+    if (_clean(d.get("Variety2")) or "") != (_clean(top.get("Variety2")) or ""):
+        return False  # ATB 5 oz keep the park in Variety2 on parent and child alike; elsewhere it's an attribution
+    if _ATTRIBUTION.search(" ".join(x for x in (_clean(d.get("Variety")), _clean(d.get("Name"))) if x)):
+        return False
+    same = (_designation_of(d) == _designation_of(top)
+            and (_clean(d.get("Variety")) or "") == (_clean(top.get("Variety")) or "")
+            and (_clean(d.get("CoinDate")) or "") == (_clean(top.get("CoinDate")) or ""))
+    return not same
 
 
-def parse_collectible(d: dict) -> dict | None:
-    """Normalize a Greysheet CollectibleDto. Returns None for entries that aren't a specific coin."""
+def parse_collectible(d: dict, top: dict | None = None) -> dict | None:
+    """Normalize a Greysheet CollectibleDto. Returns None for entries that aren't a specific coin. `top`: a
+    sub-listing's (UiParentId) top-level ancestor."""
     name = _clean(d.get("Name")) or ""
-    # Entries with a UiParentId are sub-varieties of a parent coin (VAMs, Sheldon numbers); keep parents. Except
-    # a proof's Cameo and Deep Cameo listings, which Greysheet files under the plain proof: they're priced apart.
-    if d.get("UiParentId") and not _cameo_child(d, name):
+    # Sub-listings are kept only when they're the parent coin with a designation (see designation_child).
+    if d.get("UiParentId") and not designation_child(d, top):
         return None
     if "[TYPE]" in name.upper() or d.get("IsSet") is True or d.get("IsType") is True:
         return None
@@ -184,10 +203,19 @@ def sync(db: Session, coin_type: CoinType) -> SyncResult:
 
     now = datetime.now(timezone.utc)
     rows: dict[int, dict] = {}
+    by_gsid = {d.get("Gsid"): d for _, d in raw if d.get("Gsid") is not None}
+
+    def top_of(d: dict) -> dict | None:
+        seen = set()
+        while d is not None and d.get("UiParentId") and d.get("Gsid") not in seen:
+            seen.add(d.get("Gsid"))
+            d = by_gsid.get(d.get("UiParentId"))
+        return d
+
     for nid, d in raw:
         if d.get("Gsid") is None:
             continue
-        parsed = parse_collectible(d)
+        parsed = parse_collectible(d, top_of(d) if d.get("UiParentId") else None)
         if parsed and series is not None:
             name = parsed["name"]
             if (series.only and not re.search(series.only, name)) or (series.skip and re.search(series.skip, name)):
@@ -301,6 +329,7 @@ def ensure_synced(db: Session, coin_type: CoinType) -> None:
 
 
 _CAMEO = ("CAM", "DCAM")
+_MIRROR = ("PL", "DMPL")
 
 
 def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:
@@ -312,12 +341,21 @@ def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:
         .distinct()
     ).all()
     found = {r for r in rows if r}
+    colors = sorted({w for d in found for w in d.split() if w in ("RD", "RB", "BN")})
     if strike == "PR":
         # Every proof can be Cameo or Deep/Ultra Cameo, whether or not the catalog lists it. Copper proofs carry
         # their color too (RD CAM, RD DCAM...).
-        colors = sorted({w for d in found for w in d.split() if w in ("RD", "RB", "BN")})
         found |= {f"{c} {cam}" for c in colors for cam in _CAMEO} if colors else set(_CAMEO)
+    elif strike == "MS" and not _is_set_series(db, coin_type_id):
+        # Any business strike can be graded Prooflike or Deep Mirror Prooflike (NGC designates any series).
+        found |= {f"{c} PL" for c in colors} if colors else set(_MIRROR)
     return sorted(found)
+
+
+def _is_set_series(db: Session, coin_type_id: int) -> bool:
+    ct = db.get(CoinType, coin_type_id)
+    s = BY_SLUG.get(ct.slug) if ct else None
+    return bool(s and s.is_set)
 
 
 
@@ -438,6 +476,14 @@ def match(
                              designation=designation)
             best.exact = True
             return MatchResult(candidates=[best], best=best)
+    if not entries and designation and set(designation.split()) & set(_MIRROR):
+        # A Prooflike coin Greysheet doesn't list as one (a PL Peace dollar): price it as the regular coin, and say so.
+        base = " ".join(w for w in designation.split() if w not in _MIRROR) or None
+        plain = match(db, coin_type_id, year, mint_mark, base, finish, variety, gsa)
+        word = "DMPL" if "DMPL" in designation.split() else "PL"
+        note = f"Greysheet doesn't list a {word} {label.split()[0]}, so it's matched to the regular coin (no {word} premium)."
+        plain.message = f"{note} {plain.message}" if plain.message else note
+        return plain
     if not entries:
         return MatchResult(message=f"No Greysheet catalog entry for {label}.")
 

@@ -8,8 +8,8 @@ import re
 
 COLORS = ("RD", "RB", "BN")
 OTHERS = ("DMPL", "DPL", "PL", "DCAM", "UCAM", "CAM", "FBL", "FB", "FS", "FH", "FT", "BM")
-# PCGS's API writes Cameo and Deep Cameo as "CA" and "DC".
-_ALIASES = {"UCAM": "DCAM", "CA": "CAM", "DC": "DCAM", "DPL": "DMPL", "5FS": "FS", "6FS": "FS", "CAMEO": "CAM", "RED": "RD", "BROWN": "BN"}
+# PCGS's API writes Cameo, Deep Cameo and Deep Mirror Prooflike as "CA", "DC" and "DM".
+_ALIASES = {"UCAM": "DCAM", "CA": "CAM", "DC": "DCAM", "DM": "DMPL", "DPL": "DMPL", "5FS": "FS", "6FS": "FS", "CAMEO": "CAM", "RED": "RD", "BROWN": "BN"}
 # Spelled-out designations, longest first so "Deep Cameo" isn't read as "Cameo".
 _PHRASES = [
     (r"DEEP\s*MIRROR\s*PROOF\s*-?\s*LIKE", "DMPL"), (r"PROOF\s*-?\s*LIKE", "PL"),
