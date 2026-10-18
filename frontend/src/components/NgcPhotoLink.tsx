@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, type NgcImages } from "../api";
+import { api, ApiError, type NgcImages } from "../api";
 
 /**
  * Paste one photo link copied from NGC's cert page; we fetch both sides at full size.
@@ -25,7 +25,14 @@ export default function NgcPhotoLink({
     setBusy(true);
     setError(null);
     try {
-      const r = await api.ngcImages(link.trim());
+      let r: NgcImages;
+      try {
+        r = await api.ngcImages(link.trim());
+      } catch (e) {
+        // Whatever went wrong getting NGC's photos, the user gets the same plain message.
+        if (e instanceof ApiError && e.status === 401) throw e;
+        throw new Error("The link may be incorrect or no images are available for this coin.");
+      }
       await onFound(r);
       setFound(r);
       setLink("");

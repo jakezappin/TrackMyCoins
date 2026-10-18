@@ -39,10 +39,30 @@ def test_parse_newer_folder_ids_and_uppercase_jpg():
     assert info["urls"] == [f"{base}_OBV.JPG", f"{base}_REV.JPG"]
 
 
+@pytest.mark.parametrize("link,cert,obv,rev", [
+    ("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/abc123/ngc1234567-001_obv.jpeg", "1234567-001",
+     "ngc1234567-001_obv.jpeg", "ngc1234567-001_rev.jpeg"),
+    ("https://ccg-imaging-ngc-coins-production.s3.us-east-1.amazonaws.com/A1B2C3D4E5F6/NGC1234567-001_Reverse@1000X1500.PNG",
+     "1234567-001", "NGC1234567-001_Obverse.PNG", "NGC1234567-001_Reverse.PNG"),
+    ("https://s3.amazonaws.com/ccg-imaging-ngc-coins-production/x/y/1234567_OBV-500x722.jpg?versionId=3", "1234567",
+     "1234567_OBV.jpg", "1234567_REV.jpg"),
+    ("  <https://CCG-IMAGING-NGC-COINS-PRODUCTION.S3.AMAZONAWS.COM/f/NGC_6521048-002_obv@500x722.jpg>  ", "6521048-002",
+     "NGC_6521048-002_obv.jpg", "NGC_6521048-002_rev.jpg"),
+])
+def test_parse_variations(link, cert, obv, rev):
+    info = ngc_images.parse(link)
+    assert info["cert_number"] == cert
+    assert info["urls"][0].endswith("/" + obv) and info["urls"][1].endswith("/" + rev)
+    assert all(u.startswith(f"https://{ngc_images.HOST}/") for u in info["urls"])
+
+
 @pytest.mark.parametrize("bad", [
     "", "https://www.ngccoin.com/certlookup/6521048-002/62/",
     "https://evil.example.com/1ba8ddce-270b-4b4a-b00e-0561b256781a/NGC6521048-002_OBV.jpg",
     "https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/../NGC6521048-002_OBV.jpg",
+    "https://ccg-imaging-ngc-coins-production.s3.amazonaws.com.evil.example.com/f/NGC6521048-002_OBV.jpg",
+    "https://s3.amazonaws.com/someone-elses-bucket/f/NGC6521048-002_OBV.jpg",
+    "https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/f/NGC6521048-002_OBV.gif",
 ])
 def test_parse_rejects(bad):
     with pytest.raises(ngc_images.NgcImageError):

@@ -13,35 +13,55 @@ import re
 import httpx
 
 HOST = "ccg-imaging-ngc-coins-production.s3.amazonaws.com"
+BUCKET = "ccg-imaging-ngc-coins-production"
+# As forgiving as possible about the parts NGC varies (folder id length, case, OBV/Obverse, preview size, extension,
+# S3 address style), but only ever NGC's own photo bucket: the server fetches these links.
 LINK = re.compile(
-    r"^https?://" + re.escape(HOST) + r"/(?P<folder>[0-9a-fA-F-]{32,64})/(?P<prefix>NGC)(?P<cert>\d{5,10}-\d{3})_"
-    r"(?P<side>obv|rev)(?:@\d+x\d+)?\.(?P<ext>jpe?g)(?:\?.*)?$",
+    r"^https?://(?P<host>" + re.escape(BUCKET) + r"\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com"
+    r"|s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com/" + re.escape(BUCKET) + r")"
+    r"/(?P<folder>(?:[A-Za-z0-9_-]{1,100}/){0,4})"
+    r"(?P<prefix>NGC[_-]?)?(?P<cert>\d{4,12}(?:-\d{1,4})?)[_-]"
+    r"(?P<side>obverse|reverse|obv|rev)(?P<size>[@_-]\d{2,5}x\d{2,5})?"
+    r"\.(?P<ext>jpe?g|png|webp)(?:[?#].*)?$",
     re.IGNORECASE,
 )
-# NGC's file names vary in case between coins (_OBV / _obv), and S3 names are case-sensitive, so we keep the
-# spelling of the pasted link. Preview sizes vary too (@500x722, @500x715, ...), so only full-size names are built.
+# S3 names are case-sensitive, so the other side keeps the pasted link's spelling (_OBV/_REV, _obv/_rev,
+# _Obverse/_Reverse). Preview sizes vary (@500x722, @200X300...), so full size is tried first, then the same size.
+_OTHER = {"obv": "rev", "rev": "obv", "obverse": "reverse", "reverse": "obverse"}
+
+
+NO_IMAGES = "The link may be incorrect or no images are available for this coin."
 
 
 class NgcImageError(Exception):
     pass
 
 
+def _same_case(word: str, like: str) -> str:
+    if like.isupper():
+        return word.upper()
+    if like[:1].isupper():
+        return word.capitalize()
+    return word.lower()
+
+
 def parse(link: str) -> dict:
-    link = (link or "").strip()
+    link = (link or "").strip().strip("<>\"' ")
     m = LINK.match(link)
     if not m:
-        raise NgcImageError(
-            "That isn't an NGC photo link. On NGC's cert page, right-click (or long-press) the coin photo, "
-            "choose Copy Image Address, and paste it here."
-        )
+        raise NgcImageError(NO_IMAGES)
     side = m["side"]
-    obv, rev = ("OBV", "REV") if side.isupper() else ("obv", "rev")
-    base = f"https://{HOST}/{m['folder']}/{m['prefix']}{m['cert']}_"
-    full = [f"{base}{obv}.{m['ext']}", f"{base}{rev}.{m['ext']}"]
-    pasted = link.split("?", 1)[0]
+    other = _same_case(_OTHER[side.lower()], side)
+    # Whichever address style was pasted, it's the same bucket: use the standard address (the one photo downloads allow).
+    base = f"https://{HOST}/{m['folder']}{m['prefix'] or ''}{m['cert']}_"
+    size, ext = m["size"] or "", m["ext"]
+    sides = (side, other) if side.lower().startswith("obv") else (other, side)
+    full = [f"{base}{sd}.{ext}" for sd in sides]
+    sized = [f"{base}{sd}{size}.{ext}" for sd in sides]
+    pasted = link.split("?", 1)[0].split("#", 1)[0]
     # Show the pasted (small) image for its side; the other side's preview size isn't known, so use full size.
-    previews = [pasted, full[1]] if side.lower() == "obv" else [full[0], pasted]
-    return {"cert_number": m["cert"], "urls": full, "previews": previews}
+    previews = [pasted, full[1]] if side.lower().startswith("obv") else [full[0], pasted]
+    return {"cert_number": m["cert"], "urls": full, "fallbacks": sized, "previews": previews}
 
 
 def resolve(link: str) -> dict:
@@ -49,13 +69,16 @@ def resolve(link: str) -> dict:
     info = parse(link)
     found, previews = [], []
     with httpx.Client(timeout=15, follow_redirects=False) as client:
-        for url, preview in zip(info["urls"], info["previews"]):
-            try:
-                if client.head(url).status_code == 200:
-                    found.append(url)
-                    previews.append(preview)
-            except httpx.HTTPError:
-                continue
+        # Each side at full size, or failing that at the pasted link's preview size.
+        for candidates, preview in zip(zip(info["urls"], info["fallbacks"]), info["previews"]):
+            for url in dict.fromkeys(candidates):
+                try:
+                    if client.head(url).status_code == 200:
+                        found.append(url)
+                        previews.append(preview)
+                        break
+                except httpx.HTTPError:
+                    continue
     if not found:
-        raise NgcImageError("NGC doesn't have photos at that link any more. Copy the link again from NGC's page.")
+        raise NgcImageError(NO_IMAGES)
     return {**info, "urls": found, "previews": previews}
