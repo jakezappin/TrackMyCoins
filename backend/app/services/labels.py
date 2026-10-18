@@ -46,13 +46,14 @@ class Sheet:
     qr: float
     max_font: float
     modes: tuple[str, ...] = ("corner",)  # where the QR code goes (see _layout); the first that fits biggest wins
+    spread: bool = False  # spread the lines under the QR code down to the bottom edge (no dead space)
 
 
 def sheet_for(size: str, square: float = 2.0) -> Sheet:
     if size == "2x2":
         s = square * IN
         return Sheet(letter, (s, s), 4, 5, (letter[0] - 4 * s) / 2, (letter[1] - 5 * s) / 2, (s, s), (9, 9),
-                     0.7 * IN, 11)
+                     0.8 * IN, 14, spread=True)
     if size == "avery5160":
         return Sheet(letter, (2.625 * IN, IN), 3, 10, 0.1875 * IN, 0.5 * IN, (2.75 * IN, IN), (7, 5), 0.62 * IN, 10,
                      ("side", "corner"))
@@ -235,10 +236,19 @@ class Placed:
     font: str
     size: float
     anchor: str = "start"
+    line: int = 0  # which Text it's from
+    region: int = 0  # beside the QR code (0) or under it (1)
+
+
+def _one_row(t: Text, font: str, rfont: str, size: float, width: float) -> bool:
+    w = stringWidth(t.left, font, size) if t.left else 0.0
+    if t.right:
+        w += (6 if t.left else 0) + stringWidth(t.right, rfont, size)
+    return w <= width
 
 
 def _layout(lines: list[Text], w: float, h: float, pad: tuple[float, float], q: float, mode: str,
-            fs: float, split_words: bool = False) -> list[Placed] | None:
+            fs: float, split_words: bool = False, spread: bool = False) -> list[Placed] | None:
     """Text placed at font size `fs`, or None if it doesn't fit. corner: the QR code top left, text beside it and
     then full width below it; side: the QR code on the left, all the text beside it."""
     px, py = pad
@@ -251,14 +261,20 @@ def _layout(lines: list[Text], w: float, h: float, pad: tuple[float, float], q: 
     x, top, width, bottom = regions[0]
     cursor = top
     out: list[Placed] = []
-    for t in lines:
+    for li, t in enumerate(lines):
         while True:
-            size = fs * t.scale
-            lead = size * 1.18
             font, rfont = _font(t), _font(t, True)
+            size = fs * t.scale
+            if li > 0:
+                # A detail line that would wrap shrinks a little first, to stay on one row.
+                for k in (1.0, 0.94, 0.88, 0.82, 0.76):
+                    if _one_row(t, font, rfont, fs * t.scale * k, width):
+                        size = fs * t.scale * k
+                        break
+            lead = size * 1.18
             rw = stringWidth(t.right, rfont, size) if t.right else 0.0
             rows = _wrap(t.left, font, size, width, split_words) if t.left else []
-            same_line = bool(t.right) and (not rows or stringWidth(rows[-1], font, size) + 6 + rw <= width)
+            same_line = bool(t.right) and bool(rows) and stringWidth(rows[-1], font, size) + 6 + rw <= width
             if t.right and rw > width:
                 rows = None  # the right-hand text alone is too wide here
             same_line = same_line and rows is not None
@@ -273,16 +289,24 @@ def _layout(lines: list[Text], w: float, h: float, pad: tuple[float, float], q: 
             return None
         for row in rows:
             cursor -= lead
-            out.append(Placed(x, cursor + (lead - size) / 2 + size * 0.22, row, font, size))
+            out.append(Placed(x, cursor + (lead - size) / 2 + size * 0.22, row, font, size, line=li, region=r))
         if t.right:
             if not same_line:
                 cursor -= lead
-            out.append(Placed(x + width, cursor + (lead - size) / 2 + size * 0.22, t.right, rfont, size, "end"))
+            out.append(Placed(x + width, cursor + (lead - size) / 2 + size * 0.22, t.right, rfont, size, "end", li, r))
+    if spread and r == len(regions) - 1:
+        # Share the room left at the bottom out between the lines of the last region, the last line on the bottom.
+        group = sorted({p.line for p in out if p.region == r})
+        if len(group) > 1:
+            step = max(0.0, cursor - bottom) / (len(group) - 1)
+            for p in out:
+                if p.region == r:
+                    p.y -= group.index(p.line) * step
     return out
 
 
 def fit(lines: list[Text], w: float, h: float, pad: tuple[float, float], q: float, max_font: float,
-        modes: tuple[str, ...] = ("corner",)) -> tuple[list[Placed], str, float]:
+        modes: tuple[str, ...] = ("corner",), spread: bool = False) -> tuple[list[Placed], str, float]:
     """The biggest text that fits, for each place the QR code can go: (placed text, mode, size). Words are only split
     (a long cert number over two lines) when nothing fits otherwise."""
     for split_words in (False, True):
@@ -290,7 +314,7 @@ def fit(lines: list[Text], w: float, h: float, pad: tuple[float, float], q: floa
         for mode in modes:
             fs = max_font
             while fs >= (MIN_FONT if not split_words else FLOOR_FONT):
-                placed = _layout(lines, w, h, pad, q, mode, fs, split_words)
+                placed = _layout(lines, w, h, pad, q, mode, fs, split_words, spread)
                 if placed is not None:
                     if best is None or fs > best[2] + 0.01:
                         best = (placed, mode, fs)
@@ -306,7 +330,7 @@ def draw_label(d: Drawing, data: LabelData, x0: float, y0: float, sheet: Sheet) 
     """Draw one label with its bottom left at (x0, y0). Returns the font size used."""
     w, h = sheet.label
     q = sheet.qr if data.url else 0.0
-    placed, mode, fs = fit(data.lines, w, h, sheet.pad, q, sheet.max_font, sheet.modes)
+    placed, mode, fs = fit(data.lines, w, h, sheet.pad, q, sheet.max_font, sheet.modes, sheet.spread)
     if data.url:
         qy = y0 + h - sheet.pad[1] - q if mode == "corner" else y0 + (h - q) / 2
         d.add(QrCodeWidget(data.url, x=x0 + sheet.pad[0], y=qy, barWidth=q, barHeight=q, barBorder=0, barLevel="M"))

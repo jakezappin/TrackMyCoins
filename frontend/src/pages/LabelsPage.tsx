@@ -231,8 +231,8 @@ export default function LabelsPage() {
               ))}
             </div>
             {opts.size === "2x2" && (
-              <div className="row wrap">
-                <label className="field w-auto">
+              <div className="square-opts">
+                <label className="field">
                   <span>Square size</span>
                   <select value={opts.square} onChange={(e) => set("square", Number(e.target.value) as 2 | 1.875)}>
                     <option value={2}>2" (2x2 flip or holder)</option>

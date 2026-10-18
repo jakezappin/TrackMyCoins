@@ -3790,6 +3790,18 @@ fieldset.field {
   flex: 1;
   min-width: 160px;
 }
+.square-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 16px;
+}
+.square-opts .field {
+  flex: 0 1 17rem;
+}
+.square-opts .check {
+  padding-bottom: 8px;
+}
 .size-picks {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
