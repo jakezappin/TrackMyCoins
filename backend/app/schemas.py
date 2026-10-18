@@ -301,9 +301,17 @@ class GradingChoice(BaseModel):
     declared_value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
 
 
+class NewCollectionPick(BaseModel):
+    """From the coin search: no collection of this series and finish yet, so one is created with the coin."""
+
+    coin_type_id: int
+    finish: Literal["MS", "PR", "SPR"] = "MS"
+
+
 class CoinIn(CoinFields):
-    collection_id: int
+    collection_id: int  # 0 with `new_collection`: create the collection
     grading: GradingChoice | None = None
+    new_collection: NewCollectionPick | None = None
     # Only for type set collections: which member series the coin belongs to.
     coin_type_id: int | None = None
     lookup_raw: dict | None = None

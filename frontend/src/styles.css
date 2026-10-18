@@ -3664,3 +3664,18 @@ table {
 .storage-value { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
 .storage-spot-page .card { margin-top: 16px; }
 .storage-items .tag { margin-left: 6px; }
+
+/* ---- Coin search (Add Coin) ---- */
+.catalog-search { position: relative; margin-bottom: 12px; }
+.catalog-hits {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  box-shadow: 0 6px 18px rgba(20, 24, 30, 0.15);
+}
+.catalog-hits li { cursor: pointer; align-items: flex-start; }
+.catalog-hits li.active { background: var(--accent-soft); }
+.catalog-hit-col { display: block; }

@@ -4,8 +4,10 @@ import {
   api,
   ApiError,
   type CatalogCandidate,
+  type CatalogHit,
   type Coin,
   type CoinFields,
+  type Finish,
   type GradingCompany,
   type DuplicateCert,
   type GradingService,
@@ -19,6 +21,7 @@ import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import StoragePicker from "../components/StoragePicker";
+import CoinSearch from "../components/CoinSearch";
 import { COMPANIES as GRADING_COMPANIES } from "./GradingPage";
 import { useApp, useNavCollection } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, DETAILS_PROBLEMS, FINISH_LABEL, money, parseMoney, todayISO } from "../format";
@@ -207,18 +210,21 @@ export default function CoinFormPage() {
       .finally(() => setLoading(false));
   }, [editInv]);
 
+  // Picked in the coin search with no collection of that series yet: one is made when the coin is saved.
+  const [newCollection, setNewCollection] = useState<{ coin_type_id: number; finish: Finish; label: string } | null>(null);
+
   // Default to the first collection when adding without one selected.
   useEffect(() => {
-    if (collectionId === null && collections.length) setCollectionId(collections[0].id);
-  }, [collections, collectionId]);
+    if (collectionId === null && !newCollection && collections.length) setCollectionId(collections[0].id);
+  }, [collections, collectionId, newCollection]);
 
   const collection = collections.find((c) => c.id === collectionId);
   // In a type set (e.g. Gold Type Set) each coin comes from one of the set's member series, chosen below.
-  const collectionType = coinTypes.find((t) => t.id === collection?.coin_type_id);
+  const collectionType = coinTypes.find((t) => t.id === (collection?.coin_type_id ?? newCollection?.coin_type_id));
   const isTypeSet = Boolean(collectionType?.is_type_set);
   const memberTypes = isTypeSet ? coinTypes.filter((t) => collectionType!.member_ids.includes(t.id)) : [];
   const coinType = isTypeSet ? coinTypes.find((t) => t.id === memberTypeId) : collectionType ?? coinTypes[0];
-  const finish = collection?.finish ?? "MS";
+  const finish = collection?.finish ?? newCollection?.finish ?? "MS";
   const isProof = finish !== "MS";
   const isRaw = form.grading_service === "RAW";
   // Mint & proof sets: not graded; pick the set, keep it in OGP (or a Capital holder).
@@ -562,6 +568,27 @@ export default function CoinFormPage() {
     setFindMsg(`Picked ${c.name}${c.variety ? ` (${c.variety})` : ""}`);
   }
 
+  /** A coin picked in the search: its collection (or a new one), date, mint, variety, designation and PCGS #. */
+  function pickFromCatalog(h: CatalogHit) {
+    if (h.collection_id) {
+      setNewCollection(null);
+      setCollectionId(h.collection_id);
+    } else {
+      setCollectionId(null);
+      const word = h.finish === "PR" ? " Proof" : h.finish === "SPR" ? " Silver Proof" : "";
+      setNewCollection({ coin_type_id: h.coin_type_id, finish: h.finish, label: `${h.series_name}${word} Collection` });
+    }
+    setForm((f) => ({
+      ...f,
+      year: h.year,
+      mint_mark: h.mint_mark,
+      variety: h.variety,
+      strike_designation: h.designation,
+      pcgs_number: h.pcgs_number,
+      grade_prefix: h.finish !== "MS" ? "PR" : f.grade_prefix === "PR" ? "MS" : f.grade_prefix,
+    }));
+  }
+
   // Back where the user came from, or (opened directly, e.g. from the NGC bookmark) to the coin or its collection.
   function cancel() {
     if (location.key !== "default") return navigate(-1);
@@ -573,7 +600,7 @@ export default function CoinFormPage() {
     e.preventDefault();
     if (submitting.current) return; // a double tap must not create the coin twice
     setError(null);
-    if (!collectionId) {
+    if (!collectionId && !newCollection) {
       setError("Choose a collection (create one from the sidebar first).");
       return;
     }
@@ -622,7 +649,8 @@ export default function CoinFormPage() {
       price_paid: paid.value,
       purchase_value_custom: atPurchase.value,
       sale_price: sold.value,
-      collection_id: collectionId,
+      collection_id: collectionId ?? 0,
+      new_collection: !collectionId && newCollection ? { coin_type_id: newCollection.coin_type_id, finish: newCollection.finish } : undefined,
       coin_type_id: isTypeSet ? memberTypeId : undefined,
       year: form.year ? Number(form.year) : null,
       grade: form.grade ? Number(form.grade) : null,
@@ -918,10 +946,19 @@ export default function CoinFormPage() {
       {/* ---- Coin ---- */}
       <section className="card form-section">
         <h2>{isSetSeries ? "Set" : "Coin"}</h2>
+        {!editInv && <CoinSearch onPick={pickFromCatalog} />}
         <div className="grid-4">
           <label className="field">
             <span>Collection</span>
-            <select value={collectionId ?? ""} onChange={(e) => setCollectionId(Number(e.target.value))}>
+            <select
+              value={collectionId ?? (newCollection ? "new" : "")}
+              onChange={(e) => {
+                if (e.target.value === "new") return;
+                setNewCollection(null);
+                setCollectionId(Number(e.target.value));
+              }}
+            >
+              {newCollection && !collectionId && <option value="new">New: {newCollection.label} (made when you save)</option>}
               {collectionGroups.map(({ type, collections: cols }) => (
                 <optgroup key={type.id} label={type.plural}>
                   {cols.map((c) => (

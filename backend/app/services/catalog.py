@@ -4,9 +4,12 @@ Each series in app/series.py lists the Greysheet catalog sections (nodes) for it
 proofs. We pull every collectible in them, cache them in `catalog_entries`, and match locally.
 """
 
+import gzip
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 from sqlalchemy import delete, func, select
@@ -19,7 +22,6 @@ from ..series import BY_SLUG, FINISHES
 from . import greysheet, quota
 from .greysheet import PricingError
 
-STALE_AFTER = timedelta(days=30)
 _GSA_RE = re.compile(r"GSA Hoard(?:,\s*(?:Hard|Soft) Package)?", re.I)
 
 
@@ -203,6 +205,55 @@ def sync(db: Session, coin_type: CoinType) -> SyncResult:
     return SyncResult(nodes=nodes, count=len(rows), synced_at=now)
 
 
+# ---- Bundled catalog -------------------------------------------------------------------------------------------
+# Every supported series' catalog, downloaded once (scripts/build_catalog.py) and shipped with the app, so searching
+# and matching never wait on Greysheet. A series missing from the bundle is still downloaded the first time it's
+# needed.
+
+BUNDLE = Path(__file__).resolve().parent.parent / "catalog_bundle.json.gz"
+_FIELDS = ("gsid", "node_id", "pcgs_number", "ngc_id", "year", "mint_mark", "designation", "strike", "variety", "name")
+
+
+def export_bundle(db: Session, path: Path = BUNDLE) -> int:
+    rows = db.execute(select(CatalogEntry, CoinType.slug).join(CoinType, CoinType.id == CatalogEntry.coin_type_id)
+                      .order_by(CoinType.slug, CatalogEntry.gsid)).all()
+    data = {"built": datetime.now(timezone.utc).isoformat(), "entries": [
+        {"series": slug, **{k: getattr(e, k) for k in _FIELDS}} for e, slug in rows]}
+    with gzip.open(path, "wt") as f:
+        json.dump(data, f, separators=(",", ":"))
+    return len(rows)
+
+
+def seed_from_bundle(db: Session, path: Path = BUNDLE) -> int:
+    """Load the bundled catalog for series that have none yet (or an older one). Returns entries added."""
+    if not path.exists():
+        return 0
+    with gzip.open(path, "rt") as f:
+        data = json.load(f)
+    built = datetime.fromisoformat(data["built"])
+    types = {t.slug: t.id for t in db.scalars(select(CoinType))}
+    by_series: dict[str, list[dict]] = {}
+    for e in data["entries"]:
+        by_series.setdefault(e.pop("series"), []).append(e)
+    added = 0
+    for slug, entries in by_series.items():
+        type_id = types.get(slug)
+        if type_id is None:
+            continue
+        count, last = status(db, type_id)
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if count and last is not None and last >= built:
+            continue  # what we have is as new as the bundle
+        db.execute(delete(CatalogEntry).where(CatalogEntry.coin_type_id == type_id))
+        gsids = [e["gsid"] for e in entries]
+        db.execute(delete(CatalogEntry).where(CatalogEntry.gsid.in_(gsids)))  # e.g. moved to another series
+        db.add_all(CatalogEntry(coin_type_id=type_id, synced_at=built, **e) for e in entries)
+        added += len(entries)
+    db.commit()
+    return added
+
+
 def status(db: Session, coin_type_id: int) -> tuple[int, datetime | None]:
     count, last = db.execute(
         select(func.count(CatalogEntry.id), func.max(CatalogEntry.synced_at)).where(
@@ -222,7 +273,7 @@ def ensure_synced(db: Session, coin_type: CoinType) -> None:
     count, last = status(db, coin_type.id)
     if last is not None and last.tzinfo is None:
         last = last.replace(tzinfo=timezone.utc)
-    if count == 0 or last is None or datetime.now(timezone.utc) - last > STALE_AFTER:
+    if count == 0 or last is None:
         failed = _failed.get(coin_type.id)
         if failed and datetime.now(timezone.utc) - failed[0] < RETRY_AFTER:
             if count:

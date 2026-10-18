@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..auth import current_user
 from ..db import get_db
 from ..models import CoinType, User
-from ..services import catalog, quota
+from ..services import catalog, coin_search, quota
 from ..services.greysheet import PricingError
 
 router = APIRouter(prefix="/api", tags=["catalog"])
@@ -89,6 +89,14 @@ def catalog_designations(
     ct = _coin_type(db, coin_type_id)
     _ensure_synced(db, ct)
     return catalog.designations(db, ct.id, finish)
+
+
+@router.get("/catalog/search")
+def catalog_search(q: str = Query(..., min_length=1, max_length=100), limit: int = Query(12, ge=1, le=30),
+                   db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Typeahead for the Add Coin form: "1878-S Morgan", "1962-S Roosevelt Proof" -> catalog entries, best first,
+    each with the user's collection for it (or none, so one is created when the coin is saved)."""
+    return coin_search.search(db, user.id, q, limit)
 
 
 @router.get("/catalog/match", response_model=MatchOut)

@@ -52,7 +52,7 @@ def _validate(body: CoinFields, collection: Collection, coin_type: CoinType) -> 
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"Mint mark must be one of {', '.join(marks)} for {coin_type.name}",
         )
-    data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw", "grading"})
+    data = body.model_dump(exclude={"collection_id", "coin_type_id", "lookup_raw", "grading", "new_collection"})
     if body.location == "grading" and (body.sale_price is not None or body.sale_date is not None):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "A coin at grading can't be sold. Mark it In Inventory once it's back.")
@@ -113,6 +113,8 @@ def _reject_duplicate(db: Session, user: User, data: dict, exclude_coin_id: int 
 
 @router.post("", response_model=CoinDetail, status_code=status.HTTP_201_CREATED)
 def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if not body.collection_id and body.new_collection is not None:
+        body.collection_id = _new_collection(db, user, body.new_collection.coin_type_id, body.new_collection.finish).id
     col = get_owned_collection(db, user, body.collection_id)
     _check_storage(db, user, body)
     coin_type = coin_type_for(db, col, body.coin_type_id)
@@ -132,6 +134,29 @@ def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depend
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)
+
+
+def _new_collection(db: Session, user: User, coin_type_id: int, finish: str) -> Collection:
+    """The user's first collection of this series and finish, made for a coin picked in the search."""
+    from ..services.coins import next_collection_number
+    from .importer import FINISH_WORD
+
+    ct = db.get(CoinType, coin_type_id)
+    if ct is None or finish not in (ct.finishes or ["MS"]):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That series has no collection of that kind.")
+    existing = db.scalar(select(Collection).where(Collection.user_id == user.id, Collection.coin_type_id == ct.id,
+                                                  Collection.finish == finish).order_by(Collection.number))
+    if existing is not None:
+        return existing
+    taken = set(db.scalars(select(Collection.name).where(Collection.user_id == user.id)))
+    n = 1
+    while (name := f"{ct.name}{FINISH_WORD[finish]} Collection {n}") in taken:
+        n += 1
+    col = Collection(user_id=user.id, coin_type_id=ct.id, finish=finish, name=name,
+                     number=next_collection_number(db, user.id, ct, finish))
+    db.add(col)
+    db.flush()
+    return col
 
 
 def _check_storage(db: Session, user: User, body: CoinIn | CoinUpdate) -> None:

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from .config import check_production, get_settings
 from .db import SessionLocal
 from .models import Collection, CoinType
-from .services import bullion as bullion_service, ebay, price_archive, quota
+from .services import bullion as bullion_service, catalog as catalog_service, ebay, price_archive, quota
 from .routers import attachments, auth, bullion, catalog, coins, collections, dashboard, grading, importer, jobs, label, metals, photos, pricing, reports, shared, storage, wants
 from .series import SERIES
 
@@ -45,6 +45,9 @@ async def lifespan(_: FastAPI):
     check_production(get_settings())
     get_settings().photo_dir.mkdir(parents=True, exist_ok=True)
     seed_coin_types()
+    if get_settings().seed_catalog:
+        with SessionLocal() as db:
+            catalog_service.seed_from_bundle(db)  # every series' Greysheet catalog, shipped with the app
     if get_settings().seed_spot_history:
         with SessionLocal() as db:
             bullion_service.seed_from_bundle(db)  # daily spot prices since 2000, shipped with the app

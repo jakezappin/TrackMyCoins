@@ -648,6 +648,25 @@ export interface MetalsOverview {
   };
 }
 
+// ---- Coin search (Add Coin) ----
+export interface CatalogHit {
+  gsid: number;
+  pcgs_number: string | null;
+  name: string;
+  label: string;
+  detail: string;
+  year: number;
+  mint_mark: string;
+  variety: string | null;
+  designation: string | null;
+  coin_type_id: number;
+  series_name: string;
+  finish: Finish;
+  /** The user's collection for it; null: one is created when the coin is saved. */
+  collection_id: number | null;
+  collection_name: string | null;
+}
+
 // ---- Storage ----
 export interface StorageSpotSummary {
   id: number;
@@ -1113,6 +1132,7 @@ export const api = {
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
   metals: () => request<MetalsOverview>("GET", "/api/metals"),
+  catalogSearch: (q: string) => request<CatalogHit[]>("GET", `/api/catalog/search?q=${encodeURIComponent(q)}`),
   storageSpots: () => request<StorageSpotSummary[]>("GET", "/api/storage/spots"),
   storageSpot: (id: number) => request<StorageSpot>("GET", `/api/storage/spots/${id}`),
   createStorageSpot: (b: { name: string; notes?: string | null }) => request<StorageSpotSummary>("POST", "/api/storage/spots", b),

@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     # small so it never crowds out people using the site. Off in tests.
     background_jobs: bool = True
     gold_api_key: str = ""
+    seed_catalog: bool = True  # load the bundled Greysheet catalog at start-up (off in tests)
     seed_spot_history: bool = True  # load the bundled daily spot prices at start-up (off in tests)  # gold-api.com: daily spot price history for bullion (free tier: 10 calls an hour)
     archive_pcgs_day: int = 100
     archive_greysheet_day: int = 50
