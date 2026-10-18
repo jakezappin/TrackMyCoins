@@ -1,15 +1,19 @@
 """Bullion: pure metal content, values from spot prices (live and daily history), value over time, and selling
 part of a roll or tube. Separate from the numismatic side: no grades, catalog or price guides.
 
-Spot history (USD per troy ounce, one price a day) is kept in SpotPrice: today's live price is recorded every
-day, and with a gold-api.com key (GOLD_API_KEY) past years are filled in from its price history API.
+Spot history (USD per troy ounce, one price a day) is kept in SpotPrice. It ships with the app (a bundled file of
+daily prices since 2000), today's live price is recorded every day, and with a gold-api.com key (GOLD_API_KEY)
+any missing days are filled in from its price history API.
 """
 
 import bisect
+import csv
+import gzip
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
 
 import httpx
 from sqlalchemy import func, select
@@ -179,8 +183,9 @@ def update_history(db: Session, max_requests: int = 8) -> dict:
             .where(SpotPrice.metal == metal, SpotPrice.source == "history")
         ).one()
         try:
-            if first is None or first > HISTORY_START + timedelta(days=30):
-                rows = fetch_history(metal, HISTORY_START, today)  # the whole history, once
+            if first is None:
+                # The whole history, once (where the source starts later, e.g. palladium in 2017, that's that).
+                rows = fetch_history(metal, HISTORY_START, today)
             elif last is None or (today - last).days >= 1:
                 rows = fetch_history(metal, last - timedelta(days=3), today)  # top up
             else:
@@ -325,3 +330,37 @@ def split_for_sale(db: Session, item: BullionItem, metal: str, *, quantity: int 
     db.add(sold)
     db.flush()
     return sold
+
+
+# ---- Bundled history ----------------------------------------------------------------------------------------
+# Daily prices since 2000 ship with the app (app/spot_history.csv.gz, written by scripts/export_spot_history.py),
+# so a new database has the whole history without calling any API; the API only adds the days since.
+
+BUNDLED = Path(__file__).resolve().parents[1] / "spot_history.csv.gz"
+
+
+def seed_from_bundle(db: Session) -> int:
+    """Load bundled daily prices the database doesn't have yet. Returns how many were added."""
+    if not BUNDLED.exists():
+        return 0
+    have = {(m, d) for m, d in db.execute(select(SpotPrice.metal, SpotPrice.day))}
+    new = []
+    with gzip.open(BUNDLED, "rt", newline="") as f:
+        for row in csv.DictReader(f):
+            day = date.fromisoformat(row["day"])
+            if (row["metal"], day) not in have:
+                new.append({"metal": row["metal"], "day": day, "price": Decimal(row["price"]), "source": "history"})
+    if new:
+        db.execute(SpotPrice.__table__.insert(), new)
+        db.commit()
+    return len(new)
+
+
+def export_bundle(db: Session, path: Path = BUNDLED) -> int:
+    rows = db.execute(select(SpotPrice.metal, SpotPrice.day, SpotPrice.price).order_by(SpotPrice.metal, SpotPrice.day)).all()
+    with gzip.open(path, "wt", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["metal", "day", "price"])
+        for m, d, p in rows:
+            w.writerow([m, d.isoformat(), f"{Decimal(str(p)):.4f}"])
+    return len(rows)

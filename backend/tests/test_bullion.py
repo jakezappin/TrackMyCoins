@@ -133,3 +133,17 @@ def test_bullion_kept_apart_from_coins(authed):
 @pytest.fixture(autouse=True)
 def _no_upkeep_thread(monkeypatch):
     monkeypatch.setattr(price_archive, "PAUSE_SECONDS", 0)
+
+
+def test_bundled_history_round_trip(client, tmp_path, monkeypatch):
+    path = tmp_path / "spot.csv.gz"
+    _spot("gold", date(2001, 3, 2), "265.5")
+    _spot("silver", date(2001, 3, 2), "4.4")
+    with SessionLocal() as db:
+        assert svc.export_bundle(db, path) == 2
+        db.query(SpotPrice).delete()
+        db.commit()
+        monkeypatch.setattr(svc, "BUNDLED", path)
+        assert svc.seed_from_bundle(db) == 2
+        assert svc.seed_from_bundle(db) == 0  # only what's missing
+        assert svc.SpotSeries.load(db, "gold").on(date(2001, 3, 5)) == Decimal("265.5")

@@ -13,6 +13,7 @@ os.environ["PCGS_API_TOKEN"] = ""
 os.environ["GREYSHEET_API_KEY"] = ""
 os.environ["GREYSHEET_API_TOKEN"] = ""
 os.environ["BACKGROUND_JOBS"] = "0"
+os.environ["SEED_SPOT_HISTORY"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
