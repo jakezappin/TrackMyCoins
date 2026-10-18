@@ -1,32 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type ImportPreview, type ImportResult, type ImportRow } from "../api";
+import { api, type ImportColumn, type ImportPreview, type ImportResult, type ImportRow } from "../api";
+import CleanupTool from "../components/CleanupTool";
+import DownloadLink from "../components/DownloadLink";
 import { useApp } from "../App";
 import { collectionPath, money } from "../format";
 
-type Mode = "file" | "certs";
-
-const TEMPLATE_HEADERS = [
-  "Type", "Date", "Grade", "Grading service", "Cert #", "CAC sticker", "Variety", "VAM", "Collector slab", "Toning",
-  "Price paid", "Date purchased", "Purchased from", "Notes",
-];
-const TEMPLATE_EXAMPLE = [
-  "Morgan Dollar", "1881-S", "MS65+ DMPL", "PCGS", "12345678", "Green", "", "VAM-3", "Rattler", "Obverse",
-  "250.00", "2025-03-15", "Heritage", "",
-];
+type Mode = "file" | "certs" | "cleanup";
 
 const rowKey = (r: ImportRow) => `${r.sheet}-${r.row}`;
-
-function downloadTemplate() {
-  const csv = [TEMPLATE_HEADERS, TEMPLATE_EXAMPLE].map((r) => r.map((v) => (v.includes(",") ? `"${v}"` : v)).join(",")).join("\n");
-  const url = URL.createObjectURL(new Blob([csv + "\n"], { type: "text/csv" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "TrackMyCoins_import_template.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 /** Bulk import from a spreadsheet (CSV / Excel, including our own export) or a pasted list of PCGS certs. */
 export default function ImportPage() {
@@ -139,16 +122,26 @@ export default function ImportPage() {
           <button type="button" className={`seg ${mode === "certs" ? "active" : ""}`} onClick={() => { setMode("certs"); reset(); }}>
             PCGS cert numbers
           </button>
+          <button type="button" className={`seg ${mode === "cleanup" ? "active" : ""}`} onClick={() => { setMode("cleanup"); reset(); }}>
+            Clean up a spreadsheet
+          </button>
         </div>
 
-        {mode === "file" ? (
+        {mode === "cleanup" ? (
+          <CleanupTool
+            onImport={(f) => {
+              setMode("file");
+              run(() => api.importPreview(collectionId, f));
+            }}
+          />
+        ) : mode === "file" ? (
           <div className="stack">
             <p className="muted small">
               A CSV or Excel file with one coin per row and column headings in the first row. A TrackMyCoins export
-              works as-is, including its Sold sheet. Columns can include Type (like Morgan Dollar), Date (like 1881-S), Grade (like MS65+ DMPL or
-              Raw AU55), Grading service, Cert #, CAC sticker, Variety, VAM, Collector slab, Toning, Price paid, Date
-              purchased, Purchased from and Notes.
+              works as-is, including its Sold sheet. Start from the template, or see which columns you can use below.
+              In your own format? Use <strong>Clean up a spreadsheet</strong> first.
             </p>
+            <ColumnGuide />
             <div className="row">
               {/* A real button (a hidden input inside a label can't be reached by keyboard) */}
               <button
@@ -170,9 +163,9 @@ export default function ImportPage() {
                   if (f) run(() => api.importPreview(collectionId, f));
                 }}
               />
-              <button type="button" className="btn" onClick={downloadTemplate}>
-                Download template
-              </button>
+              <DownloadLink className="btn" href={api.importTemplateUrl}>
+                Download template (Excel)
+              </DownloadLink>
             </div>
           </div>
         ) : (
@@ -242,6 +235,7 @@ export default function ImportPage() {
                         {r.target_new && <span className="tag">New</span>}
                       </span>
                     )}
+                    {ok && r.placement && <span className="small muted">{r.placement}</span>}
                     {r.errors.map((e) => (
                       <span key={e} className="small error">
                         {e}
@@ -389,5 +383,49 @@ function ImportReport({ result, onClose }: { result: ImportResult; onClose: () =
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** Which columns the import reads: required, sometimes required, optional (from the server, same as the template). */
+function ColumnGuide() {
+  const [cols, setCols] = useState<ImportColumn[] | null>(null);
+  return (
+    <details
+      className="column-guide"
+      onToggle={(e) => {
+        if ((e.target as HTMLDetailsElement).open && !cols) api.importColumns().then(setCols).catch(() => setCols([]));
+      }}
+    >
+      <summary>Which columns can I use?</summary>
+      {!cols ? (
+        <p className="muted small">Loading…</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="history">
+            <thead>
+              <tr>
+                <th>Column</th>
+                <th>Needed?</th>
+                <th>What to enter</th>
+                <th>Examples</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cols.map((c) => (
+                <tr key={c.header}>
+                  <td>
+                    <strong>{c.header}</strong>
+                  </td>
+                  <td className={`small need-${c.need === "Required" ? "req" : c.need === "Optional" ? "opt" : "some"}`}>{c.need}</td>
+                  <td className="small">{c.about}</td>
+                  <td className="small muted">{c.examples}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted small">Columns can be in any order, and headings are matched loosely (Cert, Cert #, Certification all work).</p>
+    </details>
   );
 }

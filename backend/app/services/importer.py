@@ -52,7 +52,10 @@ ALIASES = {
     "pcgs": "pcgs_number", "pcgsno": "pcgs_number", "pcgsnumber": "pcgs_number", "pcgscoinnumber": "pcgs_number",
     "pricepaid": "price_paid", "cost": "price_paid", "paid": "price_paid", "purchaseprice": "price_paid",
     "datepurchased": "purchase_date", "purchasedate": "purchase_date", "purchased": "purchase_date",
-    "dateacquired": "purchase_date", "acquired": "purchase_date",
+    "dateacquired": "purchase_date", "acquired": "purchase_date", "boughton": "purchase_date",
+    "datebought": "purchase_date", "bought": "purchase_date", "purchasedon": "purchase_date", "acquiredon": "purchase_date",
+    "boughtfrom": "purchased_from", "vendor": "purchased_from", "purchasedat": "purchased_from",
+    "pricebought": "price_paid", "costbasis": "price_paid", "amountpaid": "price_paid",
     "purchasedfrom": "purchased_from", "seller": "purchased_from", "source": "purchased_from",
     "dealer": "purchased_from", "from": "purchased_from",
     "saleprice": "sale_price", "soldfor": "sale_price",
@@ -65,6 +68,14 @@ ALIASES = {
     "inventory": "inventory_hint", "inventorynumber": "inventory_hint", "inventoryno": "inventory_hint",
     "estvalueatpurchase": "purchase_value", "valueatpurchase": "purchase_value",
     "estimatedvalueatpurchase": "purchase_value", "valueatpurchasefrom": "purchase_value_from",
+    # Where it's kept and whether it's out at grading (only used when the spreadsheet has these columns).
+    "storedin": "storage_name", "storage": "storage_name", "storagespot": "storage_name",
+    "storagelocation": "storage_name", "location": "storage_name", "box": "storage_name", "album": "storage_name",
+    "position": "storage_position", "storageposition": "storage_position", "slot": "storage_position",
+    "hole": "storage_position",
+    "status": "status", "inventorystatus": "status",
+    "submission": "submission", "gradingsubmission": "submission", "submissionnumber": "submission",
+    "submittedto": "submit_company", "sentto": "submit_company", "gradingcompany": "submit_company",
     "valuesource": "value_source", "estimatedvalue": "estimated_value", "myvalue": "estimated_value",
 }
 
@@ -315,7 +326,52 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
         f = {k: (v.isoformat() if isinstance(v, date) else str(v) if isinstance(v, Decimal) else v) for k, v in f.items()}
     valuation = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in valuation.items() if v is not None}
     hints = {k: v for k, v in (("text", hint), ("inventory", _text(vals.get("inventory_hint")))) if v}
+    hints.update(_placement(vals, errors, sold=bool(f.get("sale_price") or f.get("sale_date"))))
     return f, valuation, errors, hints
+
+
+STATUS_WORDS = {"inventory": "inventory", "ininventory": "inventory", "home": "inventory", "onhand": "inventory",
+                "inhand": "inventory", "grading": "grading", "atgrading": "grading", "submitted": "grading",
+                "outforgrading": "grading", "atgrader": "grading"}
+COMPANY_WORDS = {"ngc": "NGC", "pcgs": "PCGS", "cacg": "CACG", "cacgrading": "CACG", "cac": "CAC", "caccsticker": "CAC",
+                 "cacsticker": "CAC", "anacs": "ANACS", "icg": "ICG"}
+
+
+def _placement(vals: dict, errors: list[str], sold: bool) -> dict:
+    """Stored in / Position / Status / Submission / Submitted to, only from columns the spreadsheet has. Checked
+    against the user's own storage spots and submissions when the rows are placed."""
+    out: dict = {}
+    spot, pos = _text(vals.get("storage_name")), _text(vals.get("storage_position"))
+    if spot:
+        if len(spot) > 100:
+            errors.append("Stored in: names are 100 characters at most")
+        out["storage"] = spot[:100]
+        if pos:
+            out["position"] = pos[:60]
+    elif pos:
+        errors.append("Position without a Stored in")
+    status = _text(vals.get("status"))
+    if status:
+        st = STATUS_WORDS.get(_key(status))
+        if st is None:
+            errors.append(f"Status should be In Inventory or At Grading, not {status!r}")
+        elif st == "grading":
+            if sold:
+                errors.append("A sold coin can't be At Grading")
+            sub, comp = _text(vals.get("submission")), _text(vals.get("submit_company"))
+            company = COMPANY_WORDS.get(_key(comp)) if comp else None
+            if comp and company is None:
+                errors.append(f"Submitted to should be NGC, PCGS, CACG, CAC, ANACS or ICG, not {comp!r}")
+            if not sub and not comp:
+                errors.append("At Grading needs a Submission (its # or name) or a Submitted to (e.g. NGC) column")
+            out["status"] = "grading"
+            if sub:
+                out["submission"] = sub
+            if company:
+                out["submit_company"] = company
+        else:
+            out["status"] = "inventory"
+    return out
 
 
 def split_certs(text: str) -> list[str]:

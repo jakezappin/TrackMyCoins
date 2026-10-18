@@ -3690,3 +3690,15 @@ table {
 .kind-choice .seg { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; text-align: left; white-space: normal; }
 .kind-choice .seg .small { opacity: 0.8; font-weight: 400; }
 .notice { background: var(--gold-soft); border-radius: 8px; padding: 8px 10px; margin: 0; }
+
+/* ---- Import: column guide and cleanup ---- */
+.column-guide { margin: 4px 0; }
+.column-guide summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.need-req { color: var(--red); font-weight: 600; }
+.need-some { color: var(--warn); font-weight: 600; }
+.need-opt { color: var(--muted); }
+.cleanup-columns select.unmapped { color: var(--muted); }
+.cleanup-counts { margin: 8px 0; }
+.cleanup-change { display: block; }
+.cleanup-change del { color: var(--muted); }
+.mode-switch { flex-wrap: wrap; }

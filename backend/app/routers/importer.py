@@ -1,23 +1,30 @@
 """Bulk import: preview a spreadsheet or a list of PCGS certs, then create the coins the user keeps."""
 
+import json
+import re
+from datetime import date
+
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
-from ..models import CatalogEntry, Coin, CoinPhoto, CoinType, Collection, CollectionCounter, User
+from ..models import (CatalogEntry, Coin, CoinPhoto, CoinType, Collection, CollectionCounter, GradingSubmission,
+                      StorageSpot, User)
 from ..schemas import CoinFields, ImportValuation, small_json
 from ..series import BY_SLUG, FINISHES, Series
-from ..services import importer, lookups, quota, series_match
+from ..services import cleanup, import_columns, importer, lookups, quota, series_match
 from ..services import photos as store
 from ..services.coins import _cert_key, find_duplicate_cert, next_collection_number, next_inventory_number
 from .coins import _validate
 from .collections import get_owned_collection
 
 router = APIRouter(prefix="/api/import", tags=["import"])
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 MAX_CERTS = 50  # each PCGS cert costs a lookup call (1,000 a day)
 
@@ -33,6 +40,7 @@ class ImportRow(BaseModel):
     photo_urls: list[str] = Field(default=[], max_length=10)
     hints: dict[str, str | None] = {}  # what says which series the coin is (Type column, words after the date, inventory #)
     target: str | None = None  # the collection it will go into (preview)
+    placement: str | None = None  # where it'll be kept / which submission it's in (preview)
 
     @field_validator("fields", "valuation", "lookup_raw")
     @classmethod
@@ -195,11 +203,81 @@ class _Router:
         self.db.flush()
 
 
+class _Places:
+    """Storage spots and grading submissions named in the file: the user's own, by name (spots are created at
+    commit if new) or by submission # / name."""
+
+    def __init__(self, db: Session, user: User):
+        self.db, self.user = db, user
+        self.spots = {s.name.lower(): s for s in db.scalars(select(StorageSpot).where(StorageSpot.user_id == user.id))}
+        self.subs = list(db.scalars(select(GradingSubmission).where(GradingSubmission.user_id == user.id)))
+        self.new_spots: dict[str, StorageSpot] = {}
+        self.new_subs: dict[str, GradingSubmission] = {}
+
+    def submission(self, ref: str) -> GradingSubmission | str:
+        m = re.fullmatch(r"#?\s*(\d+)", ref.strip())
+        hit = next((s for s in self.subs if (m and s.number == int(m.group(1))) or
+                    (s.name and s.name.strip().lower() == ref.strip().lower())), None)
+        if hit is None:
+            return f"No grading submission {ref!r} (use its # or name from the Grading Tracker)"
+        if hit.date_returned:
+            return f"Submission #{hit.number} is already back"
+        return hit
+
+    def note(self, hints: dict) -> str | None:
+        parts = []
+        if hints.get("storage"):
+            new = hints["storage"].lower() not in self.spots
+            parts.append(f"Stored in {hints['storage']}{' (new)' if new else ''}"
+                         + (f" · {hints['position']}" if hints.get("position") else ""))
+        if hints.get("status") == "grading":
+            ref = hints.get("submission")
+            sub = self.submission(ref) if ref else None
+            parts.append(f"At grading: #{sub.number} {sub.company}" if isinstance(sub, GradingSubmission)
+                         else f"At grading: new {hints.get('submit_company')} submission")
+        return " · ".join(parts) or None
+
+    def check(self, hints: dict) -> str | None:
+        if hints.get("status") == "grading" and hints.get("submission"):
+            got = self.submission(hints["submission"])
+            if isinstance(got, str):
+                return got
+        return None
+
+    def apply(self, coin: Coin, hints: dict) -> None:
+        """Called at commit, after the coin is saved."""
+        from .grading import add_coin, next_number
+
+        name = hints.get("storage")
+        if name:
+            spot = self.spots.get(name.lower()) or self.new_spots.get(name.lower())
+            if spot is None:
+                spot = StorageSpot(user_id=self.user.id, name=name)
+                self.db.add(spot)
+                self.db.flush()
+                self.new_spots[name.lower()] = spot
+            coin.storage_id, coin.storage_position = spot.id, hints.get("position")
+        if hints.get("status") == "grading":
+            sub = self.submission(hints["submission"]) if hints.get("submission") else None
+            if not isinstance(sub, GradingSubmission):
+                company = hints.get("submit_company") or "NGC"
+                sub = self.new_subs.get(company)
+                if sub is None:
+                    sub = GradingSubmission(user_id=self.user.id, number=next_number(self.db, self.user),
+                                            company=company, kind="sticker" if company == "CAC" else "grading",
+                                            name=f"Imported {date.today():%b %d, %Y}", addons=[])
+                    self.db.add(sub)
+                    self.db.flush()
+                    self.new_subs[company] = sub
+            add_coin(self.db, sub, coin)
+
+
 def _check(db: Session, user: User, router_: _Router, rows: list[ImportRow]) -> list[tuple[ImportRow, Collection, CoinType]]:
     """Same rules as adding a coin by hand, plus the right series and duplicate certs within the file.
     Returns the rows that can be imported with where they go; the others get errors."""
     seen: dict[tuple[str, str], int] = {}
     ok = []
+    places = _Places(db, user)
     for r in rows:
         made_up = not r.description or r.description == _describe(r.fields)  # ours, not PCGS's
         r.description = r.description or _describe(r.fields)
@@ -231,6 +309,10 @@ def _check(db: Session, user: User, router_: _Router, rows: list[ImportRow]) -> 
                 r.errors.append(f"Same cert as row {seen[key]}")
                 continue
             seen[key] = r.row
+        if (bad := places.check(r.hints)):
+            r.errors.append(bad)
+            continue
+        r.placement = places.note(r.hints)
         r.target, r.target_new = col.name, col.id is None
         if made_up:
             r.description = _describe(r.fields, ct.name)
@@ -242,6 +324,63 @@ def _preview(db, user, col, rows: list[ImportRow]) -> PreviewOut:
     _check(db, user, _Router(db, user, col, rows), rows)
     bad = sum(1 for r in rows if r.errors)
     return PreviewOut(collection_id=col.id if col else None, rows=rows, ok_count=len(rows) - bad, error_count=bad)
+
+
+@router.get("/columns")
+def columns(_: User = Depends(current_user)):
+    """The import spreadsheet's columns: which are required and what goes in them (the Import page's guide)."""
+    return import_columns.guide()
+
+
+@router.get("/template")
+def template(_: User = Depends(current_user)):
+    return Response(import_columns.template_xlsx(), media_type=XLSX,
+                    headers={"Content-Disposition": 'attachment; filename="TrackMyCoins_import_template.xlsx"'})
+
+
+async def _read_upload(file: UploadFile) -> list[tuple[str, int, dict]]:
+    data = await file.read(10 * 1024 * 1024 + 1)
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "That file is too large (10 MB max).")
+    try:
+        raw_rows = importer.read_rows(file.filename or "", data)
+    except importer.ImportError_ as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    if not raw_rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No rows found. The first row should be column headings.")
+    if len(raw_rows) > importer.MAX_ROWS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"At most {importer.MAX_ROWS} rows at a time.")
+    return raw_rows
+
+
+def _mapping(text: str | None) -> dict[str, str]:
+    if not text:
+        return {}
+    try:
+        m = json.loads(text)
+    except ValueError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Column choices aren't valid")
+    allowed = {c["field"] for c in cleanup.CHOICES}
+    if not isinstance(m, dict) or any(not isinstance(k, str) or v not in allowed for k, v in m.items()):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Column choices aren't valid")
+    return m
+
+
+@router.post("/cleanup")
+async def cleanup_preview(file: UploadFile, mapping: str | None = Form(None), db: Session = Depends(get_db),
+                          user: User = Depends(current_user)):
+    """Spreadsheet cleanup: each column's match, and each row cleaned with what changed and what needs fixing."""
+    return cleanup.clean(db, user.id, await _read_upload(file), _mapping(mapping))
+
+
+@router.post("/cleanup/file")
+async def cleanup_file(file: UploadFile, mapping: str | None = Form(None), db: Session = Depends(get_db),
+                       user: User = Depends(current_user)):
+    """The cleaned spreadsheet (Coins, plus Changes and Problems sheets), ready to import."""
+    result = cleanup.clean(db, user.id, await _read_upload(file), _mapping(mapping))
+    stem = re.sub(r"[^A-Za-z0-9]+", "_", (file.filename or "spreadsheet").rsplit(".", 1)[0]).strip("_") or "spreadsheet"
+    return Response(cleanup.to_xlsx(result), media_type=XLSX,
+                    headers={"Content-Disposition": f'attachment; filename="{stem}_cleaned.xlsx"'})
 
 
 @router.post("/preview", response_model=PreviewOut)
@@ -320,6 +459,7 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
     placed = _check(db, user, router_, body.rows)
     router_.create_planned({(c.coin_type_id, c.finish) for _, c, _ in placed})
     rows = body.rows
+    places = _Places(db, user)
     created: list[tuple[Coin, list[str]]] = []
     per_collection: dict[int, dict] = {}
     for r, target, ct in placed:
@@ -335,6 +475,7 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
         coin.holder_premium = v.holder_premium
         db.add(coin)
         db.flush()
+        places.apply(coin, r.hints)  # Stored in / At Grading, only if the file had those columns
         created.append((coin, r.photo_urls[:4] if body.import_photos else []))
         entry = per_collection.setdefault(target.id, {"id": target.id, "name": target.name, "count": 0,
                                                        "new": (target.coin_type_id, target.finish) in router_.planned})

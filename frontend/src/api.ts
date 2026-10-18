@@ -115,6 +115,29 @@ export interface ImportRow {
   /** The collection the coin will go into, and whether that collection will be created. */
   target?: string | null;
   target_new?: boolean;
+  /** Where it'll be kept / which grading submission it goes in (only when the file has those columns). */
+  placement?: string | null;
+}
+
+export interface ImportColumn {
+  header: string;
+  need: "Required" | "Sometimes required" | "Optional";
+  about: string;
+  examples: string;
+}
+
+export interface CleanupResult {
+  headers: { header: string; field: string; auto: string; samples: string[] }[];
+  choices: { field: string; label: string }[];
+  columns: string[];
+  rows: {
+    sheet: string;
+    row: number;
+    cleaned: Record<string, string>;
+    changes: { column: string; before: string; after: string }[];
+    problems: string[];
+  }[];
+  counts: { rows: number; changed: number; problems: number };
 }
 
 export interface ImportPreview {
@@ -1093,6 +1116,31 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** POST a form and get a file back (e.g. a cleaned spreadsheet), with its name. */
+export async function postForFile(url: string, body: FormData, fallbackName = "download"): Promise<File> {
+  const res = await send(url, { method: "POST", credentials: "same-origin", body }, UPLOAD_TIMEOUT_MS);
+  checkSession(url, res.status);
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new ApiError(res.status, errorMessage(data, `${res.status} ${res.statusText}`), data?.detail);
+  }
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  return new File([await res.blob()], plain ? plain[1] : fallbackName, { type: res.headers.get("Content-Type") ?? "" });
+}
+
+/** Offer a file the app already has (e.g. from postForFile) as a download. */
+export function saveFile(file: File) {
+  const href = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(href), 10_000);
+}
+
 /** Download a report or export: an error comes back as a message, never saved as the file. */
 export async function downloadFile(url: string, fallbackName = "download"): Promise<void> {
   const res = await send(url, { credentials: "same-origin" }, UPLOAD_TIMEOUT_MS);
@@ -1211,6 +1259,20 @@ export const api = {
     if (collectionId !== null) fd.append("collection_id", String(collectionId));
     fd.append("file", file);
     return request<ImportPreview>("POST", "/api/import/preview", fd);
+  },
+  importColumns: () => request<ImportColumn[]>("GET", "/api/import/columns"),
+  importTemplateUrl: "/api/import/template",
+  cleanup: (file: File, mapping: Record<string, string>) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("mapping", JSON.stringify(mapping));
+    return request<CleanupResult>("POST", "/api/import/cleanup", fd);
+  },
+  cleanupFile: (file: File, mapping: Record<string, string>) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("mapping", JSON.stringify(mapping));
+    return postForFile("/api/import/cleanup/file", fd, "cleaned.xlsx");
   },
   importCerts: (collectionId: number | null, certs: string) =>
     request<ImportPreview>("POST", "/api/import/certs", { collection_id: collectionId, certs }),
