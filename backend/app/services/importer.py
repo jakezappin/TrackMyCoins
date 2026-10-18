@@ -13,6 +13,7 @@ from decimal import Decimal, InvalidOperation
 from openpyxl import load_workbook
 from pydantic import ValidationError
 
+from ..designations import canonical, unknown
 from ..schemas import CoinFields
 from . import details, series_match
 
@@ -84,6 +85,45 @@ DATE_RE = re.compile(r"^\s*(\d{4})(?:\s*[-/]\s*([A-Z]{1,2})\b|\s+(CC|[PDSOW])\b)
 OVERDATE_RE = re.compile(r"^\s*(\d{4})/(\d{1,2})(?:\s*-\s*([A-Z]{1,2})\b)?\s*(.*)$", re.I)
 OVERMINT_RE = re.compile(r"^\s*(\d{4})\s*-\s*([A-Z]{1,2})/([A-Z]{1,2})\b\s*(.*)$", re.I)
 GRADE_RE = re.compile(r"^(?:(raw)\s*)?(proof|unc|[A-Za-z]{1,3}(?![A-Za-z]))?[\s-]*(\d{1,2})?\s*(\+)?\s*(★|\*|star)?\s*(.*)$", re.I)
+# What else people put in a Grade cell: the service, the cert and the CAC sticker ("FR02 (32611221 PCGS)",
+# "MS65 PCGS #12345678 CAC Green").
+_CELL_SERVICE = re.compile(r"\b(PCGS|NGC|ANACS|CACG|ICG)\b", re.I)
+_CELL_CERT = re.compile(r"(?:#\s*)?\b(\d{6,8}-\d{3}|\d{6,10})\b")
+_CELL_CAC = re.compile(r"\b(?:(green|gold)\s+)?CAC\b(?:\s+(green|gold))?(?:\s+(?:bean|sticker))?", re.I)
+
+
+def split_grade_cell(text: str | None) -> tuple[str | None, dict]:
+    """The grade, and anything else written in the Grade cell: ("FR02", {"grading_service": "PCGS",
+    "cert_number": "32611221"}) from "FR02 (32611221 PCGS)"."""
+    if not text:
+        return text, {}
+    found: dict = {}
+    rest = text
+    if (m := _CELL_SERVICE.search(rest)):
+        found["grading_service"] = m.group(1).upper()
+        rest = rest[: m.start()] + " " + rest[m.end():]
+    if (m := _CELL_CAC.search(rest)):
+        found["cac"] = (m.group(1) or m.group(2) or "yes").lower()
+        rest = rest[: m.start()] + " " + rest[m.end():]
+    # A cert is 6+ digits; a grade never is (and a grade's own digits come right after its letters).
+    if (m := _CELL_CERT.search(rest)):
+        found["cert_number"] = m.group(1)
+        rest = rest[: m.start()] + " " + rest[m.end():]
+    rest = re.sub(r"[()\[\]{},;|#]", " ", rest)
+    return " ".join(rest.split()) or None, found
+
+
+def service_from_cert(cert: str | None) -> tuple[str | None, bool]:
+    """The grading service a cert number's format points to, and whether that's certain. NGC's are 7 digits, a
+    dash and 3 (1234567-001); PCGS's are 7 or 8 digits (so are some ANACS certs, hence only "likely")."""
+    c = (cert or "").strip()
+    if re.fullmatch(r"\d{6,8}-\d{3}", c):
+        return "NGC", True
+    if re.fullmatch(r"\d{7,8}", c):
+        return "PCGS", False
+    return None, False
+
+
 SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "ICG": "ICG", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
             "RAW": "RAW", "UNGRADED": "RAW", "NONE": "RAW"}
 YES = {"yes", "y", "true", "1", "x", "✓", "green", "gold"}
@@ -230,11 +270,18 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     hint = " ".join(x for x in (_text(vals.get("series_hint")), rest) if x)
     named = series_match.from_text(rest, year).series if rest else None
     f["variety"] = _text(vals.get("variety")) or (series_match.strip_series_words(rest, named) if named else rest)
+    if f["variety"]:  # "(7TF)", "[VAM-3]" -> "7TF", "VAM-3"
+        f["variety"] = " ".join(re.sub(r"[()\[\]{}]", " ", f["variety"]).split()).strip(" ,-") or None
     f["vam"] = _text(vals.get("vam"))
 
-    # Grade: "MS65+ DMPL", "PR69 DCAM", "Raw AU55", "65".
+    # Grade: "MS65+ DMPL", "MS64PL", "PR69 DCAM", "Raw AU55", "65", and maybe the service, cert and CAC with it.
+    grade_text, in_cell = split_grade_cell(_text(vals.get("grade")))
+    for k in ("grading_service", "cert_number"):
+        if in_cell.get(k) and not _text(vals.get(k)):
+            vals[k] = in_cell[k]
+    if in_cell.get("cac") and not (_text(vals.get("cac")) or _text(vals.get("cac_sticker"))):
+        vals["cac"] = in_cell["cac"]
     service = _text(vals.get("grading_service"))
-    grade_text = _text(vals.get("grade"))
     is_raw = False
     # Details grades: "AU Details", "AU55 Details - Cleaned", "Genuine - Cleaned - XF Details".
     is_details, problem = details.detect(grade_text)
@@ -265,7 +312,13 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
             f["grade"] = int(m.group(3)) if m.group(3) else None
             f["grade_plus"] = bool(m.group(4))
             f["grade_star"] = bool(m.group(5))
-            f["strike_designation"] = m.group(6).strip() or None
+            # Designations after the grade ("PL", "DCAM", "Ultra Cameo"); other words ("Toned") go to Notes.
+            tail = m.group(6).strip()
+            if tail:
+                f["strike_designation"] = canonical(tail)
+                extra = [w for w in re.findall(r"[^\s,;/]+", tail) if unknown(w)]
+                if extra:
+                    f["grade_note"] = " ".join(extra)
         else:
             errors.append(f"Couldn't read the grade: {grade_text}")
     if _text(vals.get("strike_designation")):
@@ -281,8 +334,15 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     else:
         f["grading_service"] = "RAW" if is_raw or not _text(vals.get("cert_number")) else None
         if f["grading_service"] is None:
-            errors.append("There's a cert number but no grading service")
-            f["grading_service"] = "RAW"
+            # No service column: tell it from the cert number's format (1234567-001 is NGC, 12345678 PCGS).
+            guess, certain = service_from_cert(_text(vals.get("cert_number")))
+            if guess:
+                f["grading_service"] = guess
+                if not certain:
+                    f["service_guessed"] = True
+            else:
+                errors.append("There's a cert number but no grading service (add PCGS, NGC... after it or in a column)")
+                f["grading_service"] = "RAW"
     if is_raw:
         f["grading_service"] = "RAW"
     f["cert_number"] = _text(vals.get("cert_number"))
@@ -323,6 +383,10 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     f["sale_date"] = _date(vals.get("sale_date"), errors, "Sale date")
     f["sold_to"] = _text(vals.get("sold_to"))
     f["notes"] = _text(vals.get("notes"))
+    grade_note = f.pop("grade_note", None)
+    if grade_note:  # words after the grade that aren't a designation ("MS63 Toned")
+        f["notes"] = "; ".join(x for x in (f["notes"], f"Grade note: {grade_note}") if x)
+    service_guessed = f.pop("service_guessed", False)
     if sold_sheet and f["sale_price"] is None and f["sale_date"] is None:
         errors.append("Row on the Sold sheet without a sale price or date")
 
@@ -347,6 +411,8 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
         f = {k: (v.isoformat() if isinstance(v, date) else str(v) if isinstance(v, Decimal) else v) for k, v in f.items()}
     valuation = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in valuation.items() if v is not None}
     hints = {k: v for k, v in (("text", hint), ("inventory", _text(vals.get("inventory_hint")))) if v}
+    if service_guessed:
+        hints["service_guessed"] = True
     hints.update(_placement(vals, errors, sold=bool(f.get("sale_price") or f.get("sale_date"))))
     return f, valuation, errors, hints
 

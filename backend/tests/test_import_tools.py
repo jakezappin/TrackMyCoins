@@ -81,3 +81,24 @@ def test_cleanup(authed, morgan_collection):
     p = authed.post("/api/import/preview", files={"file": ("c.xlsx", f.content, "application/octet-stream")}).json()
     assert p["ok_count"] == 2
     assert authed.post("/api/import/cleanup", files=_csv(text), data={"mapping": '{"Coin": "rm -rf"}'}).status_code == 422
+
+
+def test_cleanup_grade_cells_with_service_cert_and_designation(authed):
+    """What people write in a Grade column: "FR02 (32611221 PCGS)", "MS64PL", "PF 69 Ultra Cameo NGC 2345678-004";
+    a cert with no service says which one it is by its format."""
+    text = ("Coin,Grade,Cert\n"
+            '1878-P Morgan Dollar (7TF),FR02 (32611221 PCGS),\n'
+            "1881-S Morgan Dollar,MS64PL,\n"
+            "1895 Morgan Dollar,PF 69 Ultra Cameo NGC 2345678-004,\n"
+            "1884-CC Morgan Dollar,MS63 Toned CAC Green,23456789\n"
+            "1921 Morgan Dollar,AU58,1234567-002\n"
+            "1921 Morgan Dollar,AU58,9876543210\n")
+    rows = authed.post("/api/import/cleanup", files=_csv(text)).json()["rows"]
+    got = [(r["cleaned"]["Grading service"], r["cleaned"]["Cert #"], r["cleaned"]["Grade"]) for r in rows]
+    assert got[:5] == [("PCGS", "32611221", "FR2"), ("Raw", "", "MS64 PL"), ("NGC", "2345678-004", "PR69 DCAM"),
+                       ("PCGS", "23456789", "MS63"), ("NGC", "1234567-002", "AU58")]
+    assert rows[0]["cleaned"]["Variety"] == "7TF" and not rows[0]["problems"]
+    assert rows[3]["cleaned"]["CAC sticker"] == "Green" and "Grade note: Toned" in rows[3]["cleaned"]["Notes"]
+    assert rows[3]["notes"] and "cert number" in rows[3]["notes"][0]  # PCGS from an 8-digit cert: a guess, flagged
+    assert not rows[4]["notes"]  # NGC's format is certain
+    assert any("no grading service" in p for p in rows[5]["problems"])  # 10 digits: can't tell

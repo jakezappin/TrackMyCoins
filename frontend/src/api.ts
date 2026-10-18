@@ -142,6 +142,8 @@ export interface CleanupResult {
     cleaned: Record<string, string>;
     changes: { column: string; before: string; after: string }[];
     problems: string[];
+    /** Worth a look, but not a problem (e.g. a grading service worked out from the cert number). */
+    notes?: string[];
   }[];
   counts: { rows: number; changed: number; problems: number };
 }

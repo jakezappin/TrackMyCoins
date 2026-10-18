@@ -239,7 +239,11 @@ def clean(db: Session, user_id: int, rows: list[tuple[str, int, dict]], mapping:
             if _norm(before) != _norm(after) and (before or after):
                 changes.append({"column": head, "before": before, "after": after})
         used |= {h for h, v in cleaned.items() if v}
-        out_rows.append({"sheet": sheet, "row": num, "cleaned": cleaned, "changes": changes, "problems": problems})
+        notes = []
+        if hints.get("service_guessed"):
+            notes.append(f"Grading service {cleaned['Grading service']} worked out from the cert number's format. Check it.")
+        out_rows.append({"sheet": sheet, "row": num, "cleaned": cleaned, "changes": changes, "problems": problems,
+                         "notes": notes})
 
     columns = [h for h in HEADERS if h in used or h in ("Type", "Date", "Grading service", "Cert #", "Grade")]
     columns += [h for h in ("Toner premium", "Holder premium", "Value source", "Estimated value") if h in used]

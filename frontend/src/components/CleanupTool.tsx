@@ -180,6 +180,11 @@ export default function CleanupTool({ onImport }: { onImport: (cleaned: File) =>
                         {p}
                       </span>
                     ))}
+                    {(r.notes ?? []).map((n) => (
+                      <span key={n} className="small warn">
+                        {n}
+                      </span>
+                    ))}
                   </div>
                 </li>
               ))}
