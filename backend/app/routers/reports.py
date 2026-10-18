@@ -170,6 +170,8 @@ COIN_COLUMNS = [
     ("Details %", 9, lambda c: details.pct(c) if c.details else None),
     ("Value source", 10, lambda c: "Own value" if c.value_source == "custom" else "CPG"),
     ("Estimated value", 14, lambda c: value_estimate(c)),
+    ("Stored in", 16, lambda c: c.storage.name if c.storage else None),
+    ("Position", 12, lambda c: c.storage_position),
     ("Photos", 7, lambda c: len(c.photos)),
     ("Notes", 30, lambda c: c.notes),
 ]

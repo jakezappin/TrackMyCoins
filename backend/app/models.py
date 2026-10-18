@@ -300,6 +300,9 @@ class Coin(Base):
     strike_designation: Mapped[str | None] = mapped_column(String(20))  # PL, DMPL, RD, FB, DCAM, "RD CAM" ...
     cac: Mapped[bool] = mapped_column(Boolean, default=False)
     cac_sticker: Mapped[str | None] = mapped_column(String(10))  # green | gold
+    # Where the owner keeps it (an album, a box...) and where in it ("Page 3, hole 14"). Kept while it's at grading.
+    storage_id: Mapped[int | None] = mapped_column(ForeignKey("storage_spots.id", ondelete="SET NULL"), index=True)
+    storage_position: Mapped[str | None] = mapped_column(String(60))
     # Where the coin is: "inventory" (with the owner) or "grading" (out at a grader, in a GradingSubmission).
     location: Mapped[str] = mapped_column(String(12), default="inventory", server_default="inventory")
     # Details grade ("AU Details – Cleaned"): genuine but with a problem, so not priced like a straight grade.
@@ -367,6 +370,7 @@ class Coin(Base):
     coin_type: Mapped[CoinType] = relationship()
     collection: Mapped[Collection] = relationship(back_populates="coins")
     user: Mapped[User] = relationship()
+    storage: Mapped["StorageSpot | None"] = relationship(viewonly=True)
     photos: Mapped[list["CoinPhoto"]] = relationship(
         back_populates="coin", cascade="all, delete-orphan", order_by="CoinPhoto.sort_order"
     )
@@ -451,6 +455,9 @@ class BullionItem(Base):
     sold_to: Mapped[str | None] = mapped_column(String(200))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Where it's kept (see StorageSpot) and where in it.
+    storage_id: Mapped[int | None] = mapped_column(ForeignKey("storage_spots.id", ondelete="SET NULL"), index=True)
+    storage_position: Mapped[str | None] = mapped_column(String(60))
 
     collection: Mapped[BullionCollection] = relationship(back_populates="items")
     photos: Mapped[list["BullionPhoto"]] = relationship(
@@ -582,4 +589,18 @@ class GradingAttachment(Base):
     original_name: Mapped[str] = mapped_column(String(200))
     content_type: Mapped[str] = mapped_column(String(60))
     size_bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class StorageSpot(Base):
+    """Where the owner keeps coins and bullion: "Dansco Peace Album", "Box #12" or a code of their own. Just a name
+    and notes ("In the safe"); no types or nesting."""
+
+    __tablename__ = "storage_spots"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

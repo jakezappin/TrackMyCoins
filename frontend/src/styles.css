@@ -3641,3 +3641,26 @@ table {
 .span-2 { grid-column: span 2; }
 @media (max-width: 640px) { .span-2 { grid-column: auto; } }
 .back-link { align-self: flex-start; width: auto; }
+
+/* ---- Storage ---- */
+.tag.storage {
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+.storage-card:hover { box-shadow: 0 2px 8px rgba(20, 24, 30, 0.1); }
+.storage-notes { white-space: pre-line; }
+.storage-value { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
+.storage-spot-page .card { margin-top: 16px; }
+.storage-items .tag { margin-left: 6px; }

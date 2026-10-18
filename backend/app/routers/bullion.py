@@ -22,6 +22,7 @@ from ..services import bullion as svc
 from ..services import bullion_io as bio
 from ..services.importer import ImportError_
 from ..services import photos as store
+from .storage import check_spot
 
 router = APIRouter(prefix="/api/bullion", tags=["bullion"])
 settings = get_settings()
@@ -59,8 +60,11 @@ class ItemIn(BaseModel):
     sale_date: date | None = None
     sold_to: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=5000)
+    # Where it's kept (a Storage spot) and where in it.
+    storage_id: int | None = None
+    storage_position: str | None = Field(default=None, max_length=60)
 
-    @field_validator("description", "purchased_from", "sold_to", "notes", mode="before")
+    @field_validator("description", "purchased_from", "sold_to", "notes", "storage_position", mode="before")
     @classmethod
     def _blank(cls, v):
         return v.strip() or None if isinstance(v, str) else v
@@ -149,7 +153,20 @@ def _item_out(item: BullionItem, series: svc.SpotSeries | None, spot_now: Decima
         "held_days": ((item.sale_date or datetime.now(timezone.utc).date()) - svc.started(item)).days,
         "long_term": svc.long_term(svc.started(item), item.sale_date or datetime.now(timezone.utc).date()),
         "thumbnail_url": f"{_photo_url(item.photos[0])}?size=thumb" if item.photos else None,
+        "storage_id": item.storage_id, "storage_position": item.storage_position,
+        "storage_name": _storage_name(item),
     }
+
+
+def _storage_name(item: BullionItem) -> str | None:
+    if item.storage_id is None:
+        return None
+    from sqlalchemy.orm import object_session
+
+    from ..models import StorageSpot
+
+    spot = object_session(item).get(StorageSpot, item.storage_id) if object_session(item) else None
+    return spot.name if spot else None
 
 
 def _collection_out(db: Session, col: BullionCollection, with_items: bool) -> dict:
@@ -171,6 +188,8 @@ def _check_metal(body: ItemIn, metal: str) -> None:
 
 
 def _apply(item: BullionItem, body: ItemIn) -> None:
+    if body.storage_id is None:
+        body.storage_position = None
     for k, v in body.model_dump(exclude={"collection_id"}).items():
         setattr(item, k, v)
     if body.face_value is not None:  # junk silver: the face value is the amount
@@ -262,6 +281,7 @@ def all_history(db: Session = Depends(get_db), user: User = Depends(current_user
 def create_item(body: ItemIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     col = _collection(db, user, body.collection_id)
     _check_metal(body, col.metal)
+    check_spot(db, user, body.storage_id)
     item = BullionItem(user_id=user.id, collection_id=col.id,
                        inventory_number=svc.next_inventory_number(db, user.id, col.metal))
     _apply(item, body)
@@ -283,6 +303,7 @@ def update_item(inv: str, body: ItemIn, db: Session = Depends(get_db), user: Use
     if target.metal != item.collection.metal:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Move it to a collection of the same metal.")
     _check_metal(body, target.metal)
+    check_spot(db, user, body.storage_id)
     item.collection_id = target.id
     _apply(item, body)
     db.commit()

@@ -203,6 +203,9 @@ export interface CoinFields {
   details_pct: number | null;
   /** With the owner, or out at a grading company. */
   location: "inventory" | "grading";
+  /** Where it's kept (a Storage spot) and where in it, e.g. "Page 3, hole 14". */
+  storage_id: number | null;
+  storage_position: string | null;
   slab_soapbox: boolean;
   slab_ngc_fatty: boolean;
   slab_rattler: boolean;
@@ -269,6 +272,7 @@ export interface Coin extends CoinFields {
   details_basis: string | null;
   /** A Details coin's share of CPG, before premiums. */
   details_value: string | null;
+  storage_name: string | null;
   /** The submission it's in while at grading. */
   grading: { id: number; number: number; company: GradingCompany; company_label: string; name: string | null; status: string; expected_grade: string | null } | null;
   latest_greysheet: PriceQuote | null;
@@ -386,10 +390,14 @@ export interface BullionItemIn {
   sale_date: string | null;
   sold_to: string | null;
   notes: string | null;
+  /** Where it's kept (a Storage spot) and where in it. */
+  storage_id?: number | null;
+  storage_position?: string | null;
 }
 
 export interface BullionItem extends BullionItemIn {
   id: number;
+  storage_name: string | null;
   inventory_number: string;
   collection_name: string;
   metal: Metal;
@@ -638,6 +646,34 @@ export interface MetalsOverview {
     coins_counted: number;
     coins_total: number;
   };
+}
+
+// ---- Storage ----
+export interface StorageSpotSummary {
+  id: number;
+  name: string;
+  notes: string | null;
+  coin_count: number;
+  bullion_count: number;
+  value: string;
+  unvalued: number;
+  created_at: string;
+}
+
+export interface StoredItem {
+  kind: "coin" | "bullion";
+  inventory_number: string;
+  position: string | null;
+  title: string;
+  subtitle: string | null;
+  grade: string;
+  value: string | null;
+  at_grading: boolean;
+  thumbnail_url: string | null;
+}
+
+export interface StorageSpot extends StorageSpotSummary {
+  items: StoredItem[];
 }
 
 // ---- Grading Tracker ----
@@ -1077,6 +1113,17 @@ export const api = {
 
   coinTypes: () => request<CoinType[]>("GET", "/api/coin-types"),
   metals: () => request<MetalsOverview>("GET", "/api/metals"),
+  storageSpots: () => request<StorageSpotSummary[]>("GET", "/api/storage/spots"),
+  storageSpot: (id: number) => request<StorageSpot>("GET", `/api/storage/spots/${id}`),
+  createStorageSpot: (b: { name: string; notes?: string | null }) => request<StorageSpotSummary>("POST", "/api/storage/spots", b),
+  updateStorageSpot: (id: number, b: { name: string; notes?: string | null }) =>
+    request<StorageSpot>("PUT", `/api/storage/spots/${id}`, b),
+  deleteStorageSpot: (id: number) => request<void>("DELETE", `/api/storage/spots/${id}`),
+  storeItem: (id: number, b: { kind: "coin" | "bullion"; inventory_number: string; position?: string | null }) =>
+    request<StorageSpot>("POST", `/api/storage/spots/${id}/items`, b),
+  unstoreItem: (id: number, kind: "coin" | "bullion", inv: string) =>
+    request<StorageSpot>("DELETE", `/api/storage/spots/${id}/items/${kind}/${encodeURIComponent(inv)}`),
+  storageReportUrl: (id: number, values: boolean) => `/api/storage/spots/${id}/report?values=${values}`,
   gradingCatalog: () => request<GradingCatalog>("GET", "/api/grading/tiers"),
   submissions: () => request<SubmissionSummary[]>("GET", "/api/grading/submissions"),
   submission: (id: number) => request<Submission>("GET", `/api/grading/submissions/${id}`),

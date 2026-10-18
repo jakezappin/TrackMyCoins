@@ -154,6 +154,9 @@ class CoinFields(BaseModel):
     details_pct: int | None = Field(default=None, ge=1, le=100)
     # In the owner's hands, or out at a grading company (in a Grading Tracker submission).
     location: Literal["inventory", "grading"] = "inventory"
+    # Where it's kept (a Storage spot) and where in it, e.g. "Page 3, hole 14".
+    storage_id: int | None = None
+    storage_position: str | None = Field(default=None, max_length=60)
 
     slab_soapbox: bool = False
     slab_ngc_fatty: bool = False
@@ -270,7 +273,8 @@ class CoinFields(BaseModel):
             return v or None
         return v
 
-    @field_validator("cert_number", "vam", "variety", "pcgs_number", "purchased_from", "sold_to", "notes", mode="before")
+    @field_validator("cert_number", "vam", "variety", "pcgs_number", "purchased_from", "sold_to", "notes",
+                     "storage_position", mode="before")
     @classmethod
     def _blank_to_none(cls, v):
         if isinstance(v, str):
@@ -352,6 +356,7 @@ class CoinOut(CoinFields, ORM):
     details_value: Decimal | None = None  # a Details coin's share of CPG (before premiums)
     # The submission it's in while at grading: {"id", "number", "company", "company_label", "status"}.
     grading: dict | None = None
+    storage_name: str | None = None
     latest_greysheet: PriceQuoteOut | None = None
     photo_count: int = 0
     thumbnail_url: str | None = None

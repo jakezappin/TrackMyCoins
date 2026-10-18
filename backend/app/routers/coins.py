@@ -114,6 +114,7 @@ def _reject_duplicate(db: Session, user: User, data: dict, exclude_coin_id: int 
 @router.post("", response_model=CoinDetail, status_code=status.HTTP_201_CREATED)
 def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     col = get_owned_collection(db, user, body.collection_id)
+    _check_storage(db, user, body)
     coin_type = coin_type_for(db, col, body.coin_type_id)
     data = _validate(body, col, coin_type)
     _reject_duplicate(db, user, data)
@@ -131,6 +132,14 @@ def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depend
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)
+
+
+def _check_storage(db: Session, user: User, body: CoinIn | CoinUpdate) -> None:
+    from .storage import check_spot
+
+    check_spot(db, user, body.storage_id)
+    if body.storage_id is None:
+        body.storage_position = None
 
 
 def _apply_location(db: Session, user: User, coin: Coin, body: CoinIn | CoinUpdate) -> None:
@@ -181,6 +190,7 @@ def get_coin(inventory_number: str, db: Session = Depends(get_db), user: User = 
 def update_coin(inventory_number: str, body: CoinUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     coin = get_owned_coin(db, user, inventory_number)
     col = get_owned_collection(db, user, body.collection_id)
+    _check_storage(db, user, body)
     coin_type = coin_type_for(db, col, body.coin_type_id or coin.coin_type_id)
     if coin_type.id != coin.coin_type_id:
         # Its inventory number (e.g. MOR-00005) belongs to its series, so a coin keeps its series.

@@ -4,6 +4,7 @@ import { api, type BullionItemIn, type BullionMeta } from "../api";
 import { useApp, useNavCollection } from "../App";
 import { FACE_NOTE, FACE_OZ, METAL_LABEL, PACKAGING_LABEL, PRESETS, parsePurity, purityLabel, pureOz } from "../bullionFormat";
 import { money, parseMoney, todayISO } from "../format";
+import StoragePicker from "../components/StoragePicker";
 
 const EMPTY: Omit<BullionItemIn, "collection_id"> = {
   description: "",
@@ -20,6 +21,8 @@ const EMPTY: Omit<BullionItemIn, "collection_id"> = {
   sale_date: null,
   sold_to: null,
   notes: null,
+  storage_id: null,
+  storage_position: null,
 };
 
 /** Add or edit a bullion item: what it is, how much metal, and the purchase (and sale) details. */
@@ -60,6 +63,8 @@ export default function BullionFormPage() {
           purchase_date: i.purchase_date, purchased_from: i.purchased_from,
           sale_price: copy ? null : i.sale_price, sale_date: copy ? null : i.sale_date, sold_to: copy ? null : i.sold_to,
           notes: copy ? null : i.notes,
+          storage_id: i.storage_id ?? null,
+          storage_position: copy ? null : i.storage_position ?? null,
         });
       })
       .catch((e) => setError((e as Error).message))
@@ -371,6 +376,15 @@ export default function BullionFormPage() {
           <p className="muted small">Selling only part of a roll or tube? Use Sell on the item's page instead.</p>
         </section>
       </div>
+
+      <section className="card form-section">
+        <h2>Storage</h2>
+        <StoragePicker
+          storageId={form.storage_id ?? null}
+          position={form.storage_position ?? null}
+          onChange={(id, pos) => setForm((f) => ({ ...f, storage_id: id, storage_position: pos }))}
+        />
+      </section>
 
       <section className="card form-section">
         <h2>Notes</h2>

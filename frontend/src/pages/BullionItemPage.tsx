@@ -197,6 +197,17 @@ export default function BullionItemPage() {
             <dd>{purityLabel(item.purity)}</dd>
             <dt>Pure {METAL_LABEL[item.metal].toLowerCase()}</dt>
             <dd>{ozLabel(item.oz)}</dd>
+            <dt>Stored in</dt>
+            <dd>
+              {item.storage_id ? (
+                <Link to={`/storage/${item.storage_id}`}>
+                  {item.storage_name}
+                  {item.storage_position ? ` · ${item.storage_position}` : ""}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
           </dl>
           <h3 className="details-sub">Purchase</h3>
           <dl className="facts">

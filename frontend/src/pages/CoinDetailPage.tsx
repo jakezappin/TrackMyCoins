@@ -349,6 +349,17 @@ export default function CoinDetailPage() {
               <dd>{toning.length ? toning.join(", ") : "—"}</dd>
               <dt>PCGS #</dt>
               <dd>{coin.pcgs_number ?? "—"}</dd>
+            <dt>Stored in</dt>
+            <dd>
+              {coin.storage_id ? (
+                <Link to={`/storage/${coin.storage_id}`}>
+                  {coin.storage_name}
+                  {coin.storage_position ? ` · ${coin.storage_position}` : ""}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
             </dl>
           ) : (
           <dl className="facts">
@@ -381,6 +392,17 @@ export default function CoinDetailPage() {
             <dd>{toning.length ? toning.join(", ") : "—"}</dd>
             <dt>PCGS #</dt>
             <dd>{coin.pcgs_number ?? "—"}</dd>
+            <dt>Stored in</dt>
+            <dd>
+              {coin.storage_id ? (
+                <Link to={`/storage/${coin.storage_id}`}>
+                  {coin.storage_name}
+                  {coin.storage_position ? ` · ${coin.storage_position}` : ""}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
           </dl>
           )}
 

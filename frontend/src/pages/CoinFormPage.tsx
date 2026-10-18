@@ -18,6 +18,7 @@ import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
 import DuplicateCertModal from "../components/DuplicateCertModal";
+import StoragePicker from "../components/StoragePicker";
 import { COMPANIES as GRADING_COMPANIES } from "./GradingPage";
 import { useApp, useNavCollection } from "../App";
 import { coinPath, collectionPath, collectionsBySeries, DETAILS_PROBLEMS, FINISH_LABEL, money, parseMoney, todayISO } from "../format";
@@ -41,6 +42,8 @@ const EMPTY: CoinFields = {
   details_problem: null,
   details_pct: null,
   location: "inventory",
+  storage_id: null,
+  storage_position: null,
   slab_soapbox: false,
   slab_ngc_fatty: false,
   slab_rattler: false,
@@ -1123,6 +1126,18 @@ export default function CoinFormPage() {
         current={editInv ? currentGrading : null}
       />
 
+      <section className="card form-section">
+        <h2>Storage</h2>
+        <StoragePicker
+          storageId={form.storage_id}
+          position={form.storage_position}
+          onChange={(id, pos) => setForm((f) => ({ ...f, storage_id: id, storage_position: pos }))}
+        />
+        {form.location === "grading" && form.storage_id != null && (
+          <p className="muted small">It keeps this spot while it's at grading, so you know where it goes back.</p>
+        )}
+      </section>
+
       {/* ---- CAC / slab / packaging / toning ---- */}
       <div className="grid-3">
         {!isSetSeries && (
@@ -1472,7 +1487,7 @@ function LocationCard({
 
   return (
     <section className="card form-section location-card">
-      <h2>Location</h2>
+      <h2>Status</h2>
       <div className="segmented" role="radiogroup" aria-label="Where the coin is">
         {(
           [

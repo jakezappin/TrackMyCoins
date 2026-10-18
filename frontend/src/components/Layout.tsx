@@ -60,6 +60,9 @@ export default function Layout() {
           <NavLink to="/grading" className="nav-item">
             Grading Tracker
           </NavLink>
+          <NavLink to="/storage" className="nav-item">
+            Storage
+          </NavLink>
 
           <button className="nav-item nav-action" onClick={() => setCreating(true)}>
             + New collection

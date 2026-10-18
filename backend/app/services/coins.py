@@ -160,6 +160,11 @@ def coin_out(coin: Coin) -> CoinOut:
     out.value_estimate = value_estimate(coin)
     out.details_basis = details_basis(coin)
     out.details_value = market_value(coin) if coin.details else None
+    if coin.storage_id is not None and (db_ := object_session(coin)) is not None:
+        from ..models import StorageSpot
+
+        spot = db_.get(StorageSpot, coin.storage_id)
+        out.storage_name = spot.name if spot else None
     if coin.location == "grading" and (db := object_session(coin)) is not None:
         from . import grading  # it uses this module's neighbours
 
