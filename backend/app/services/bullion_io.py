@@ -13,7 +13,7 @@ from openpyxl.styles import Font, PatternFill
 
 from ..models import BullionItem
 from . import bullion as svc
-from .importer import _date, _key, _money, _text, read_rows
+from .importer import _date, _key, _money, _text, no_formulas, read_rows
 
 COLUMNS = ["Inventory #", "Collection", "Description", "Packaging", "Quantity", "Weight", "Unit", "Purity",
            "Face value", "Pure ozt", "Price paid", "Date purchased", "Purchased from", "Melt value", "Sale price",
@@ -40,40 +40,62 @@ ALIASES = {
 UNIT_WORDS = {"ozt": "ozt", "oz": "ozt", "troyoz": "ozt", "troyounce": "ozt", "troyounces": "ozt", "ounce": "ozt",
               "ounces": "ozt", "g": "g", "gram": "g", "grams": "g", "gr": "g", "kg": "kg", "kilo": "kg", "kilos": "kg",
               "kilogram": "kg", "kilograms": "kg"}
-KARATS = {"24k": "0.999", "22k": "0.9167", "18k": "0.75", "14k": "0.585"}
+KARATS = {"24k": "0.999", "22k": "0.9167", "18k": "0.75", "14k": "0.585", "10k": "0.417"}
 
 
 def parse_purity(v) -> Decimal | None:
-    """'.999', '999', '0.999', '99.9%', '90%', '22k' -> a share between 0 and 1."""
+    """'.999', '999', '9999', '0.999', '99.9%', '90%', '90', '22k', '22 karat', '22kt' -> a share between 0 and 1.
+    Anything else (a bare '2', say) is refused rather than guessed."""
     text = (_text(v) or "").lower().replace(" ", "").replace("fine", "")
     if not text:
         return None
-    if text in KARATS:
-        return Decimal(KARATS[text])
+    karat = re.fullmatch(r"(\d{1,2})(k|kt|karat|carat|ct)", text)
+    if karat:
+        k = int(karat.group(1))
+        return Decimal(KARATS[f"{k}k"]) if f"{k}k" in KARATS else (Decimal(k) / 24).quantize(Decimal("0.0001")) if 0 < k <= 24 else None
     try:
         if text.endswith("%"):
             n = Decimal(text[:-1]) / 100
         else:
             n = Decimal(text)
             if n > 1:
-                n = n / (Decimal(1000) if n >= 100 else Decimal(100))  # 999 / 9999 or 90
-                if n > 1:
-                    n = n / 10  # 9999 -> .9999
+                if 10 <= n <= 100:
+                    n = n / 100  # percent: 90, 99.9
+                elif 100 < n < 1000:
+                    n = n / 1000  # millesimal: 925, 999
+                elif 1000 <= n <= 10000:
+                    n = n / 10000  # 9999
+                else:
+                    return None  # 2, 5...: not a purity
     except InvalidOperation:
         return None
     return n if 0 < n <= 1 else None
 
 
+def _number(text: str) -> Decimal | None:
+    """'1', '1,000', '0.5', '1/10', '2 1/2'."""
+    text = text.replace(",", "").strip()
+    m = re.fullmatch(r"(?:(\d+)\s+)?(\d+)/(\d+)", text)
+    try:
+        if m:
+            whole = Decimal(m.group(1) or 0)
+            return whole + Decimal(m.group(2)) / Decimal(m.group(3)) if Decimal(m.group(3)) else None
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
 def parse_weight(v, unit_v) -> tuple[Decimal | None, str]:
-    """'1', '10 oz', '1 kilo', '31.1 g' (a unit in the weight wins over the Unit column)."""
+    """'1', '10 oz', '1/10 oz', '1,000 g', '1 kilo' (a unit in the weight wins over the Unit column)."""
     text = (_text(v) or "").lower()
     unit = UNIT_WORDS.get(_key(unit_v) or "", "ozt")
-    m = re.match(r"^\s*([0-9]*\.?[0-9]+)\s*([a-z ]*)$", text)
+    m = re.match(r"^\s*((?:\d+\s+)?[0-9][0-9,]*(?:\.[0-9]+)?(?:/[0-9]+)?|\.[0-9]+)\s*([a-z .]*)$", text)
     if not m:
         return None, unit
     if m.group(2).strip():
         unit = UNIT_WORDS.get(re.sub(r"[^a-z]", "", m.group(2)), unit)
-    return Decimal(m.group(1)), unit
+    n = _number(m.group(1))
+    return (n if n is not None and n > 0 else None), unit
 
 
 def row_to_item(raw: dict) -> tuple[dict, list[str]]:
@@ -154,6 +176,7 @@ def export_xlsx(items: list[BullionItem], spots: dict[str, Decimal | None]) -> b
             for idx in (11, 15):
                 row[idx].number_format = "yyyy-mm-dd"
     buf = io.BytesIO()
+    no_formulas(wb)
     wb.save(buf)
     return buf.getvalue()
 

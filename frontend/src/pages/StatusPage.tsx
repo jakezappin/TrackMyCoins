@@ -43,6 +43,8 @@ export default function StatusPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const { coinTypes } = useApp();
   const [mode, setMode] = useState<StatusMode | null>(null);
+  // Dates already on the want list, so "+ Want" shows them as wanted instead of inviting a duplicate.
+  const [wanted, setWanted] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCollection(null);
@@ -69,6 +71,22 @@ export default function StatusPage() {
       cancelled = true;
     };
   }, [collection, mode]);
+
+  useEffect(() => {
+    if (!collection) return;
+    let cancelled = false;
+    api
+      .wants()
+      .then((ws) => {
+        if (cancelled) return;
+        const mine = ws.filter((w) => w.coin_type_id === collection.coin_type_id && w.finish === collection.finish);
+        setWanted(new Set(mine.map((w) => wantKey(w.year, w.mint_mark, w.variety))));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [collection]);
 
   function chooseMode(m: StatusMode) {
     if (!collection || m === mode) return;
@@ -204,6 +222,7 @@ export default function StatusPage() {
                       year={r.year}
                       mintMark={r.mint_mark}
                       variety={r.variety}
+                      already={wanted.has(wantKey(r.year, r.mint_mark, r.variety))}
                       {...(isSetSeries ? { noGrade: true } : wantTarget(r.coins[0], collection.finish === "MS" ? "MS" : "PR"))}
                       label={`${r.label} ${collection.collection_type_label}`}
                     />
@@ -241,6 +260,7 @@ export default function StatusPage() {
                       year={r.year}
                       mintMark={r.mint_mark}
                       variety={r.variety}
+                      already={wanted.has(wantKey(r.year, r.mint_mark, r.variety))}
                       noGrade
                       label={`${r.label} ${collection.collection_type_label}`}
                     />
@@ -285,4 +305,8 @@ function wantTarget(best: Coin | undefined, uncirculated: "MS" | "PR") {
   if (!next) return { gradePrefix: uncirculated };
   const prefix = next >= 60 ? (best.grade_prefix === "PR" || best.grade_prefix === "SP" ? best.grade_prefix : uncirculated) : best.grade_prefix ?? uncirculated;
   return { gradePrefix: prefix, grade: next };
+}
+
+function wantKey(year: number, mint: string, variety: string | null) {
+  return `${year}|${mint}|${variety ?? ""}`;
 }

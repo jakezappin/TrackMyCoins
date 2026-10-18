@@ -39,12 +39,16 @@ async def upload_photos(
     coin = get_owned_coin(db, user, inventory_number)
     _check_room(len(coin.photos), len(files))
     order = len(coin.photos)
+    saved: list[str] = []
     for f in files:
         data = await f.read()
         try:
             name, ctype = store.save_bytes(coin.id, data, f.content_type or "")
         except store.PhotoError as e:
+            for done in saved:  # nothing is kept from a failed upload
+                store.delete_photo_file(coin.id, done)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{f.filename}: {e}")
+        saved.append(name)
         db.add(CoinPhoto(coin_id=coin.id, file_name=name, content_type=ctype, sort_order=order))
         order += 1
     db.commit()

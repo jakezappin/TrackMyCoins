@@ -216,3 +216,81 @@ def test_insurance_report_includes_bullion(authed):
     r = authed.get("/api/reports/insurance")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
     assert len(r.content) > 2000
+
+
+def test_face_value_only_for_silver(authed):
+    au = _col(authed, "gold", "Gold")
+    r = authed.post("/api/bullion/items", json={"collection_id": au["id"], "description": "$20 Liberty", "face_value": "20",
+                                               "purity": "0.9"})
+    assert r.status_code == 422 and "Face value is only for" in r.text
+    ok = _item(authed, au, description="$20 Liberty", weight="33.436", weight_unit="g", purity="0.9")
+    assert ok["oz"] == "0.9675"
+
+
+def test_quota_is_atomic_and_site_capped(client, monkeypatch):
+    from app.config import get_settings
+    from app.services import quota
+
+    monkeypatch.setattr(get_settings(), "greysheet_site_day", 3)
+    quota.spend(1, "greysheet", 2)
+    with pytest.raises(quota.QuotaExceeded) as e:
+        quota.spend(2, "greysheet", 2)  # user 2 is fine, but the site would pass 3
+    assert e.value.site_wide and quota.used_today(2, "greysheet") == 0  # nothing counted for the refused call
+    quota.spend_site("greysheet", 1)
+    with pytest.raises(quota.QuotaExceeded):
+        quota.spend_site("greysheet", 1)
+
+
+def test_no_price_paid_isnt_free(authed):
+    ag = _col(authed)
+    _item(authed, ag, quantity=10, price_paid="300")
+    _item(authed, ag, quantity=10, price_paid=None)
+    s = authed.get(f"/api/bullion/collections/{ag['id']}").json()["summary"]
+    assert (s["value"], s["cost"], s["no_cost"]) == ("999.00", "300.00", 1)  # value counts both; cost only the priced
+    assert s["change"] == "199.50" and s["change_pct"] == 66.5  # not +99.8% from treating the other as free
+    assert s["avg_cost_oz"]["silver"] == "30.03"
+    # A sale date with no sale price isn't a loss of the whole cost.
+    i = _item(authed, ag, price_paid="40", sale_date=date.today().isoformat())
+    s = authed.get(f"/api/bullion/collections/{ag['id']}").json()["summary"]
+    assert (s["realized"], s["realized_count"]) == ("0.00", 0)
+    assert authed.get(f"/api/bullion/items/{i['inventory_number']}").json()["change"] is None
+
+
+def test_long_term_needs_more_than_a_year():
+    assert svc.long_term(date(2024, 1, 10), date(2025, 1, 10)) is False  # the anniversary is still short-term
+    assert svc.long_term(date(2024, 1, 10), date(2025, 1, 11)) is True
+    assert svc.long_term(date(2023, 3, 1), date(2024, 3, 1)) is False  # across a leap day (366 days)
+    assert svc.long_term(date(2024, 2, 29), date(2025, 3, 1)) is True
+
+
+def test_import_formats():
+    from app.services.bullion_io import parse_purity, parse_weight
+
+    assert parse_weight("1/10 oz", None) == (Decimal("0.1"), "ozt")
+    assert parse_weight("1,000 g", None) == (Decimal("1000"), "g")
+    assert parse_purity("22 karat") == Decimal("0.9167") and parse_purity("22kt") == Decimal("0.9167")
+    assert parse_purity("2") is None and parse_purity("925") == Decimal("0.925") and parse_purity("90") == Decimal("0.9")
+
+
+def test_exports_never_contain_formulas(authed):
+    import io as _io
+
+    from openpyxl import load_workbook
+
+    ag = _col(authed)
+    _item(authed, ag, notes="=HYPERLINK(\"http://evil\")")
+    wb = load_workbook(_io.BytesIO(authed.get(f"/api/bullion/collections/{ag['id']}/export").content))
+    cell = next(c for row in wb["Bullion"].iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("="))
+    assert cell.data_type == "s"
+
+
+def test_failed_upload_keeps_no_files(authed):
+    from app.services import attachments as docs
+
+    item = _item(authed, _col(authed))
+    pdf = b"%PDF-1.4\n%%EOF\n"
+    r = authed.post(f"/api/bullion/items/{item['inventory_number']}/attachments",
+                    files=[("files", ("a.pdf", pdf, "application/pdf")), ("files", ("b.txt", b"x", "text/plain"))])
+    assert r.status_code == 400
+    folder = docs.coin_dir(f"bullion-{item['id']}")
+    assert not folder.exists() or not any(folder.iterdir())

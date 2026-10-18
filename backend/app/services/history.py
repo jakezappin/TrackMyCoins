@@ -78,7 +78,7 @@ def value_history(db: Session, user_id: int, collection_id: int | None = None, c
             if c.pcgs_number and c.grade:
                 key = (str(c.pcgs_number), int(c.grade), bool(c.grade_plus))
                 if key not in sales:
-                    sales[key] = price_archive.sales_for(db, *key)
+                    sales[key] = price_archive.sales_for(db, *key, cac=False)  # the market's shape: plain sales
                 market_key[c.id] = key
     if not coins:
         return []

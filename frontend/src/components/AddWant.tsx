@@ -17,6 +17,8 @@ export default function AddWant(props: {
   label: string;
   /** Mint & proof sets: no target grade */
   noGrade?: boolean;
+  /** Already on the want list */
+  already?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
@@ -30,6 +32,10 @@ export default function AddWant(props: {
     const price = parseMoney(max);
     if ("error" in price) {
       setError(`Max price ${price.error}.`);
+      return;
+    }
+    if (grade && !props.noGrade && (!/^\d+$/.test(grade.trim()) || Number(grade) < 1 || Number(grade) > 70)) {
+      setError("Target grade must be a whole number from 1 to 70.");
       return;
     }
     setBusy(true);
@@ -53,7 +59,7 @@ export default function AddWant(props: {
     }
   }
 
-  if (done) return <span className="small muted want-done">✓ On want list</span>;
+  if (done || props.already) return <span className="small muted want-done">✓ On want list</span>;
   return (
     <>
       <button type="button" className="btn small" onClick={() => setOpen(true)} aria-label={`Add ${props.label} to want list`}>
@@ -61,7 +67,7 @@ export default function AddWant(props: {
       </button>
       {open &&
         createPortal(
-          <div className="modal-backdrop" onClick={() => setOpen(false)}>
+          <div className="modal-backdrop" onClick={() => !busy && setOpen(false)}>
             <div className="modal" role="dialog" aria-label="Add to want list" onClick={(e) => e.stopPropagation()}>
               <h2>Add To Want List</h2>
               <p className="strong">{props.label}</p>

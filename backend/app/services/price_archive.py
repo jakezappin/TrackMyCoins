@@ -76,12 +76,14 @@ def save_sales(db: Session, pcgs_number: str, grade: int, plus: bool, sales: lis
     return len(new)
 
 
-def sales_for(db: Session, pcgs_number: str, grade: int, plus: bool) -> list[tuple[str, Decimal]]:
-    """[(month, price)] of every archived sale of this issue and grade."""
-    return [(m, p) for m, p in db.execute(
-        select(AuctionSale.sale_month, AuctionSale.price).where(
-            AuctionSale.pcgs_number == str(pcgs_number), AuctionSale.grade == int(grade), AuctionSale.plus == bool(plus))
-    )]
+def sales_for(db: Session, pcgs_number: str, grade: int, plus: bool, cac: bool | None = None) -> list[tuple[str, Decimal]]:
+    """[(month, price)] of archived sales of this issue and grade: all of them, or only CAC (cac=True) or only
+    plain (cac=False) ones, since a CAC sticker adds to the price."""
+    q = select(AuctionSale.sale_month, AuctionSale.price).where(
+        AuctionSale.pcgs_number == str(pcgs_number), AuctionSale.grade == int(grade), AuctionSale.plus == bool(plus))
+    if cac is not None:
+        q = q.where(AuctionSale.cac == cac)
+    return [(m, p) for m, p in db.execute(q)]
 
 
 def last_full_fetch(db: Session, pcgs_number: str, grade: int, plus: bool) -> datetime | None:

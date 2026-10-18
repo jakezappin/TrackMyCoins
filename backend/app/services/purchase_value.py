@@ -79,15 +79,15 @@ def _history_cpg(db: Session, coin: Coin, start: date) -> CpgHistory | None:
 
     for key in _key_for(coin):
         rows = db.scalars(select(CpgHistory).where(CpgHistory.key == key, CpgHistory.grade == coin.grade)).all()
-        rows = [h for h in rows if ("+" in h.label) == bool(coin.grade_plus)] or []
-        cac = [h for h in rows if h.cac]
-        rows = cac if coin.cac and cac else [h for h in rows if not h.cac]
-        before = [h for h in rows if _day(h.first_seen) <= start]
-        if not before:
-            continue  # the history starts after the purchase
-        h = max(before, key=lambda h: h.first_seen)
-        if start - _day(h.last_seen) <= HISTORY_GAP:
-            return h
+        rows = [h for h in rows if ("+" in h.label) == bool(coin.grade_plus)]
+        # A CAC coin: CAC prices if the history has them for that date, else the plain ones.
+        for want_cac in ([True, False] if coin.cac else [False]):
+            before = [h for h in rows if h.cac == want_cac and _day(h.first_seen) <= start]
+            if not before:
+                continue  # the history starts after the purchase
+            h = max(before, key=lambda h: h.first_seen)
+            if start - _day(h.last_seen) <= HISTORY_GAP:
+                return h
     return None
 
 
@@ -114,7 +114,7 @@ def estimate(db: Session, coin: Coin) -> Estimate:
     return Estimate(None, None, "", pending=pending)
 
 
-def _sales(pcgs_number: str, grade: int, plus: bool, user_id: int) -> list[tuple[str, Decimal]]:
+def _sales(pcgs_number: str, grade: int, plus: bool, user_id: int, cac: bool | None = None) -> list[tuple[str, Decimal]]:
     """Archived sales for this issue and grade, after fetching PCGS's full list if it hasn't been in 3 months
     (one call, charged to the user). The archive keeps sales PCGS has since dropped."""
     from . import price_archive
@@ -125,7 +125,7 @@ def _sales(pcgs_number: str, grade: int, plus: bool, user_id: int) -> list[tuple
             quota.spend(user_id, "pcgs")
             price_archive.fetch_full(db, pcgs_number, grade, plus)
             db.commit()
-        return price_archive.sales_for(db, pcgs_number, grade, plus)
+        return price_archive.sales_for(db, pcgs_number, grade, plus, cac)
 
 
 def _months_apart(ym: str, d: date) -> int:
@@ -154,8 +154,12 @@ def fill_auctions(coin: Coin, user_id: int) -> bool:
     key = auction_key(coin)
     if key is None or coin.purchase_auction_key == key:
         return False
-    sales = _sales(str(coin.pcgs_number), int(coin.grade), bool(coin.grade_plus), user_id)
-    got = average_near(sales, purchase_day(coin))
+    args = (str(coin.pcgs_number), int(coin.grade), bool(coin.grade_plus), user_id)
+    # Like for like: CAC sales sell higher, so plain coins use plain sales; a CAC coin uses CAC sales when there
+    # were some around then, else plain ones.
+    got = average_near(_sales(*args, cac=True), purchase_day(coin)) if coin.cac else None
+    if got is None:
+        got = average_near(_sales(*args, cac=False), purchase_day(coin))
     coin.purchase_auction_value, coin.purchase_auction_count, coin.purchase_auction_span = got or (None, 0, None)
     coin.purchase_auction_key = key
     return True

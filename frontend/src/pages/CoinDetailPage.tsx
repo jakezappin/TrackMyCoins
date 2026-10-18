@@ -57,6 +57,10 @@ export default function CoinDetailPage() {
   useNavCollection("coin", coin && !coin.is_sold ? coin.collection_id : null);
 
   useEffect(() => {
+    // Another coin: don't show the previous one (or its error) while this one loads.
+    setCoin(null);
+    setError(null);
+    setActive(0);
     api.coin(inv).then(setCoin).catch((e) => setError(e.message));
   }, [inv]);
 
@@ -410,7 +414,10 @@ export default function CoinDetailPage() {
         </section>
       </div>
 
-      <ValueHistoryChart coinInv={coin.inventory_number} refreshKey={`${coin.latest_cpg?.id}-${coin.purchase_value?.value}`} />
+      <ValueHistoryChart
+        coinInv={coin.inventory_number}
+        refreshKey={`${coin.value_estimate}-${coin.purchase_value?.value}-${coin.price_quotes.map((q) => q.id).join(",")}`}
+      />
 
       <div className="coin-row">
         <EstimatedValueCard coin={coin} onChange={update} />

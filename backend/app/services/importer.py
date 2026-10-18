@@ -297,3 +297,13 @@ def split_certs(text: str) -> list[str]:
         if c and c not in seen:
             seen.append(c)
     return seen
+
+
+def no_formulas(wb) -> None:
+    """Exports never contain formulas: text a user typed that starts with "=" (a note, say) is kept as text,
+    so opening the file can't run it."""
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.data_type == "f":
+                    cell.data_type = "s"

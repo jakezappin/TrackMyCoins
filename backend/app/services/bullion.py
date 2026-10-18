@@ -52,7 +52,8 @@ def _d(v) -> Decimal | None:
 def pure_oz(item: BullionItem) -> Decimal:
     """Troy ounces of pure metal in the item (all pieces)."""
     purity = _d(item.purity) or Decimal(0)
-    if item.face_value is not None:
+    metal = item.collection.metal if getattr(item, "collection", None) is not None else "silver"
+    if item.face_value is not None and metal == "silver":
         per_dollar = FACE_OZ.get(purity.normalize()) or FACE_OZ.get(purity)
         if per_dollar is not None:
             return (_d(item.face_value) * per_dollar).quantize(Decimal("0.0001"))
@@ -66,6 +67,16 @@ def started(item: BullionItem) -> date:
         return item.purchase_date
     created = item.created_at if item.created_at.tzinfo else item.created_at.replace(tzinfo=timezone.utc)
     return created.date()
+
+
+def long_term(bought: date, sold: date) -> bool:
+    """Held more than a year (U.S. tax): sold after the purchase's one-year anniversary. Selling on the
+    anniversary itself is still short-term. Bought on Feb 29: the anniversary is Feb 28."""
+    try:
+        anniversary = bought.replace(year=bought.year + 1)
+    except ValueError:
+        anniversary = date(bought.year + 1, 2, 28)
+    return sold > anniversary
 
 
 def is_sold(item: BullionItem) -> bool:
@@ -224,37 +235,52 @@ def value(item: BullionItem, metal: str, series: SpotSeries | None = None, spot_
 
 
 def summary(items: list[BullionItem], metal_of, spots_now: dict[str, Decimal | None]) -> dict:
-    """Totals over the items on hand: pure ounces per metal, value now, cost basis, change."""
+    """Totals over the items on hand: pure ounces per metal and value now for everything; cost basis, change and
+    average cost per ounce only over items with a price paid (one without isn't free: it's left out and counted
+    in `no_cost`). Realized gains only count sales with both prices."""
     held = [i for i in items if not is_sold(i)]
     oz: dict[str, Decimal] = {}
+    oz_costed: dict[str, Decimal] = {}
     cost_by: dict[str, Decimal] = {}
-    value_now = cost = Decimal(0)
-    unpriced = 0
+    value_now = value_costed = cost = Decimal(0)
+    unpriced = no_cost = 0
     for i in held:
         m = metal_of(i)
         o = pure_oz(i)
         oz[m] = oz.get(m, Decimal(0)) + o
-        cost_by[m] = cost_by.get(m, Decimal(0)) + (_d(i.price_paid) or Decimal(0))
-        if spots_now.get(m) is not None:
-            value_now += o * spots_now[m]
+        price = spots_now.get(m)
+        v = o * price if price is not None else None
+        if v is not None:
+            value_now += v
         else:
             unpriced += 1
-        cost += _d(i.price_paid) or Decimal(0)
+        paid = _d(i.price_paid)
+        if paid is None:
+            no_cost += 1
+            continue
+        cost += paid
+        cost_by[m] = cost_by.get(m, Decimal(0)) + paid
+        oz_costed[m] = oz_costed.get(m, Decimal(0)) + o
+        if v is not None:
+            value_costed += v
     sold = [i for i in items if is_sold(i)]
-    realized = sum(((_d(i.sale_price) or Decimal(0)) - (_d(i.price_paid) or Decimal(0)) for i in sold), Decimal(0))
-    change = value_now - cost
+    realized_items = [i for i in sold if i.sale_price is not None and i.price_paid is not None]
+    realized = sum((_d(i.sale_price) - _d(i.price_paid) for i in realized_items), Decimal(0))
+    change = value_costed - cost
     return {
         "count": len(held),
         "oz": {m: str(v.quantize(Decimal("0.0001"))) for m, v in oz.items()},
         # What was paid per pure ounce: also the spot price where the stack breaks even.
-        "avg_cost_oz": {m: str((cost_by[m] / v).quantize(CENTS)) for m, v in oz.items() if v > 0 and cost_by.get(m)},
+        "avg_cost_oz": {m: str((cost_by[m] / v).quantize(CENTS)) for m, v in oz_costed.items() if v > 0 and m in cost_by},
         "value": str(value_now.quantize(CENTS)),
         "cost": str(cost.quantize(CENTS)),
         "change": str(change.quantize(CENTS)),
         "change_pct": round(float(change / cost) * 100, 1) if cost else None,
         "unpriced": unpriced,
+        "no_cost": no_cost,
         "sold_count": len(sold),
         "realized": str(realized.quantize(CENTS)),
+        "realized_count": len(realized_items),
         "spot": {m: (str(p) if p is not None else None) for m, p in spots_now.items()},
     }
 

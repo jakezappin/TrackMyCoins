@@ -76,3 +76,11 @@ def fresh_rate_limits():
 
     for lim in (auth.login_limiter, auth.signup_limiter, auth.signup_counter):
         lim._hits.clear()
+
+
+@pytest.fixture(autouse=True)
+def fresh_catalog_failures():
+    """The catalog's back-off after a failed download is kept in memory; start each test without one."""
+    from app.services import catalog
+
+    catalog._failed.clear()

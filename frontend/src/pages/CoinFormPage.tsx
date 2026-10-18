@@ -141,6 +141,14 @@ export default function CoinFormPage() {
   const leaving = useRef(false);
   const submitting = useRef(false);
   const dirty = baseline !== null && (JSON.stringify(form) !== baseline || files.length > 0 || importUrls.length > 0);
+  /** A change the form makes itself (a proof collection's PR prefix, a set's OGP): if nothing has been typed yet,
+   * it doesn't count as an unsaved edit. */
+  const autoAdjust = (fn: (f: CoinFields) => CoinFields) =>
+    setForm((f) => {
+      const next = fn(f);
+      if (next !== f) setBaseline((b) => (b === JSON.stringify(f) ? JSON.stringify(next) : b));
+      return next;
+    });
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       dirty && !leaving.current && currentLocation.pathname !== nextLocation.pathname,
@@ -199,8 +207,8 @@ export default function CoinFormPage() {
   useNavCollection("coin", collectionId);
   useEffect(() => {
     if (!isSetSeries) return;
-    setForm((f) => ({ ...f, grading_service: "RAW", cert_number: null, ...(editInv ? {} : { ogp: true }) }));
-  }, [isSetSeries, editInv]);
+    autoAdjust((f) => ({ ...f, grading_service: "RAW", cert_number: null, ...(editInv ? {} : { ogp: true }) }));
+  }, [isSetSeries, editInv]); // eslint-disable-line react-hooks/exhaustive-deps
   // Packaging checkboxes that apply to this series/finish: [field, label, the field it excludes].
   const packaging: [PackKey, string, PackKey | null][] = [];
   if (coinType && GSA_SERIES.includes(coinType.slug)) {
@@ -233,12 +241,12 @@ export default function CoinFormPage() {
   // Proof collections take PR grades; business-strike collections take MS and circulated grades.
   useEffect(() => {
     if (!collection) return;
-    setForm((f) => {
+    autoAdjust((f) => {
       if (isProof && f.grade_prefix !== "PR") return { ...f, grade_prefix: "PR" };
       if (!isProof && f.grade_prefix === "PR") return { ...f, grade_prefix: "MS" };
       return f;
     });
-  }, [collection, isProof]);
+  }, [collection, isProof]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Designations that exist for this series and finish, from the Greysheet catalog.
   const [designations, setDesignations] = useState<string[] | null>(null);

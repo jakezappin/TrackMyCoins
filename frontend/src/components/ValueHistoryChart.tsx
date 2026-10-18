@@ -55,11 +55,12 @@ export default function ValueHistoryChart({
     const ro = new ResizeObserver(([e]) => setW(Math.max(280, Math.round(e.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [points]);
+  }, [points, collapsed]); // the plot only exists while open: measure it when it appears
   const narrow = W < 520;
   const PAD = { top: 14, right: narrow ? 62 : 110, bottom: 26, left: narrow ? 48 : 58 };
 
   useEffect(() => {
+    setHover(null); // a point picked on the old data may not exist in the new
     (load ? load() : one ? api.coinHistory(coinInv) : api.history(collectionId)).then(setPoints).catch(() => setPoints([]));
   }, [collectionId, coinInv, one, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -117,6 +118,8 @@ export default function ValueHistoryChart({
   }, [points, W]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!points) return null;
+  // The hovered point, if it still exists (the data can change under it).
+  const hp = hover != null && hover < points.length ? hover : null;
   const costWord = one ? "Paid" : "Cost";
   if (one && collapsed) {
     return (
@@ -209,32 +212,32 @@ export default function ValueHistoryChart({
             <text className="end-label" x={W - PAD.right + 8} y={geo.y(Number(last.cost)) + (last.value != null && Math.abs(geo.y(Number(last.cost)) - geo.y(Number(last.value))) < 14 ? 14 : 0)} dy="0.32em">
               {compact.format(Number(last.cost))}{narrow ? "" : ` ${costWord.toLowerCase()}`}
             </text>
-            {hover != null && (
+            {hp != null && (
               <g>
-                <line className="crosshair" x1={geo.x(geo.xs[hover])} x2={geo.x(geo.xs[hover])} y1={PAD.top} y2={H - PAD.bottom} />
-                {points[hover].value != null && <circle className="dot value" cx={geo.x(geo.xs[hover])} cy={geo.y(Number(points[hover].value))} r={4.5} />}
-                <circle className="dot cost" cx={geo.x(geo.xs[hover])} cy={geo.y(Number(points[hover].cost))} r={4.5} />
+                <line className="crosshair" x1={geo.x(geo.xs[hp])} x2={geo.x(geo.xs[hp])} y1={PAD.top} y2={H - PAD.bottom} />
+                {points[hp].value != null && <circle className="dot value" cx={geo.x(geo.xs[hp])} cy={geo.y(Number(points[hp].value))} r={4.5} />}
+                <circle className="dot cost" cx={geo.x(geo.xs[hp])} cy={geo.y(Number(points[hp].cost))} r={4.5} />
               </g>
             )}
           </svg>
-          {hover != null && (
+          {hp != null && (
             <div
-              className={`apr-tip history-tip ${geo.x(geo.xs[hover]) > W / 2 ? "left" : "right"}`}
-              style={{ left: `${(geo.x(geo.xs[hover]) / W) * 100}%` }}
+              className={`apr-tip history-tip ${geo.x(geo.xs[hp]) > W / 2 ? "left" : "right"}`}
+              style={{ left: `${(geo.x(geo.xs[hp]) / W) * 100}%` }}
             >
-              <strong>{shortDate(points[hover].date)}</strong>
+              <strong>{shortDate(points[hp].date)}</strong>
               <span>
-                {valueLabel} {money(points[hover].value)}
-                {points[hover].backfilled ? " *" : ""}
+                {valueLabel} {money(points[hp].value)}
+                {points[hp].backfilled ? " *" : ""}
               </span>
               <span>
-                {costWord} {money(points[hover].cost)}
+                {costWord} {money(points[hp].cost)}
               </span>
-              {points[hover].backfilled && <span className="muted">* estimated from value at purchase and auction prices</span>}
+              {points[hp].backfilled && <span className="muted">* estimated from value at purchase and auction prices</span>}
               {!one && (
                 <span className="muted">
-                  {points[hover].coin_count} coin{points[hover].coin_count === 1 ? "" : "s"}
-                  {points[hover].priced_count < points[hover].coin_count ? `, ${points[hover].coin_count - points[hover].priced_count} without a value` : ""}
+                  {points[hp].coin_count} coin{points[hp].coin_count === 1 ? "" : "s"}
+                  {points[hp].priced_count < points[hp].coin_count ? `, ${points[hp].coin_count - points[hp].priced_count} without a value` : ""}
                 </span>
               )}
             </div>

@@ -49,7 +49,7 @@ def test_order_of_preference(authed, morgan_collection, monkeypatch):
         return f"{d.year}-{d.month:02d}"
 
     sales = [(ym(0), Decimal(100)), (ym(-1), Decimal(110)), (ym(2), Decimal(90)), (ym(20), Decimal(500))]
-    monkeypatch.setattr(purchase_value, "_sales", lambda *a: sales)
+    monkeypatch.setattr(purchase_value, "_sales", lambda *a, **k: sales)
     pv = authed.post(f"/api/coins/{old['inventory_number']}/purchase-value").json()["purchase_value"]
     assert (pv["value"], pv["source"], pv["pending"]) == ("100.00", "auctions", False)
     assert pv["detail"].startswith("Average of 3 PCGS auction sales")
@@ -73,7 +73,7 @@ def test_order_of_preference(authed, morgan_collection, monkeypatch):
 
 def test_no_sales_means_price_paid(authed, morgan_collection, monkeypatch):
     c = _coin(authed, morgan_collection["id"], purchase_date="2015-03-01", price_paid="95")
-    monkeypatch.setattr(purchase_value, "_sales", lambda *a: [("2024-01", Decimal(200))])  # too far away
+    monkeypatch.setattr(purchase_value, "_sales", lambda *a, **k: [("2024-01", Decimal(200))])  # too far away
     pv = authed.post(f"/api/coins/{c['inventory_number']}/purchase-value").json()["purchase_value"]
     assert (pv["value"], pv["source"], pv["pending"]) == ("95.00", "paid", False)
 

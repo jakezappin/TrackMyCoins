@@ -32,6 +32,8 @@ export default function BullionItemPage() {
 
   useEffect(() => {
     setItem(null);
+    setError(null);
+    setActive(0);
     api.bullionItem(inv).then(setItem).catch((e) => setError((e as Error).message));
   }, [inv]);
 
@@ -144,6 +146,7 @@ export default function BullionItemPage() {
                   className="btn small danger-outline"
                   disabled={busy !== null}
                   onClick={() =>
+                    confirm("Delete this photo?") &&
                     act("Deleting the photo", async () => {
                       await api.deleteBullionPhoto(photo.id);
                       setActive(0);
@@ -234,6 +237,7 @@ export default function BullionItemPage() {
       </div>
 
       <ValueHistoryChart
+        key={item.inventory_number}
         coinInv={item.inventory_number}
         load={() => api.bullionItemHistory(item.inventory_number)}
         refreshKey={`${item.value_now}-${item.quantity}`}
@@ -248,11 +252,11 @@ export default function BullionItemPage() {
         <SellDialog
           item={item}
           onClose={() => setSelling(false)}
-          onSold={async (r) => {
+          onSold={async () => {
             setSelling(false);
             await refresh();
-            navigate(`/bullion/items/${r.kept ?? r.sold}`);
-            if (r.kept) setItem(await api.bullionItem(r.kept));
+            // Sold it all: this item is now the sold one; sold part of it: this page shows what's left.
+            setItem(await api.bullionItem(item.inventory_number));
           }}
         />
       )}
@@ -273,6 +277,13 @@ function SellDialog({ item, onClose, onSold }: { item: BullionItem; onClose: () 
   async function sell() {
     const p = parseMoney(price);
     if ("error" in p || p.value == null) return setError(`Sale price ${"error" in p ? p.error : "is required"}.`);
+    if (byFace || many) {
+      const n = Number(part);
+      const total = byFace ? Number(item.face_value) : item.quantity;
+      if (!part.trim() || !Number.isFinite(n) || n <= 0 || n > total || (!byFace && !Number.isInteger(n)))
+        return setError(byFace ? `Enter the face value sold, up to $${total}.` : `Enter how many pieces were sold, 1 to ${total}.`);
+    }
+    if (!day) return setError("Enter the sale date.");
     setBusy(true);
     setError(null);
     try {
@@ -291,7 +302,7 @@ function SellDialog({ item, onClose, onSold }: { item: BullionItem; onClose: () 
 
   const whole = byFace ? Number(part) >= Number(item.face_value) : !many || Number(part) >= item.quantity;
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div className="modal" role="dialog" aria-label="Sell" onClick={(e) => e.stopPropagation()}>
         <h2>Sell {item.description}</h2>
         {(many || byFace) && (

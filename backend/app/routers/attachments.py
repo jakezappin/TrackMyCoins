@@ -51,12 +51,16 @@ async def upload_attachments(
     if have + len(files) > settings.max_attachments_per_coin:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"A coin can have at most {settings.max_attachments_per_coin} files (it has {have}).")
+    saved: list[str] = []
     for f in files:
         data = await f.read(settings.max_attachment_bytes + 1)
         try:
             stored, name, ctype, size = store.save(coin.id, data, f.content_type or "", f.filename)
         except store.AttachmentError as e:
+            for done in saved:  # nothing is kept from a failed upload
+                store.delete_file(coin.id, done)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{f.filename}: {e}")
+        saved.append(stored)
         db.add(CoinAttachment(coin_id=coin.id, file_name=stored, original_name=name, content_type=ctype, size_bytes=size))
     db.commit()
     return _list(db, coin.id)

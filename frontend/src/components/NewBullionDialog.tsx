@@ -31,7 +31,7 @@ export default function NewBullionDialog({ onClose }: { onClose: () => void }) {
   }
 
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div className="modal" role="dialog" aria-label="New bullion collection" onClick={(e) => e.stopPropagation()}>
         <h2>New Bullion Collection</h2>
         <div className="segmented">

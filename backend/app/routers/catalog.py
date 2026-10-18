@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 import httpx
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..auth import current_user
 from ..db import get_db
 from ..models import CoinType, User
-from ..services import catalog
+from ..services import catalog, quota
 from ..services.greysheet import PricingError
 
 router = APIRouter(prefix="/api", tags=["catalog"])
@@ -62,9 +62,18 @@ def catalog_status(coin_type_id: int, db: Session = Depends(get_db), _: User = D
 
 
 @router.post("/coin-types/{coin_type_id}/catalog/sync", response_model=CatalogStatus)
-def catalog_sync(coin_type_id: int, db: Session = Depends(get_db), _: User = Depends(current_user)):
+def catalog_sync(coin_type_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Re-download a series' catalog: at most once a day (it changes rarely), counted against the user's
+    Greysheet allowance."""
+    ct = _coin_type(db, coin_type_id)
+    count, last = catalog.status(db, ct.id)
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    if count and last and datetime.now(timezone.utc) - last < timedelta(days=1):
+        return CatalogStatus(count=count, synced_at=last)
+    quota.spend(user.id, "greysheet", len(catalog.series_nodes(ct)))
     try:
-        r = catalog.sync(db, _coin_type(db, coin_type_id))
+        r = catalog.sync(db, ct)
     except PricingError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:

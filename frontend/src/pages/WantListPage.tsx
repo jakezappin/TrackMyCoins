@@ -157,10 +157,19 @@ function WantForm({ want, onClose, onSaved }: { want: WantItem | null; onClose: 
   // A matching collection of the user's, if they have one (the want then shows "for <collection>").
   const collection = collections.find((c) => c.coin_type_id === typeId && c.finish === finish);
 
+  // Switching series keeps the mint only if the new series was struck there.
+  const mints = type?.mint_marks.length ? type.mint_marks : ["P"];
+  useEffect(() => {
+    if (!mints.includes(mint)) setMint(mints[0]);
+  }, [typeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function save() {
     const price = parseMoney(max);
     if ("error" in price) return setError(`Max price ${price.error}.`);
     if (!year) return setError("Enter the year.");
+    if (!mints.includes(mint)) return setError(`${type?.plural ?? "This series"} weren't struck at ${mint}.`);
+    if (grade && !/^\d+$/.test(grade.trim())) return setError("Target grade must be a whole number (1–70).");
+    if (grade && (Number(grade) < 1 || Number(grade) > 70)) return setError("Target grade must be between 1 and 70.");
     const body: WantIn = {
       collection_id: collection?.id ?? null,
       coin_type_id: typeId,
@@ -186,7 +195,7 @@ function WantForm({ want, onClose, onSaved }: { want: WantItem | null; onClose: 
   }
 
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div className="modal want-modal" role="dialog" aria-label={want ? "Edit want" : "Add to want list"} onClick={(e) => e.stopPropagation()}>
         <h2>{want ? "Edit Want" : "Add To Want List"}</h2>
         <label className="field">
@@ -219,7 +228,7 @@ function WantForm({ want, onClose, onSaved }: { want: WantItem | null; onClose: 
           <label className="field">
             <span>Mint</span>
             <select value={mint} onChange={(e) => setMint(e.target.value)}>
-              {(type?.mint_marks.length ? type.mint_marks : ["P"]).map((m) => (
+              {mints.map((m) => (
                 <option key={m} value={m}>
                   {m === "P" ? "P (no mint mark)" : m}
                 </option>

@@ -393,7 +393,8 @@ def test_new_series_dates():
     assert date_problem(atb, 2015, "P", "SP") is None
     assert "isn't an America the Beautiful" in date_problem(atb, 2022, "P", "MS")
     assert date_problem(a250, 2026, "D", "MS") is None
-    assert "no 2026-S America 250" in date_problem(a250, 2026, "S", "MS") or "proofs" in date_problem(a250, 2026, "S", "MS")
+    # The current year's list is still incomplete: only the year is checked.
+    assert date_problem(a250, 2026, "S", "MS") is None
 
 
 def test_silver_eagle_and_modern_dollar_lines():

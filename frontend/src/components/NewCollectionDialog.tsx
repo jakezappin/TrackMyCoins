@@ -63,7 +63,7 @@ export default function NewCollectionDialog({ initialType, onClose, onCreated }:
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <h2>New Collection</h2>
         <label className="field">

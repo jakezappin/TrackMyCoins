@@ -40,7 +40,7 @@ export default function BullionImportDialog({ collectionId, onClose, onDone }: {
   }
 
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div className="modal import-report" role="dialog" aria-label="Import bullion" onClick={(e) => e.stopPropagation()}>
         <h2>Import Bullion</h2>
         {result ? (

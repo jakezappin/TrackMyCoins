@@ -49,7 +49,7 @@ export default function ShareCollection({
         {asMenuItem ? (shared ? "Sharing… (on)" : "Share…") : shared ? "Shared" : "Share"}
       </button>
       {open && createPortal(
-        <div className="modal-backdrop" onClick={() => setOpen(false)}>
+        <div className="modal-backdrop" onClick={() => !busy && setOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Share “{collection.name}”</h2>
             <p className="muted small">

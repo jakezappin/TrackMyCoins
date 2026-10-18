@@ -71,6 +71,7 @@ export default function BullionFormPage() {
   const metal = col?.metal ?? "silver";
   const purities = meta?.purities[metal] ?? [];
   const faceAllowed = metal === "silver";
+  const facePurities = useMemo(() => Object.keys(FACE_OZ), []);
   // A purity this metal doesn't usually come in (an edited item's .9995 silver, say) shows as Custom.
   const usual = purities.includes(String(Number(form.purity)));
   useEffect(() => {
@@ -91,16 +92,28 @@ export default function BullionFormPage() {
     }));
   }
 
+  // Another metal: its own usual purity, no leftover custom purity or face value.
+  function changeCollection(id: number) {
+    const next = bullionCollections.find((c) => c.id === id);
+    setCollectionId(id);
+    if (!next || next.metal === metal) return;
+    setCustomPurity(null);
+    setPreset("");
+    if (next.metal !== "silver") setByFace(false);
+    const first = meta?.purities[next.metal]?.[0];
+    if (first) setForm((f) => ({ ...f, purity: first }));
+  }
+
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const text = (k: "description" | "purchased_from" | "sold_to" | "notes") => ({
     value: form[k] ?? "",
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => set(k, e.target.value || null),
   });
-  const amount = byFace ? { ...form, weight: null } : { ...form, face_value: null };
+  const face = byFace && faceAllowed && facePurities.includes(String(Number(form.purity)));
+  const amount = face ? { ...form, weight: null } : { ...form, face_value: null };
   const oz = pureOz(amount);
   const spot = meta?.spot[metal];
   const sameCollections = inv && col ? bullionCollections.filter((c) => c.metal === col.metal) : bullionCollections;
-  const facePurities = useMemo(() => Object.keys(FACE_OZ), []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -116,9 +129,9 @@ export default function BullionFormPage() {
       body = {
         ...form,
         collection_id: collectionId,
-        weight: byFace ? null : form.weight,
-        face_value: byFace ? money_("Face value", form.face_value) : null,
-        quantity: byFace ? 1 : Number(form.quantity) || 1,
+        weight: face ? null : form.weight,
+        face_value: face ? money_("Face value", form.face_value) : null,
+        quantity: face ? 1 : Number(form.quantity) || 1,
         price_paid: money_("Price paid", form.price_paid),
         sale_price: money_("Sale price", form.sale_price),
       };
@@ -180,7 +193,7 @@ export default function BullionFormPage() {
         <div className="grid-2">
           <label className="field">
             <span>Collection</span>
-            <select value={collectionId ?? ""} onChange={(e) => setCollectionId(Number(e.target.value))}>
+            <select value={collectionId ?? ""} onChange={(e) => changeCollection(Number(e.target.value))}>
               {sameCollections.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({METAL_LABEL[c.metal]})
@@ -248,7 +261,7 @@ export default function BullionFormPage() {
               </div>
             </div>
           )}
-          {byFace ? (
+          {face ? (
             <label className="field">
               <span>Face value</span>
               <input

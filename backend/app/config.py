@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     greysheet_per_user_day: int = 150
     pcgs_per_user_day: int = 100  # PCGS calls (a coin's market data is 2)
     pcgs_site_day: int = 900
+    greysheet_site_day: int = 1500  # every Greysheet call the site makes in a day (users, catalogs, upkeep)
     # Monthly price-data upkeep in the background (services/price_archive.py): its own daily allowances, kept
     # small so it never crowds out people using the site. Off in tests.
     background_jobs: bool = True

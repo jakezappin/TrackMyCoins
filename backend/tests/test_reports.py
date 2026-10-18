@@ -256,3 +256,29 @@ def test_upgrade_finder(authed):
     [item] = d["items"]
     assert (item["label"], item["current_value"], item["next_label"], item["next_cpg"], item["cost"], item["pct"]) == (
         "1881-S", "900.00", "65", "1150.00", "250.00", 28)
+
+
+def test_upgrade_finder_plus_grade(authed, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.db import SessionLocal
+    from app.models import Coin, GradePriceSheet
+    from app.services import upgrades
+
+    col = _collection(authed, "morgan-dollars", name="Plus")
+    authed.post("/api/coins", json=coin_payload(col["id"], year=1881, mint_mark="S", grade=65, grade_plus=True, pcgs_number="7130"))
+    with SessionLocal() as db:
+        db.add(GradePriceSheet(key="pcgs:7130", name="1881-S $1", rows=[
+            {"grade": 65, "label": "MS65", "cac": False, "cpg": "500"},
+            {"grade": 65, "label": "MS65+", "cac": False, "cpg": "700"},
+            {"grade": 66, "label": "MS66", "cac": False, "cpg": "900"}]))
+        db.commit()
+
+    def one_row(db, col, mode):  # the checklist reduced to this coin's line
+        row = SimpleNamespace(coins=[db.query(Coin).one()], pcgs_numbers={"7130"}, label="1881-S", year=1881,
+                              mint_mark="S", variety=None)
+        return SimpleNamespace(rows=[row])
+
+    monkeypatch.setattr(upgrades.checklist, "build", one_row)
+    [item] = authed.get(f"/api/collections/{col['id']}/upgrades").json()["items"]
+    assert (item["current_value"], item["next_label"], item["cost"]) == ("700.00", "MS66", "200.00")  # 65+ priced as 65+

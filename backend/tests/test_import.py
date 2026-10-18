@@ -243,3 +243,26 @@ def test_ogp_round_trip(authed):
     assert f["ogp"] is True
     f, *_ = importer.row_to_fields({"Date": "1986-S", "Grade": "PR69"})
     assert f["ogp"] is False
+
+
+def test_american_eagles_and_modern_series_sort_right():
+    from app.services.series_match import from_text
+
+    cases = {("American Eagle 1 oz Silver", 2021): "american-silver-eagles",
+             ("American Eagle 1 oz Gold", 2020): "gold-eagles-50", ("American Eagle 1/10 oz Gold", 2020): "gold-eagles-5",
+             ("American Eagle 1/4 oz Gold", 2015): "gold-eagles-10", ("American Eagle 1/2 oz Gold", 2015): "gold-eagles-25",
+             ("Washington 5 oz", 2012): "atb-5oz-silver", ("Emerging Liberty dime", 2026): "america-250",
+             ("Liberty Eagle", 1880): "liberty-eagles", ("Washington Quarter", 2012): "washington-quarters"}
+    for (text, year), slug in cases.items():
+        assert from_text(text, year).series.slug == slug, text
+
+
+def test_current_year_only_checks_the_year():
+    from datetime import date
+
+    from app.series import BY_SLUG
+    from app.services.series_match import date_problem
+
+    y = date.today().year
+    assert date_problem(BY_SLUG["american-silver-eagles"], y, "W", "PR") is None
+    assert date_problem(BY_SLUG["morgan-dollars"], 1904, "CC", "MS")  # past years still checked

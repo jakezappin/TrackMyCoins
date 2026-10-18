@@ -97,6 +97,13 @@ def _issue(db: Session, w: WantItem) -> catalog.Candidate | None:
     return m.best or (m.candidates[0] if len(m.candidates) == 1 else None)
 
 
+def _finish_of(c: Coin) -> str:
+    """The coin's finish: its collection's (Proof, Silver Proof), or a proof grade in a business-strike or type set."""
+    if c.collection.finish != "MS":
+        return c.collection.finish
+    return "PR" if c.grade_prefix == "PR" else "MS"
+
+
 def _out(db: Session, user: User, w: WantItem, held: list[Coin]) -> dict:
     label = f"{w.year}{'' if w.mint_mark == 'P' else '-' + w.mint_mark} {w.coin_type.name}"
     if w.variety:
@@ -114,8 +121,10 @@ def _out(db: Session, user: User, w: WantItem, held: list[Coin]) -> dict:
             sheet_name = sheet.name
             if target:
                 target = with_designation(target, from_greysheet_name(sheet.name))
-    # Coins already owned of this date/mint (and variety, if given).
+    # Coins already owned of this date/mint and finish (and variety, if given): an MS66 1880 doesn't fill a
+    # wanted 1880 proof.
     mine = [c for c in held if c.coin_type_id == w.coin_type_id and c.year == w.year and c.mint_mark == w.mint_mark
+            and _finish_of(c) == w.finish
             and (not w.variety or (c.variety or "").lower().find(w.variety.lower()) >= 0)]
     mine.sort(key=lambda c: -(c.grade or 0))
     best = mine[0] if mine else None

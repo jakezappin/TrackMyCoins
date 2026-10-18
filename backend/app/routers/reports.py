@@ -21,6 +21,7 @@ from ..db import get_db
 from ..models import Coin, CoinType, Collection, User
 from ..schemas import CoinOut
 from ..services import checklist, insurance, purchase_value, upgrades
+from ..services.importer import no_formulas
 from ..services.coins import CPG, coin_out, collection_summary, latest_quote, on_hand, sold, value_estimate
 from ..services.greysheet import PricingError
 from .collections import _type_label, get_owned_collection
@@ -93,7 +94,12 @@ def collection_upgrades(
 ):
     """Next grade up for each coin in the set and what it would cost (saved prices only, no API calls)."""
     col = get_owned_collection(db, user, collection_id)
-    return upgrades.find(db, col, mode if mode in checklist.modes_for(col.coin_type.slug) else "full")
+    try:
+        return upgrades.find(db, col, mode if mode in checklist.modes_for(col.coin_type.slug) else "full")
+    except PricingError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Couldn't load the catalog for this series: {e}")
+    except httpx.HTTPError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Greysheet error: {e}")
 
 
 # ---- Excel export ----------------------------------------------------------------------------
@@ -283,6 +289,7 @@ def export_collection(
         _sheet(wb.create_sheet("Sold"), _pick(SOLD_COLUMNS, chosen) or SOLD_COLUMNS[:1], gone)
 
     buf = io.BytesIO()
+    no_formulas(wb)
     wb.save(buf)
     buf.seek(0)
     filename = re.sub(r"[^A-Za-z0-9 _-]+", "", col.name).strip().replace(" ", "_") or "collection"

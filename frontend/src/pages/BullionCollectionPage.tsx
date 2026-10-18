@@ -27,6 +27,11 @@ export default function BullionCollectionPage() {
   const load = useCallback(() => {
     api.bullionCollection(Number(id)).then(setCol).catch((e) => setError((e as Error).message));
   }, [id]);
+  useEffect(() => {
+    // Another collection: don't show the previous one (or its error) while this one loads.
+    setCol(null);
+    setError(null);
+  }, [id]);
   useEffect(load, [load]);
 
   async function rename() {
@@ -122,6 +127,7 @@ export default function BullionCollectionPage() {
       </div>
 
       <ValueHistoryChart
+        key={col.id}
         load={() => api.bullionCollectionHistory(col.id)}
         refreshKey={`${s.value}-${s.count}`}
         title="Melt Value Over Time"

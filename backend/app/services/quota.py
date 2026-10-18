@@ -6,7 +6,8 @@ saved all-grades results and cached PCGS data cost nothing.
 
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from ..config import get_settings
 from ..db import SessionLocal
@@ -27,17 +28,22 @@ def _limits(service: str) -> tuple[int, int | None]:
     s = get_settings()
     return {
         "claude": (s.claude_per_user_day, None),
-        "greysheet": (s.greysheet_per_user_day, None),
+        "greysheet": (s.greysheet_per_user_day, s.greysheet_site_day),
         "pcgs": (s.pcgs_per_user_day, s.pcgs_site_day),
     }[service]
 
 
-def _row(db, day: date, user_id: int, service: str) -> ApiUsage:
-    row = db.scalar(select(ApiUsage).where(ApiUsage.day == day, ApiUsage.user_id == user_id, ApiUsage.service == service))
-    if row is None:
-        row = ApiUsage(day=day, user_id=user_id, service=service, count=0)
-        db.add(row)
-    return row
+def _take(db, day: date, user_id: int, service: str, n: int, cap: int) -> bool:
+    """Add n to a counter only if it stays within cap: one UPDATE, so two requests at the same moment can't both
+    slip past the limit."""
+    db.execute(sqlite_insert(ApiUsage).values(day=day, user_id=user_id, service=service, count=0)
+               .on_conflict_do_nothing(index_elements=["day", "user_id", "service"]))
+    done = db.execute(
+        update(ApiUsage)
+        .where(ApiUsage.day == day, ApiUsage.user_id == user_id, ApiUsage.service == service, ApiUsage.count + n <= cap)
+        .values(count=ApiUsage.count + n)
+    )
+    return done.rowcount == 1
 
 
 def spend(user_id: int, service: str, n: int = 1, limit: int | None = None) -> None:
@@ -48,17 +54,24 @@ def spend(user_id: int, service: str, n: int = 1, limit: int | None = None) -> N
     per_user = limit if limit is not None else per_user
     today = date.today()
     with SessionLocal() as db:
-        mine = _row(db, today, user_id, service)
-        if mine.count + n > per_user:
+        if not _take(db, today, user_id, service, n, per_user):
+            db.rollback()
             raise QuotaExceeded(f"You've reached today's limit for {NAMES[service]} ({per_user}). It resets tomorrow.")
-        if site is not None:
-            everyone = _row(db, today, SITE, service)
-            if everyone.count + n > site:
-                raise QuotaExceeded(
-                    f"The site has reached today's limit for {NAMES[service]}. Try again tomorrow.", site_wide=True
-                )
-            everyone.count += n
-        mine.count += n
+        if site is not None and not _take(db, today, SITE, service, n, site):
+            db.rollback()  # undoes this user's count too
+            raise QuotaExceeded(f"The site has reached today's limit for {NAMES[service]}. Try again tomorrow.", site_wide=True)
+        db.commit()
+
+
+def spend_site(service: str, n: int = 1) -> None:
+    """Calls made for the site rather than one user (e.g. downloading a series' catalog): the site-wide limit only."""
+    _, site = _limits(service)
+    if site is None:
+        return
+    with SessionLocal() as db:
+        if not _take(db, date.today(), SITE, service, n, site):
+            db.rollback()
+            raise QuotaExceeded(f"The site has reached today's limit for {NAMES[service]}. Try again tomorrow.", site_wide=True)
         db.commit()
 
 

@@ -49,3 +49,14 @@ def test_want_with_invalid_year_refused(authed):
     ct = next(t for t in authed.get("/api/coin-types").json() if t["slug"] == "peace-dollars")
     r = authed.post("/api/wants", json={"coin_type_id": ct["id"], "finish": "MS", "year": 1930, "mint_mark": "P"})
     assert r.status_code == 422 and "1930 isn't a Peace Dollar date" in r.json()["detail"]
+
+
+def test_owned_coin_must_match_finish(authed):
+    from test_api import coin_payload
+
+    ct = next(t for t in authed.get("/api/coin-types").json() if t["slug"] == "morgan-dollars")
+    col = authed.post("/api/collections", json={"name": "Morgans", "coin_type_id": ct["id"]}).json()
+    authed.post("/api/coins", json=coin_payload(col["id"], year=1880, mint_mark="P", grade=66))
+    w = authed.post("/api/wants", json={"coin_type_id": ct["id"], "finish": "PR", "year": 1880, "mint_mark": "P",
+                                        "grade_prefix": "PR", "grade": 65}).json()
+    assert w["owned"] is None  # an MS66 isn't the 1880 proof on the want list

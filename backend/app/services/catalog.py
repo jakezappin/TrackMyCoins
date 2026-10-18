@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,7 @@ from ..config import get_settings
 from ..designations import canonical
 from ..models import CatalogEntry, Coin, CoinType
 from ..series import BY_SLUG, FINISHES
-from . import greysheet
+from . import greysheet, quota
 from .greysheet import PricingError
 
 STALE_AFTER = timedelta(days=30)
@@ -159,7 +160,9 @@ def series_nodes(coin_type: CoinType) -> list[int]:
 
 
 def sync(db: Session, coin_type: CoinType) -> SyncResult:
+    """Download the series' catalog from Greysheet (one call per section, counted against the site's daily limit)."""
     nodes = series_nodes(coin_type)
+    quota.spend_site("greysheet", len(nodes))
     series = BY_SLUG.get(coin_type.slug)
     raw: list[tuple[int, dict]] = []
     with greysheet.client() as c:
@@ -209,12 +212,30 @@ def status(db: Session, coin_type_id: int) -> tuple[int, datetime | None]:
     return count, last
 
 
+# A series whose catalog just failed to download isn't tried again for an hour (a want list with many wants
+# in it, say, would otherwise download it once per want).
+RETRY_AFTER = timedelta(hours=1)
+_failed: dict[int, tuple[datetime, str]] = {}
+
+
 def ensure_synced(db: Session, coin_type: CoinType) -> None:
     count, last = status(db, coin_type.id)
     if last is not None and last.tzinfo is None:
         last = last.replace(tzinfo=timezone.utc)
     if count == 0 or last is None or datetime.now(timezone.utc) - last > STALE_AFTER:
-        sync(db, coin_type)
+        failed = _failed.get(coin_type.id)
+        if failed and datetime.now(timezone.utc) - failed[0] < RETRY_AFTER:
+            if count:
+                return  # use the catalog we have
+            raise PricingError(failed[1])
+        try:
+            sync(db, coin_type)
+            _failed.pop(coin_type.id, None)
+        except (PricingError, httpx.HTTPError, quota.QuotaExceeded) as e:
+            _failed[coin_type.id] = (datetime.now(timezone.utc), str(e) or "Greysheet catalog unavailable")
+            if count:
+                return
+            raise
 
 
 def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:

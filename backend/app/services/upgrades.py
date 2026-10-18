@@ -44,10 +44,13 @@ def find(db: Session, col: Collection, mode: str = "full") -> dict:
             continue
         rows = _cpg_rows(sheet, cac=best.cac)
         current = value_estimate(best)
-        here = next((r for r in rows if int(r["grade"]) == best.grade), None)
+        # Grades in order with their plus: a 65+ is priced as a 65+, and its next step up is 66.
+        mine = (best.grade, bool(best.grade_plus))
+        rank = lambda r: (int(r["grade"] or 0), "+" in str(r["label"]))  # noqa: E731
+        here = next((r for r in rows if rank(r) == mine), None)
         if current is None and here is not None:
             current = Decimal(here["cpg"])
-        nxt = next((r for r in rows if int(r["grade"]) > best.grade), None)
+        nxt = next((r for r in rows if rank(r)[0] > best.grade), None)
         if nxt is None:
             top.append(row.label)  # already at the top priced grade
             continue

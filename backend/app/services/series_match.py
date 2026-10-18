@@ -147,7 +147,10 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "standing-liberty-quarters": ("slq",),
     "washington-quarters": ("washington", "state quarter", "statehood"),
     "atb-5oz-silver": ("5oz", "5 oz", "five ounce", "atb5"),
-    "america-250": ("semiquincentennial", "semiq", "america 250", "250th", "1776 2026", "1776~2026"),
+    "america-250": ("semiquincentennial", "semiq", "america 250", "250th", "1776 2026", "1776~2026",
+                    "emerging liberty", "enduring liberty", "mayflower compact", "revolutionary war",
+                    "declaration of independence", "us constitution", "u s constitution", "gettysburg address",
+                    "freedom ringing"),
     "seated-liberty-half-dollars": ("seated",),
     "barber-half-dollars": ("barber",),
     "kennedy-half-dollars": ("kennedy",),
@@ -188,6 +191,9 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "modern-commemorative-halves": ("commemorative", "commem"),
     "modern-commemorative-dollars": ("commemorative", "commem"),
 }
+
+# Series whose own words win over a broader series' ("5 oz" over "Washington", "Emerging Liberty" over dimes).
+DOMINANT = {"atb-5oz-silver", "america-250"}
 
 # Face value written out: (pattern, cents), checked in order on folded text; the first hit wins.
 _FACE_PATTERNS: list[tuple[re.Pattern, int]] = [
@@ -259,9 +265,14 @@ def _issues() -> dict:
 
 def date_problem(series: Series, year: int | None, mint: str | None, grade_prefix: str | None = None) -> str | None:
     """Why a date can't be right for a series (wrong year, no such mint that year, or a proof-only date with a
-    business-strike grade), or None. Years newer than the catalog (e.g. the 2021+ Morgans) only get the year check."""
+    business-strike grade), or None. The current and next year, and years newer than the catalog, only get the year
+    check."""
     if problem := year_problem(series, year):
         return problem
+    # The current year's issues are still coming out (and next year's are listed early), so the date list is
+    # incomplete for them: only the year is checked until the catalog catches up.
+    if year is not None and year >= _this_year():
+        return None
     strikes = _issues().get(series.slug, {}).get(year) if year is not None else None
     if not strikes or not mint or mint not in series.mint_marks:  # unknown letters: the mint-mark check says so
         return None
@@ -298,9 +309,33 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", t)
 
 
-def face_value(text: str) -> int | None:
+def _prep(text: str) -> str:
+    """Normalized text plus series words implied by it: "American Eagle 1 oz Silver" is a Silver Eagle,
+    "American Eagle 1/10 oz Gold" a Gold Eagle (the bare word "eagle" would otherwise read as a $10 gold piece)."""
     t = _norm(text)
+    eagle = re.search(r"\beagles?\b", t)
+    if eagle and re.search(r"\bsilver\b", t):
+        t += "silvereagle "
+    elif eagle and re.search(r"\bamerican\b", t) and re.search(r"\bgold\b", t):
+        t += "goldeagle "
+    return t
+
+
+# Gold Eagle sizes written out: 1/10 oz is the $5, 1/4 the $10, 1/2 the $25, 1 oz the $50.
+_EAGLE_SIZES = [(re.compile(r"1/10\s*oz|\btenth\b"), 500), (re.compile(r"1/4\s*oz|\bquarter (oz|ounce)\b"), 1000),
+                (re.compile(r"1/2\s*oz|\bhalf (oz|ounce)\b"), 2500), (re.compile(r"(?<![/0-9.])1\s*oz\b|\bone ounce\b"), 5000)]
+
+
+def face_value(text: str) -> int | None:
+    t = _prep(text)
+    if "goldeagle" in t:  # a Gold Eagle's size gives its face value
+        for pat, cents in _EAGLE_SIZES:
+            if pat.search(t):
+                return cents
+    american = re.search(r"\bamerican\b|silvereagle|goldeagle|flyingeagle", t)
     for pat, cents in _FACE_PATTERNS:
+        if american and pat.pattern.endswith(r"|\beagle\b") and not pat.search(t.replace("eagle", "")):
+            continue  # "American Eagle" isn't a $10 gold eagle
         if pat.search(t):
             return cents
     return None
@@ -318,9 +353,13 @@ class Match:
 
 
 def _candidates(text: str, year: int | None) -> list[Series]:
-    t = _norm(text)
+    t = _prep(text)
     usable = [s for s in SERIES if not s.is_type_set and year_ok(s.slug, year)]
     named = [s for s in usable if any(_has(t, k) for k in KEYWORDS.get(s.slug, ()))]
+    # Words that only one modern series uses beat a broader one ("Washington 5 oz" is an ATB 5 oz, not a quarter).
+    specific = [s for s in named if s.slug in DOMINANT]
+    if specific:
+        named = specific
     face = face_value(text)
     if named:
         # "Indian $5" or "Seated Liberty dime": the face value picks among designs used on several coins.

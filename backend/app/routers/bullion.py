@@ -147,7 +147,7 @@ def _item_out(item: BullionItem, series: svc.SpotSeries | None, spot_now: Decima
         "photos": [{"id": p.id, "url": _photo_url(p), "thumb_url": f"{_photo_url(p)}?size=thumb"} for p in item.photos],
         # Held more than a year: long-term for U.S. taxes (bullion is taxed as a collectible).
         "held_days": ((item.sale_date or datetime.now(timezone.utc).date()) - svc.started(item)).days,
-        "long_term": ((item.sale_date or datetime.now(timezone.utc).date()) - svc.started(item)).days > 365,
+        "long_term": svc.long_term(svc.started(item), item.sale_date or datetime.now(timezone.utc).date()),
         "thumbnail_url": f"{_photo_url(item.photos[0])}?size=thumb" if item.photos else None,
     }
 
@@ -161,6 +161,13 @@ def _collection_out(db: Session, col: BullionCollection, with_items: bool) -> di
         series = svc.SpotSeries.load(db, col.metal)
         out["items"] = [_item_out(i, series, spot) for i in sorted(items, key=lambda i: i.inventory_number)]
     return out
+
+
+def _check_metal(body: ItemIn, metal: str) -> None:
+    """Face value is how junk silver is counted; any other metal needs its weight."""
+    if body.face_value is not None and metal != "silver":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "Face value is only for 90%, 40% and 35% silver coins. Enter the weight for gold, platinum or palladium.")
 
 
 def _apply(item: BullionItem, body: ItemIn) -> None:
@@ -254,6 +261,7 @@ def all_history(db: Session = Depends(get_db), user: User = Depends(current_user
 @router.post("/items", status_code=status.HTTP_201_CREATED)
 def create_item(body: ItemIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     col = _collection(db, user, body.collection_id)
+    _check_metal(body, col.metal)
     item = BullionItem(user_id=user.id, collection_id=col.id,
                        inventory_number=svc.next_inventory_number(db, user.id, col.metal))
     _apply(item, body)
@@ -274,6 +282,7 @@ def update_item(inv: str, body: ItemIn, db: Session = Depends(get_db), user: Use
     target = _collection(db, user, body.collection_id)
     if target.metal != item.collection.metal:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Move it to a collection of the same metal.")
+    _check_metal(body, target.metal)
     item.collection_id = target.id
     _apply(item, body)
     db.commit()
@@ -326,12 +335,16 @@ async def upload_photos(inv: str, files: list[UploadFile], db: Session = Depends
     if len(item.photos) + len(files) > settings.max_photos_per_coin:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"An item can have at most {settings.max_photos_per_coin} photos.")
     start = len(item.photos)
+    saved: list[str] = []
     for n, f in enumerate(files):
         data = await f.read(settings.max_photo_bytes + 1)
         try:
             name, ctype = store.save_bytes(_photo_key(item.id), data, f.content_type or "")
         except store.PhotoError as e:
+            for done in saved:  # nothing is kept from a failed upload
+                store.delete_photo_file(_photo_key(item.id), done)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{f.filename}: {e}")
+        saved.append(name)
         db.add(BullionPhoto(item_id=item.id, file_name=name, content_type=ctype, sort_order=start + n))
     db.commit()
     db.expire_all()
@@ -402,12 +415,16 @@ async def upload_docs(inv: str, files: list[UploadFile], db: Session = Depends(g
     if have + len(files) > settings.max_attachments_per_coin:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"An item can have at most {settings.max_attachments_per_coin} files (it has {have}).")
+    saved: list[str] = []
     for f in files:
         data = await f.read(settings.max_attachment_bytes + 1)
         try:
             stored, name, ctype, size = docs.save(_photo_key(item.id), data, f.content_type or "", f.filename)
         except docs.AttachmentError as e:
+            for done in saved:  # nothing is kept from a failed upload
+                docs.delete_file(_photo_key(item.id), done)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{f.filename}: {e}")
+        saved.append(stored)
         db.add(BullionAttachment(item_id=item.id, file_name=stored, original_name=name, content_type=ctype, size_bytes=size))
     db.commit()
     return _docs(db, item.id)
@@ -499,10 +516,16 @@ def _check_row(col: BullionCollection, r: ImportRowOut) -> ItemIn | None:
     if r.errors:
         return None
     try:
-        return ItemIn(**{**r.fields, "collection_id": col.id})
+        item = ItemIn(**{**r.fields, "collection_id": col.id})
     except ValidationError as e:
         r.errors.extend(err["msg"].removeprefix("Value error, ") for err in e.errors())
         return None
+    try:
+        _check_metal(item, col.metal)
+    except HTTPException as e:
+        r.errors.append(e.detail)
+        return None
+    return item
 
 
 @router.post("/collections/{collection_id}/import/preview")
@@ -523,8 +546,6 @@ async def import_preview(collection_id: int, file: UploadFile, db: Session = Dep
         fields, errors = bio.row_to_item(values)
         r = ImportRowOut(row=n, sheet=sheet, fields=fields, errors=errors)
         item = _check_row(col, r)
-        if item is not None and col.metal != "silver" and item.face_value is not None:
-            r.errors.append("Face value is for silver coins")
         if item is not None and not r.errors:
             probe = BullionItem(weight=item.weight, weight_unit=item.weight_unit, purity=item.purity,
                                 face_value=item.face_value, quantity=item.quantity)

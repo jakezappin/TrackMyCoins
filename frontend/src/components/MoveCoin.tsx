@@ -41,7 +41,7 @@ export default function MoveCoin({ coin, onMoved }: { coin: CoinDetail; onMoved:
       </button>
       {open &&
         createPortal(
-          <div className="modal-backdrop" onClick={() => setOpen(false)}>
+          <div className="modal-backdrop" onClick={() => !busy && setOpen(false)}>
             <div className="modal" role="dialog" aria-label="Move coin" onClick={(e) => e.stopPropagation()}>
               <h2>Move {coin.inventory_number}</h2>
               <p className="muted small">
