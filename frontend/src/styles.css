@@ -3278,3 +3278,19 @@ table {
 .grow-2 {
   grid-column: span 2;
 }
+
+/* Dashboard groups: Numismatics and Bullion */
+.dash-group-head {
+  margin-bottom: -4px;
+  align-items: baseline;
+}
+.dash-group-head h2,
+.bullion-dash > .section-head h2 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+.bullion-dash {
+  margin-top: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}

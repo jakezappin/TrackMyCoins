@@ -38,7 +38,7 @@ export default function DashboardPage() {
   useEffect(() => {
     api.dashboard().then(setData).catch((e) => setError(e.message));
   }, [collections]);
-  const { refresh } = useApp();
+  const { refresh, bullionCollections } = useApp();
 
   if (error) return <div className="page error">{error}</div>;
   if (!data) return <div className="page muted">Loading…</div>;
@@ -78,6 +78,12 @@ export default function DashboardPage() {
       <RefreshSlot />
       <QuickSearch />
 
+      {bullionCollections.length > 0 && (
+        <div className="section-head dash-group-head">
+          <h2>Numismatics</h2>
+          <span className="muted small">Coins and sets, valued from CPG or your own estimates</span>
+        </div>
+      )}
       {/* Row 1: totals across every collection */}
       <div className="cards">
         <div className="card stat">
@@ -101,7 +107,6 @@ export default function DashboardPage() {
 
       <ValueHistoryChart collectionId={null} refreshKey={data.totals} />
       <MoversCard gainers={data.gainers} decliners={data.decliners} />
-      <BullionDashboard />
 
       {/* Row 2: recently opened collections */}
       <section className="section">
@@ -217,6 +222,8 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      <BullionDashboard />
 
       {creating && (
         <NewCollectionDialog onClose={() => setCreating(false)} onCreated={(c) => navigate(collectionPath(c))} />
