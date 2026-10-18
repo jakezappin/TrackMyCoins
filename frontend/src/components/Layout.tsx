@@ -4,12 +4,14 @@ import { api } from "../api";
 import { useApp } from "../App";
 import { collectionPath, collectionsBySeries, FINISH_LABEL, soldPath } from "../format";
 import Logo from "./Logo";
+import NewBullionDialog from "./NewBullionDialog";
 import NewCollectionDialog from "./NewCollectionDialog";
 
 export default function Layout() {
-  const { user, setUser, coinTypes, collections } = useApp();
+  const { user, setUser, coinTypes, collections, bullionCollections } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [creatingBullion, setCreatingBullion] = useState(false);
   const loc = useLocation();
   const navigate = useNavigate();
 
@@ -71,6 +73,19 @@ export default function Layout() {
               </NavLink>
             </div>
           ))}
+
+          <div className="nav-group">
+            <div className="nav-heading">Bullion</div>
+            {bullionCollections.map((c) => (
+              <NavLink key={c.id} to={`/bullion/${c.id}`} className="nav-item">
+                <span className="truncate">{c.name}</span>
+                <span className="count">{c.summary.count}</span>
+              </NavLink>
+            ))}
+            <button className="nav-item nav-action" onClick={() => setCreatingBullion(true)}>
+              + New bullion collection
+            </button>
+          </div>
         </nav>
 
         <div className="sidebar-footer">
@@ -97,6 +112,7 @@ export default function Layout() {
         <Outlet />
       </main>
 
+      {creatingBullion && <NewBullionDialog onClose={() => setCreatingBullion(false)} />}
       {creating && (
         <NewCollectionDialog
           onClose={() => setCreating(false)}

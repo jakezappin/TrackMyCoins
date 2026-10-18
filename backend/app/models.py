@@ -398,3 +398,87 @@ class PriceQuote(Base):
     raw: Mapped[dict | None] = mapped_column(JSON)
 
     coin: Mapped[Coin] = relationship(back_populates="price_quotes")
+
+
+# ---- Bullion: kept apart from the numismatic collections (no grades, catalog or price guides) ----------------
+
+class BullionCollection(Base):
+    """A user's bullion stack for one metal (silver, gold, platinum or palladium)."""
+
+    __tablename__ = "bullion_collections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    metal: Mapped[str] = mapped_column(String(12))  # silver | gold | platinum | palladium
+    name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    items: Mapped[list["BullionItem"]] = relationship(back_populates="collection", cascade="all, delete-orphan")
+
+
+class BullionItem(Base):
+    """A bar, round, coin, roll or tube. Pure metal = weight x purity x quantity, or face value for junk silver."""
+
+    __tablename__ = "bullion_items"
+    __table_args__ = (UniqueConstraint("user_id", "inventory_number"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    collection_id: Mapped[int] = mapped_column(ForeignKey("bullion_collections.id", ondelete="CASCADE"), index=True)
+    inventory_number: Mapped[str] = mapped_column(String(20))  # "AG-00001"
+    description: Mapped[str] = mapped_column(String(200))  # "Buffalo Round", "Silvertown Bar"
+    packaging: Mapped[str] = mapped_column(String(20), default="single")  # single | roll | tube | box
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    weight: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))  # per piece
+    weight_unit: Mapped[str] = mapped_column(String(4), default="ozt")  # ozt | g | kg
+    purity: Mapped[Decimal] = mapped_column(Numeric(6, 5))  # 0.999
+    face_value: Mapped[Decimal | None] = mapped_column(Money)  # junk silver: "$10 face" instead of weight
+    price_paid: Mapped[Decimal | None] = mapped_column(Money)
+    purchase_date: Mapped[date | None] = mapped_column(Date)
+    purchased_from: Mapped[str | None] = mapped_column(String(200))
+    sale_price: Mapped[Decimal | None] = mapped_column(Money)
+    sale_date: Mapped[date | None] = mapped_column(Date)
+    sold_to: Mapped[str | None] = mapped_column(String(200))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    collection: Mapped[BullionCollection] = relationship(back_populates="items")
+    photos: Mapped[list["BullionPhoto"]] = relationship(
+        back_populates="item", cascade="all, delete-orphan", order_by="BullionPhoto.sort_order"
+    )
+
+
+class BullionPhoto(Base):
+    __tablename__ = "bullion_photos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("bullion_items.id", ondelete="CASCADE"), index=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(50))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    item: Mapped[BullionItem] = relationship(back_populates="photos")
+
+
+class BullionCounter(Base):
+    """Next bullion inventory number per (user, metal): AG-00001, AU-00001... Never reused."""
+
+    __tablename__ = "bullion_counters"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    metal: Mapped[str] = mapped_column(String(12), primary_key=True)
+    next_seq: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class SpotPrice(Base):
+    """Daily spot price (USD per troy ounce) per metal: the history behind bullion values over time."""
+
+    __tablename__ = "spot_prices"
+    __table_args__ = (UniqueConstraint("metal", "day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    metal: Mapped[str] = mapped_column(String(12))
+    day: Mapped[date] = mapped_column(Date, index=True)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    source: Mapped[str] = mapped_column(String(20), default="live")  # live | history

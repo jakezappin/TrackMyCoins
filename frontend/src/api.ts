@@ -325,6 +325,78 @@ export type GradePrices =
       has_cac: boolean;
     };
 
+// ---- Bullion (kept apart from coins) ----
+export type Metal = "silver" | "gold" | "platinum" | "palladium";
+
+export interface BullionSummary {
+  count: number;
+  oz: Partial<Record<Metal, string>>;
+  value: string;
+  cost: string;
+  change: string;
+  change_pct: number | null;
+  unpriced: number;
+  sold_count: number;
+  realized: string;
+  spot: Partial<Record<Metal, string | null>>;
+  by_metal?: Partial<Record<Metal, BullionSummary>>;
+}
+
+export interface BullionCollection {
+  id: number;
+  name: string;
+  metal: Metal;
+  created_at: string;
+  summary: BullionSummary;
+  items?: BullionItem[];
+}
+
+export interface BullionItemIn {
+  collection_id: number;
+  description: string;
+  packaging: "single" | "roll" | "tube" | "box";
+  quantity: number;
+  weight: string | null;
+  weight_unit: "ozt" | "g" | "kg";
+  purity: string;
+  face_value: string | null;
+  price_paid: string | null;
+  purchase_date: string | null;
+  purchased_from: string | null;
+  sale_price: string | null;
+  sale_date: string | null;
+  sold_to: string | null;
+  notes: string | null;
+}
+
+export interface BullionItem extends BullionItemIn {
+  id: number;
+  inventory_number: string;
+  collection_name: string;
+  metal: Metal;
+  is_sold: boolean;
+  created_at: string;
+  oz: string;
+  spot_now: string | null;
+  value_now: string | null;
+  spot_at_purchase: string | null;
+  value_at_purchase: string | null;
+  premium_pct: number | null;
+  change: string | null;
+  change_pct: number | null;
+  photos: { id: number; url: string; thumb_url: string }[];
+  thumbnail_url: string | null;
+}
+
+export interface BullionMeta {
+  metals: Metal[];
+  purities: Record<Metal, string[]>;
+  units: string[];
+  packaging: string[];
+  face_purities: string[];
+  spot: Partial<Record<Metal, string | null>>;
+}
+
 /** One mint or proof set from the catalog (the coin form's Set picker). */
 export interface SetOption {
   gsid: number;
@@ -749,6 +821,32 @@ export const api = {
   priceWant: (id: number) => request<WantItem>("POST", `/api/wants/${id}/price`),
   upgrades: (collectionId: number) => request<Upgrades>("GET", `/api/collections/${collectionId}/upgrades`),
   priceData: () => request<PriceData>("GET", "/api/price-data"),
+  bullionMeta: () => request<BullionMeta>("GET", "/api/bullion/meta"),
+  bullionCollections: () => request<BullionCollection[]>("GET", "/api/bullion/collections"),
+  bullionCollection: (id: number) => request<BullionCollection>("GET", `/api/bullion/collections/${id}`),
+  createBullionCollection: (name: string, metal: Metal) =>
+    request<BullionCollection>("POST", "/api/bullion/collections", { name, metal }),
+  renameBullionCollection: (id: number, name: string) =>
+    request<BullionCollection>("PUT", `/api/bullion/collections/${id}`, { name }),
+  deleteBullionCollection: (id: number) => request<void>("DELETE", `/api/bullion/collections/${id}`),
+  bullionCollectionHistory: (id: number) => request<HistoryPoint[]>("GET", `/api/bullion/collections/${id}/history`),
+  bullionSummary: () => request<BullionSummary>("GET", "/api/bullion/summary"),
+  bullionHistory: () => request<HistoryPoint[]>("GET", "/api/bullion/history"),
+  bullionItem: (inv: string) => request<BullionItem>("GET", `/api/bullion/items/${encodeURIComponent(inv)}`),
+  createBullionItem: (b: BullionItemIn) => request<BullionItem>("POST", "/api/bullion/items", b),
+  updateBullionItem: (inv: string, b: BullionItemIn) =>
+    request<BullionItem>("PUT", `/api/bullion/items/${encodeURIComponent(inv)}`, b),
+  deleteBullionItem: (inv: string) => request<void>("DELETE", `/api/bullion/items/${encodeURIComponent(inv)}`),
+  bullionItemHistory: (inv: string) =>
+    request<HistoryPoint[]>("GET", `/api/bullion/items/${encodeURIComponent(inv)}/history`),
+  sellBullion: (inv: string, b: { quantity?: number; face_value?: string; sale_price: string; sale_date: string; sold_to?: string | null }) =>
+    request<{ sold: string; kept: string | null }>("POST", `/api/bullion/items/${encodeURIComponent(inv)}/sell`, b),
+  uploadBullionPhotos: (inv: string, files: File[]) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f));
+    return request<BullionItem>("POST", `/api/bullion/items/${encodeURIComponent(inv)}/photos`, fd);
+  },
+  deleteBullionPhoto: (id: number) => request<void>("DELETE", `/api/bullion/photos/${id}`),
   sets: (coinTypeId: number, year?: number) =>
     request<SetOption[]>("GET", `/api/coin-types/${coinTypeId}/sets${year ? `?year=${year}` : ""}`),
   fillPurchaseValue: (inv: string) =>

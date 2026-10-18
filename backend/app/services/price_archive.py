@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..db import SessionLocal
 from ..models import AuctionFetch, AuctionSale, Coin, CpgHistory, GradePriceSheet, PcgsGuideHistory
-from . import grade_prices, greysheet, quota
+from . import bullion, grade_prices, greysheet, quota
 from .coins import CPG, latest_quote, on_hand
 from .lookups import pcgs
 
@@ -149,6 +149,13 @@ def run_due(max_seconds: float = 600) -> dict:
     done = {"sheets": 0, "auctions": 0, "stopped": None}
     started = time.time()
     with SessionLocal() as db:
+        # Bullion: today's spot prices, and past prices when a gold-api.com key is set.
+        try:
+            bullion.record_live(db)
+            bullion.update_history(db)
+        except Exception as e:  # never let this stop the rest
+            db.rollback()
+            log.info("spot prices: %s", e)
         coins = _held(db)
         now = datetime.now(timezone.utc)
 

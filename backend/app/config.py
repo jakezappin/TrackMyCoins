@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # Monthly price-data upkeep in the background (services/price_archive.py): its own daily allowances, kept
     # small so it never crowds out people using the site. Off in tests.
     background_jobs: bool = True
+    gold_api_key: str = ""  # gold-api.com: daily spot price history for bullion (free tier: 10 calls an hour)
     archive_pcgs_day: int = 100
     archive_greysheet_day: int = 50
     pcgs_site_day_note: str = ""  # PCGS allows 1,000 a day for the whole site; keep a margin

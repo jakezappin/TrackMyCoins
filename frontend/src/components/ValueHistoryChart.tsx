@@ -9,8 +9,9 @@ const compact = new Intl.NumberFormat("en-US", { style: "currency", currency: "U
 
 function niceMax(v: number) {
   if (v <= 0) return 100;
-  const mag = 10 ** Math.floor(Math.log10(v));
-  const step = [1, 1.25, 1.5, 2, 2.5, 5, 10].map((f) => f * mag).find((s) => s * 4 >= v) ?? v / 4;
+  // Four even steps up to just above the highest value: 1,150 -> 0-1,200; 420 -> 0-500.
+  const mag = 10 ** Math.floor(Math.log10(v / 4));
+  const step = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 10].map((f) => f * mag).find((s) => s * 4 >= v) ?? v / 4;
   return step * 4;
 }
 
@@ -27,10 +28,19 @@ export default function ValueHistoryChart({
   collectionId = null,
   coinInv,
   refreshKey,
+  load,
+  title = "Value Over Time",
+  valueLabel = "Estimated value",
+  emptyText,
 }: {
   collectionId?: number | null;
   coinInv?: string;
   refreshKey?: unknown;
+  /** Another source of points (bullion: melt value over time). */
+  load?: () => Promise<HistoryPoint[]>;
+  title?: string;
+  valueLabel?: string;
+  emptyText?: string;
 }) {
   const one = coinInv !== undefined;
   const [collapsed, toggle] = useCollapsed("collapse-coin-history", true);
@@ -50,8 +60,8 @@ export default function ValueHistoryChart({
   const PAD = { top: 14, right: narrow ? 62 : 110, bottom: 26, left: narrow ? 48 : 58 };
 
   useEffect(() => {
-    (one ? api.coinHistory(coinInv) : api.history(collectionId)).then(setPoints).catch(() => setPoints([]));
-  }, [collectionId, coinInv, one, refreshKey]);
+    (load ? load() : one ? api.coinHistory(coinInv) : api.history(collectionId)).then(setPoints).catch(() => setPoints([]));
+  }, [collectionId, coinInv, one, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const geo = useMemo(() => {
     if (!points || points.length === 0) return null;
@@ -111,7 +121,7 @@ export default function ValueHistoryChart({
   if (one && collapsed) {
     return (
       <section className="card history-card collapsed">
-        <CollapseHead title="Value Over Time" collapsed onToggle={toggle} />
+        <CollapseHead title={title} collapsed onToggle={toggle} />
       </section>
     );
   }
@@ -134,25 +144,27 @@ export default function ValueHistoryChart({
       {(() => {
         const legend = (
           <div className="history-legend small">
-            <span className="lg value">Estimated value</span>
+            <span className="lg value">{valueLabel}</span>
             <span className="lg cost">{costWord}</span>
             {anyBackfilled && <span className="lg value dashed">Before {one ? "first price" : "prices were recorded"}</span>}
           </div>
         );
         return one ? (
-          <CollapseHead title="Value Over Time" collapsed={false} onToggle={toggle}>
+          <CollapseHead title={title} collapsed={false} onToggle={toggle}>
             {legend}
           </CollapseHead>
         ) : (
           <div className="section-head">
-            <h2>Value Over Time</h2>
+            <h2>{title}</h2>
             {legend}
           </div>
         );
       })()}
       {!geo || points.length < 2 || !hasValue ? (
         <p className="muted small">
-          {one
+          {emptyText
+            ? emptyText
+            : one
             ? "The chart fills in once there's a price history. Use Get CPG Price below."
             : "The chart fills in as you add coins and record prices. Use Refresh prices to get CPG values for every coin."}
         </p>
@@ -212,7 +224,7 @@ export default function ValueHistoryChart({
             >
               <strong>{shortDate(points[hover].date)}</strong>
               <span>
-                Estimated value {money(points[hover].value)}
+                {valueLabel} {money(points[hover].value)}
                 {points[hover].backfilled ? " *" : ""}
               </span>
               <span>
