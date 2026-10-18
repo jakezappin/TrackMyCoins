@@ -35,7 +35,7 @@ class SyncResult:
 @dataclass
 class Candidate:
     pcgs_number: str | None
-    gsid: int
+    gsid: int | None  # None: not a Greysheet listing (a Cameo PCGS number worked out from the plain proof's)
     name: str
     variety: str | None
     designation: str | None
@@ -74,11 +74,22 @@ _DATE_RE = re.compile(
 _IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE", "5OZ SILVER", "PEACE", "S$1 MORGAN", "S$1 PEACE", "S$1"}
 
 
+def _cameo_child(d: dict, name: str) -> bool:
+    if _clean(d.get("Variety2")):
+        return False  # a VAM or die variety (which may also be a cameo): still a sub-variety
+    if (_clean(d.get("Desg")) or "").upper() not in ("PR", "PF"):
+        return False
+    tail = re.search(r"\b(?:PR|PF)((?:\s+[A-Z0-9]+)*)\s*$", name.upper())
+    words = (canonical(tail.group(1)) or "").split() if tail else []
+    return "CAM" in words or "DCAM" in words
+
+
 def parse_collectible(d: dict) -> dict | None:
     """Normalize a Greysheet CollectibleDto. Returns None for entries that aren't a specific coin."""
     name = _clean(d.get("Name")) or ""
-    # Entries with a UiParentId are sub-varieties of a parent coin (VAMs, Sheldon numbers); keep parents.
-    if d.get("UiParentId"):
+    # Entries with a UiParentId are sub-varieties of a parent coin (VAMs, Sheldon numbers); keep parents. Except
+    # a proof's Cameo and Deep Cameo listings, which Greysheet files under the plain proof: they're priced apart.
+    if d.get("UiParentId") and not _cameo_child(d, name):
         return None
     if "[TYPE]" in name.upper() or d.get("IsSet") is True or d.get("IsType") is True:
         return None
@@ -289,6 +300,9 @@ def ensure_synced(db: Session, coin_type: CoinType) -> None:
             raise
 
 
+_CAMEO = ("CAM", "DCAM")
+
+
 def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:
     """Distinct designations in the catalog for a series and finish, e.g. ['BN', 'RB', 'RD']."""
     strike = FINISHES[finish][2]
@@ -297,7 +311,31 @@ def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:
         .where(CatalogEntry.coin_type_id == coin_type_id, CatalogEntry.strike == strike)
         .distinct()
     ).all()
-    return sorted({r for r in rows if r})
+    found = {r for r in rows if r}
+    if strike == "PR":
+        # Every proof can be Cameo or Deep/Ultra Cameo, whether or not the catalog lists it. Copper proofs carry
+        # their color too (RD CAM, RD DCAM...).
+        colors = sorted({w for d in found for w in d.split() if w in ("RD", "RB", "BN")})
+        found |= {f"{c} {cam}" for c in colors for cam in _CAMEO} if colors else set(_CAMEO)
+    return sorted(found)
+
+
+
+def _without_cameo(designation: str | None) -> str | None:
+    return " ".join(w for w in (designation or "").split() if w not in _CAMEO) or None
+
+
+def cameo_pcgs_number(plain: str | None, designation: str | None) -> str | None:
+    """PCGS numbers Cameo and Deep Cameo proofs as 8 or 9 in front of the plain proof's number (1895 $1 PR 7330,
+    CAM 87330, DCAM 97330). Only for the four-digit numbers that rule holds for."""
+    words = (designation or "").split()
+    if not plain or not plain.isdigit() or len(plain) != 4:
+        return None
+    if "DCAM" in words:
+        return "9" + plain
+    if "CAM" in words:
+        return "8" + plain
+    return None
 
 
 # ---- Matching ---------------------------------------------------------------------------------
@@ -386,8 +424,20 @@ def match(
             CatalogEntry.strike == strike,
         )
     ).all()
+    all_entries = entries
     entries = [e for e in entries if (e.designation or None) == designation]
     label = f"{year}{'' if mint_mark == 'P' else '-' + mint_mark} {designation or ''}".strip()
+    if not entries and strike == "PR" and designation and set(designation.split()) & set(_CAMEO):
+        # A Cameo / Deep Cameo proof the catalog doesn't list: PCGS's number for it, from the plain proof's.
+        base = _without_cameo(designation)
+        plain = [e for e in all_entries if (e.designation or None) == base and not e.variety]
+        number = cameo_pcgs_number(plain[0].pcgs_number, designation) if len(plain) == 1 else None
+        if number:
+            word = "Deep Cameo" if "DCAM" in designation.split() else "Cameo"
+            best = Candidate(pcgs_number=number, gsid=None, name=f"{plain[0].name} {word}", variety=None,
+                             designation=designation)
+            best.exact = True
+            return MatchResult(candidates=[best], best=best)
     if not entries:
         return MatchResult(message=f"No Greysheet catalog entry for {label}.")
 

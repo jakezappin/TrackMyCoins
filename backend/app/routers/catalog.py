@@ -26,7 +26,7 @@ class CatalogStatus(BaseModel):
 
 class CandidateOut(BaseModel):
     pcgs_number: str | None
-    gsid: int
+    gsid: int | None
     name: str
     variety: str | None
     designation: str | None

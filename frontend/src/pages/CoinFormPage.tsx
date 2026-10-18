@@ -533,7 +533,7 @@ export default function CoinFormPage() {
     }
   }
 
-  async function findPcgs() {
+  async function findPcgs(designation: string | null = form.strike_designation) {
     if (!coinType || !form.year) {
       setFindMsg("Enter the year and mint first.");
       return;
@@ -546,7 +546,7 @@ export default function CoinFormPage() {
         coin_type_id: coinType.id,
         year: Number(form.year),
         mint_mark: form.mint_mark,
-        designation: form.strike_designation,
+        designation,
         finish,
         variety: form.variety,
         gsa: form.gsa_hard_pack ? "hard" : form.gsa_soft_pack ? "soft" : null,
@@ -1119,7 +1119,15 @@ export default function CoinFormPage() {
           </label>
           <label className="field">
             <span>Strike designation</span>
-            <select {...text("strike_designation")}>
+            <select
+              value={form.strike_designation ?? ""}
+              onChange={(e) => {
+                const d = e.target.value || null;
+                set("strike_designation", d);
+                // A Cameo or DMPL coin has its own PCGS # (and price): find the one for the new designation.
+                if (form.year && coinType && !isSetSeries && !form.is_error) findPcgs(d);
+              }}
+            >
               <option value="">None</option>
               {designationOptions.map((d) => (
                 <option key={d} value={d}>
@@ -1132,7 +1140,7 @@ export default function CoinFormPage() {
             <span>PCGS coin # (for pricing)</span>
             <div className="row tight">
               <input {...text("pcgs_number")} placeholder="e.g. 7226" />
-              <button type="button" className="btn" onClick={findPcgs} disabled={findBusy} title="Find from date, mint and designation">
+              <button type="button" className="btn" onClick={() => findPcgs()} disabled={findBusy} title="Find from date, mint and designation">
                 {findBusy ? "…" : "Find"}
               </button>
             </div>
@@ -1235,7 +1243,7 @@ export default function CoinFormPage() {
         {candidates.length > 0 && (
           <div className="candidates">
             {candidates.map((c) => (
-              <button type="button" key={c.gsid} className="candidate" onClick={() => pickCandidate(c)} disabled={!c.pcgs_number}>
+              <button type="button" key={c.gsid ?? c.pcgs_number ?? c.name} className="candidate" onClick={() => pickCandidate(c)} disabled={!c.pcgs_number}>
                 <span className="mono">#{c.pcgs_number ?? "—"}</span>
                 <span>{c.name}</span>
                 {c.variety && <span className="muted">{c.variety}</span>}

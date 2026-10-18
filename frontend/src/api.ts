@@ -578,7 +578,7 @@ export interface CollectionStatus {
 
 export interface CatalogCandidate {
   pcgs_number: string | null;
-  gsid: number;
+  gsid: number | null;
   name: string;
   variety: string | null;
   designation: string | null;

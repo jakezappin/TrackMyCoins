@@ -47,7 +47,10 @@ MORGANS = [
     {"Gsid": 9, "PcgsNumber": "7068", "CoinDate": "Morgan", "Desg": "MS", "Name": "Morgan $1 Pre-1921 MS [Type]"},
 ]
 
-MORGAN_PROOFS = [item(8, "7315", "1880", strike="PR"), item(16, "87315", "1880", "CAM", strike="PR")]
+# Greysheet files a proof's Cameo and Deep Cameo listings under the plain proof (UiParentId).
+MORGAN_PROOFS = [item(8, "7315", "1880", strike="PR"), item(16, "87315", "1880", "CAM", strike="PR", parent=8),
+                 item(15, "7330", "1895", strike="PR"), item(14, "97330", "1895", "DCAM", strike="PR", parent=15),
+                 item(13, "133999", "1895", "DCAM", strike="PR", parent=15, variety2="VAM-1")]
 KENNEDY_PROOFS = [
     item(20, "6801", "1992-S", "DCAM", variety="Clad", strike="PR", denom="50c"),
     item(21, "96805", "1992-S", "DCAM", variety="Silver", strike="PR", denom="50c"),
@@ -162,7 +165,7 @@ def test_sync_pulls_series_nodes(authed):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["nodes"] == [8971, 8972]
-    assert body["count"] == 24  # 23 business strikes + 2 proofs - [Type] entry - VAM child
+    assert body["count"] == 26  # 23 business strikes + 4 proofs (cameos kept, the VAM cameo not) - [Type] - VAM child
     assert {c.split("NodeId=")[1].split("&")[0] for c in calls if "NodeId=" in c} == {"8971", "8972"}
 
 
@@ -264,7 +267,8 @@ def test_silver_proof_matching(authed):
 
 def test_copper_designations(authed):
     tid = type_id(authed, "lincoln-cents")
-    assert authed.get(f"/api/coin-types/{tid}/designations", params={"finish": "PR"}).json() == ["RB", "RD", "RD CAM"]
+    assert authed.get(f"/api/coin-types/{tid}/designations", params={"finish": "PR"}).json() == [
+        "RB", "RB CAM", "RB DCAM", "RD", "RD CAM", "RD DCAM"]
 
     def best(desg):
         m = authed.get(
@@ -433,3 +437,28 @@ def test_modern_morgans_split_from_shared_section(client, monkeypatch):
             t = db.query(CoinType).filter_by(slug=slug).one()
             cat.sync(db, t)
             assert [e.gsid for e in db.query(CatalogEntry).filter_by(coin_type_id=t.id)] == gsids
+
+
+def test_proof_cameo_designations_and_pcgs_numbers(authed):
+    """Every proof offers Cameo and Deep Cameo; one the catalog doesn't list gets PCGS's number for it."""
+    from app.designations import canonical, from_pcgs
+    from app.services.catalog import cameo_pcgs_number
+
+    tid = type_id(authed)
+    assert authed.get(f"/api/coin-types/{tid}/designations", params={"finish": "PR"}).json() == ["CAM", "DCAM"]
+
+    def best(desg):
+        m = authed.get("/api/catalog/match", params={"coin_type_id": tid, "year": 1880, "mint_mark": "P",
+                                                      "designation": desg, "finish": "PR"}).json()
+        return (m["best"] or {}).get("pcgs_number")
+
+    assert best(None) == "7315"
+    assert best("CAM") == "87315"  # listed in the catalog
+    assert best("Ultra Cameo") == "97315"  # not listed: 9 + the plain proof's number
+    m = authed.get("/api/catalog/match", params={"coin_type_id": tid, "year": 1895, "mint_mark": "P",
+                                                  "designation": "DCAM", "finish": "PR"}).json()
+    assert m["best"]["pcgs_number"] == "97330" and m["best"]["gsid"] == 14  # listed under the plain proof
+    assert cameo_pcgs_number("7330", "CAM") == "87330" and cameo_pcgs_number("7330", "DCAM") == "97330"
+    assert cameo_pcgs_number("149553", "CAM") is None  # newer numbers don't follow the rule
+    # PCGS's own codes for them.
+    assert canonical("CA") == "CAM" and from_pcgs({"Designation": "DC"}) == "DCAM"
