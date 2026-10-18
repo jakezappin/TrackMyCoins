@@ -82,6 +82,13 @@ const EMPTY: CoinFields = {
 
 const SERVICES: GradingService[] = ["PCGS", "NGC", "ANACS", "CACG", "ICG", "OTHER", "RAW"];
 const CIRC_PREFIXES = ["MS", "SP", "AU", "XF", "VF", "F", "VG", "G", "AG", "FR", "PO"];
+// The grades the services use, by letter grade (the Sheldon scale).
+const GRADE_NUMBERS: [string, number[]][] = [
+  ["PO", [1]], ["FR", [2]], ["AG", [3]], ["G", [4, 6]], ["VG", [8, 10]], ["F", [12, 15]], ["VF", [20, 25, 30, 35]],
+  ["XF", [40, 45]], ["AU", [50, 53, 55, 58]], ["MS", [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70]],
+];
+const SHELDON_NUMBERS = GRADE_NUMBERS.flatMap(([, ns]) => ns);
+const letterGrade = (n: number) => GRADE_NUMBERS.find(([, ns]) => ns.includes(n))?.[0] ?? "MS";
 
 /** A grade typed the way NGC and the others write it: "MS64", "64", "AU 58", "PF69", "64+", "65★". */
 function parseGrade(s: string): { prefix: string | null; grade: number; plus: boolean; star: boolean } | null {
@@ -119,13 +126,13 @@ const VARIETY_HINTS: Record<string, string> = {
   "morgan-dollars": "e.g. 8TF, 1880/79, O/S",
 };
 
-function verifyUrl(service: GradingService, cert: string, grade: number | null): string | null {
+function verifyUrl(service: GradingService, cert: string, grade: number | null, details = false): string | null {
   if (!cert && service !== "ANACS" && service !== "CACG" && service !== "ICG") return null;
   switch (service) {
     case "PCGS":
       return `https://www.pcgs.com/cert/${encodeURIComponent(cert)}`;
     case "NGC":
-      return ngcCertUrl(cert, grade);
+      return ngcCertUrl(cert, grade, details);
     case "ANACS":
       // ANACS's lookup form; it can't be prefilled from the address.
       return "https://portal.anacs.com/Verify/CertVerification.aspx";
@@ -518,7 +525,7 @@ export default function CoinFormPage() {
     if (files.length && !confirm("Photos you've attached here can't come along to NGC and back. Continue and re-add them later?")) return;
     if (!editInv) saveCoinDraft({ form, collectionId, memberTypeId });
     leaving.current = true; // the draft comes back with us
-    window.location.href = ngcCertUrl(form.cert_number, form.grade);
+    window.location.href = ngcCertUrl(form.cert_number, form.grade, form.details);
   }
 
   /** NGC has no lookup we can use, but CAC's site still tells us about a sticker. */
@@ -762,7 +769,7 @@ export default function CoinFormPage() {
   const isNgc = form.grading_service === "NGC";
   // NGC and ANACS: no lookups we can automate, so cert + grade and a Verify button that's always there.
   const verifyOnly = isNgc || form.grading_service === "ANACS" || form.grading_service === "ICG";
-  const vurl = lookup?.verify_url && form.grading_service !== "NGC" ? lookup.verify_url : verifyUrl(form.grading_service, form.cert_number ?? "", form.grade);
+  const vurl = lookup?.verify_url && form.grading_service !== "NGC" ? lookup.verify_url : verifyUrl(form.grading_service, form.cert_number ?? "", form.grade, form.details);
   const isSold = Boolean(form.sale_price || form.sale_date);
 
   return (
@@ -850,8 +857,41 @@ export default function CoinFormPage() {
             />
           </label>
           {verifyOnly && (
-            <label className="field grade-mini">
+            <label className={`field grade-mini${isNgc ? " ngc-grade" : ""}`}>
               <span>Grade</span>
+              {isNgc ? (
+                // NGC's cert page is by grade number, or NGCDetails for a Details coin: pick from NGC's grades.
+                <select
+                  value={form.details ? "details" : form.grade ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "details")
+                      return setForm((f) => ({ ...f, details: true, grade_plus: false, grade_star: false, cac: false, cac_sticker: null }));
+                    const n = v ? Number(v) : null;
+                    setForm((f) => ({
+                      ...f,
+                      details: false,
+                      details_problem: null,
+                      details_pct: null,
+                      grade: n,
+                      grade_prefix: n == null ? f.grade_prefix : isProof ? "PR" : letterGrade(n),
+                      grade_plus: n != null && f.grade_plus && n >= 45 && n <= 69,
+                      grade_star: n != null && f.grade_star,
+                    }));
+                  }}
+                  aria-label="NGC grade"
+                >
+                  <option value="">Grade…</option>
+                  {SHELDON_NUMBERS.slice()
+                    .reverse()
+                    .map((n) => (
+                      <option key={n} value={n}>
+                        {isProof ? `PF${n}` : `${letterGrade(n)}${n}`}
+                      </option>
+                    ))}
+                  <option value="details">NGC Details</option>
+                </select>
+              ) : (
               <input
                 inputMode="text"
                 placeholder="MS62"
@@ -875,6 +915,7 @@ export default function CoinFormPage() {
                 }}
                 onBlur={() => setGradeText(null)}
               />
+              )}
             </label>
           )}
           {canLookUp && (
@@ -888,7 +929,7 @@ export default function CoinFormPage() {
                 Open on NGC ↗
               </button>
             ) : (
-              <a className="btn btn-primary" href={ngcCertUrl(form.cert_number, form.grade)} target="_blank" rel="noreferrer">
+              <a className="btn btn-primary" href={ngcCertUrl(form.cert_number, form.grade, form.details)} target="_blank" rel="noreferrer">
                 Verify ↗
               </a>
             )

@@ -14,22 +14,16 @@ import httpx
 
 HOST = "ccg-imaging-ngc-coins-production.s3.amazonaws.com"
 BUCKET = "ccg-imaging-ngc-coins-production"
-# As forgiving as possible about the parts NGC varies (folder id length, case, OBV/Obverse, preview size, extension,
-# S3 address style), but only ever NGC's own photo bucket: the server fetches these links.
-LINK = re.compile(
-    r"^https?://(?P<host>" + re.escape(BUCKET) + r"\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com"
-    r"|s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com/" + re.escape(BUCKET) + r")"
-    r"/(?P<folder>(?:[A-Za-z0-9_-]{1,100}/){0,4})"
-    r"(?P<prefix>NGC[_-]?)?(?P<cert>\d{4,12}(?:-\d{1,4})?)[_-]"
-    r"(?P<side>obverse|reverse|obv|rev)(?P<size>[@_-]\d{2,5}x\d{2,5})?"
-    r"\.(?P<ext>jpe?g|png|webp)(?:[?#].*)?$",
-    re.IGNORECASE,
-)
-# S3 names are case-sensitive, so the other side keeps the pasted link's spelling (_OBV/_REV, _obv/_rev,
-# _Obverse/_Reverse). Preview sizes vary (@500x722, @200X300...), so full size is tried first, then the same size.
+# Deliberately forgiving: any link to NGC's photo bucket (any S3 address style) whose file name has the cert number
+# and the side in it. Prefixes (TN_ thumbnails), size suffixes (@500x722, _200x300), case and extension all vary
+# between coins and over time. Only ever NGC's own bucket, though: the server fetches these links.
+_BUCKET_LINK = re.compile(
+    r"^https?://(?:" + re.escape(BUCKET) + r"\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com"
+    r"|s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com/" + re.escape(BUCKET) + r")/(?P<path>[^?#]+)", re.IGNORECASE)
+_CORE = re.compile(r"(?P<core>(?:NGC[_-]?)?(?P<cert>\d{4,12}(?:-\d{1,4})?)[_-]?(?P<side>obverse|reverse|obv|rev))",
+                   re.IGNORECASE)
+_EXT = re.compile(r"\.(?P<ext>jpe?g|png|webp)$", re.IGNORECASE)
 _OTHER = {"obv": "rev", "rev": "obv", "obverse": "reverse", "reverse": "obverse"}
-
-
 NO_IMAGES = "The link may be incorrect or no images are available for this coin."
 
 
@@ -46,22 +40,40 @@ def _same_case(word: str, like: str) -> str:
 
 
 def parse(link: str) -> dict:
+    """Both sides' photo URLs from one pasted NGC photo link: full size first (the file name without any thumbnail
+    prefix or size suffix), then the pasted file's own name, for each side."""
     link = (link or "").strip().strip("<>\"' ")
-    m = LINK.match(link)
+    m = _BUCKET_LINK.match(link)
     if not m:
         raise NgcImageError(NO_IMAGES)
-    side = m["side"]
+    path = m["path"]
+    if ".." in path.split("/"):
+        raise NgcImageError(NO_IMAGES)
+    folder, _, name = path.rpartition("/")
+    core, ext = _CORE.search(name), _EXT.search(name)
+    if not core or not ext:
+        raise NgcImageError(NO_IMAGES)
+    side = core["side"]
     other = _same_case(_OTHER[side.lower()], side)
-    # Whichever address style was pasted, it's the same bucket: use the standard address (the one photo downloads allow).
-    base = f"https://{HOST}/{m['folder']}{m['prefix'] or ''}{m['cert']}_"
-    size, ext = m["size"] or "", m["ext"]
-    sides = (side, other) if side.lower().startswith("obv") else (other, side)
-    full = [f"{base}{sd}.{ext}" for sd in sides]
-    sized = [f"{base}{sd}{size}.{ext}" for sd in sides]
-    pasted = link.split("?", 1)[0].split("#", 1)[0]
-    # Show the pasted (small) image for its side; the other side's preview size isn't known, so use full size.
-    previews = [pasted, full[1]] if side.lower().startswith("obv") else [full[0], pasted]
-    return {"cert_number": m["cert"], "urls": full, "fallbacks": sized, "previews": previews}
+    base = f"https://{HOST}/{folder + '/' if folder else ''}"
+
+    def named(which: str) -> tuple[str, str]:
+        """(full-size name, the pasted name) for one side."""
+        swap = core["core"][: core.start("side") - core.start("core")] + which
+        full = f"{swap}.{ext['ext']}"
+        pasted = name[: core.start("core")] + swap + name[core.end("core"):]
+        return base + full, base + pasted
+
+    obv_side, rev_side = (side, other) if side.lower().startswith("obv") else (other, side)
+    obv, rev = named(obv_side), named(rev_side)
+    pasted_url = base + name
+    return {
+        "cert_number": core["cert"],
+        "urls": [obv[0], rev[0]],
+        "fallbacks": [obv[1], rev[1]],
+        # The pasted (small) image previews its own side; the other side shows full size.
+        "previews": [pasted_url, rev[0]] if side.lower().startswith("obv") else [obv[0], pasted_url],
+    }
 
 
 def resolve(link: str) -> dict:

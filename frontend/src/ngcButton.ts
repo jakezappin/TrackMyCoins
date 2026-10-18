@@ -75,8 +75,10 @@ export function clearCoinDraft() {
   }
 }
 
-export function ngcCertUrl(cert?: string | null, grade?: number | null): string {
+/** NGC's cert page: /certlookup/<cert>/<grade number>/, or /NGCDetails/ for a Details coin. */
+export function ngcCertUrl(cert?: string | null, grade?: number | null, details?: boolean): string {
   const c = (cert ?? "").trim();
   if (!c) return "https://www.ngccoin.com/certlookup/";
-  return `https://www.ngccoin.com/certlookup/${encodeURIComponent(c)}/${grade ? `${grade}/` : ""}`;
+  const tail = details ? "NGCDetails/" : grade ? `${grade}/` : "";
+  return `https://www.ngccoin.com/certlookup/${encodeURIComponent(c)}/${tail}`;
 }

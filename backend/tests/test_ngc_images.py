@@ -40,6 +40,8 @@ def test_parse_newer_folder_ids_and_uppercase_jpg():
 
 
 @pytest.mark.parametrize("link,cert,obv,rev", [
+    ("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/17709902-6008-4aad-aac5-cd2bd653c64f/TN_NGC2183211-001_OBV.jpg",
+     "2183211-001", "NGC2183211-001_OBV.jpg", "NGC2183211-001_REV.jpg"),  # a TN_ thumbnail: full size wanted
     ("https://ccg-imaging-ngc-coins-production.s3.amazonaws.com/abc123/ngc1234567-001_obv.jpeg", "1234567-001",
      "ngc1234567-001_obv.jpeg", "ngc1234567-001_rev.jpeg"),
     ("https://ccg-imaging-ngc-coins-production.s3.us-east-1.amazonaws.com/A1B2C3D4E5F6/NGC1234567-001_Reverse@1000X1500.PNG",

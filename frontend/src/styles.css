@@ -4136,3 +4136,7 @@ fieldset.field .check {
     flex: none;
   }
 }
+
+.lookup-bar .field.grade-mini.ngc-grade {
+  width: 150px;
+}

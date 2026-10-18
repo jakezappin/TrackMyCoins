@@ -328,7 +328,7 @@ export default function CoinDetailPage() {
               {coin.cert_number && (
                 <p className="small muted">
                   Open{" "}
-                  <a href={ngcCertUrl(coin.cert_number, coin.grade)} target="_blank" rel="noreferrer">
+                  <a href={ngcCertUrl(coin.cert_number, coin.grade, coin.details)} target="_blank" rel="noreferrer">
                     this coin on NGC ↗
                   </a>
                   , then copy a coin photo's address there and paste it below.
