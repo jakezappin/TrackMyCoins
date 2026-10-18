@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/metals", tags=["metals"])
 
 PRECIOUS = ("gold", "silver", "platinum", "palladium")
 RATIO_YEARS = 25  # the gold/silver ratio is judged against its average over this many years
-RANGES = {"1m": 31, "6m": 183, "1y": 366, "5y": 5 * 366, "10y": 10 * 366, "all": None}
+RANGES = {"1w": 8, "1m": 31, "6m": 183, "1y": 366, "5y": 5 * 366, "10y": 10 * 366, "all": None}
 MAX_POINTS = 400
 
 
@@ -180,7 +180,7 @@ def overview(db: Session = Depends(get_db), user: User = Depends(current_user)):
 @router.get("/history")
 def history(
     series: Literal["gold", "silver", "platinum", "palladium", "ratio"] = "gold",
-    range: Literal["1m", "6m", "1y", "5y", "10y", "all"] = "1y",
+    range: Literal["1w", "1m", "6m", "1y", "5y", "10y", "all"] = "1y",
     db: Session = Depends(get_db),
     _: User = Depends(current_user),
 ):

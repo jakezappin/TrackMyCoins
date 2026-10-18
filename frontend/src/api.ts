@@ -634,7 +634,7 @@ export interface MetalsOverview {
   };
 }
 
-export type MetalRange = "1m" | "6m" | "1y" | "5y" | "10y" | "all";
+export type MetalRange = "1w" | "1m" | "6m" | "1y" | "5y" | "10y" | "all";
 
 export interface WantIn {
   collection_id?: number | null;

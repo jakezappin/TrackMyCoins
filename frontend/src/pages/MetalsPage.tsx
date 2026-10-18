@@ -4,7 +4,7 @@ import LineChart, { type LinePoint } from "../components/LineChart";
 import { money } from "../format";
 
 const METAL_NAME: Record<PreciousMetal, string> = { gold: "Gold", silver: "Silver", platinum: "Platinum", palladium: "Palladium" };
-const RANGES: [MetalRange, string][] = [["1m", "1M"], ["6m", "6M"], ["1y", "1Y"], ["5y", "5Y"], ["10y", "10Y"], ["all", "All"]];
+const RANGES: [MetalRange, string][] = [["1w", "1W"], ["1m", "1M"], ["6m", "6M"], ["1y", "1Y"], ["5y", "5Y"], ["10y", "10Y"], ["all", "All"]];
 const SIGNAL: Record<string, { label: string; tone: string; text: string }> = {
   trade_gold: {
     label: "Trade gold for silver",

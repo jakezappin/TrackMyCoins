@@ -64,12 +64,19 @@ export default function LineChart({ points, format, label, guides = [], band, he
     const y = (v: number) => PAD.top + (1 - (v - min) / (max - min)) * h;
     const path = points.map((p, i) => `${i ? "L" : "M"}${x(p.date).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
     const yearSpan = (t1 - t0) / (365 * 864e5);
-    const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => {
-      const i = Math.round(f * (points.length - 1));
+    const daySpan = (t1 - t0) / 864e5;
+    const idx = [...new Set([0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * (points.length - 1))))];
+    const xTicks = idx.map((i) => {
       const d = new Date(points[i].date + "T00:00:00");
       return {
         x: x(points[i].date),
-        text: yearSpan > 2 ? String(d.getFullYear()) : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        // A week: "Mon 13"; a few months: "Oct 13"; years: "2024".
+        text:
+          yearSpan > 2
+            ? String(d.getFullYear())
+            : daySpan <= 14
+              ? d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })
+              : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
       };
     });
     return { x, y, path, yTicks: niceTicks(min, max), xTicks, w, h };
@@ -114,7 +121,7 @@ export default function LineChart({ points, format, label, guides = [], band, he
           </g>
         ))}
         {geo.xTicks.map((t, i) => (
-          <text key={i} x={t.x} y={height - 6} className="lc-axis" textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"}>
+          <text key={i} x={t.x} y={height - 6} className="lc-axis" textAnchor={i === 0 ? "start" : i === geo.xTicks.length - 1 ? "end" : "middle"}>
             {t.text}
           </text>
         ))}
@@ -127,6 +134,8 @@ export default function LineChart({ points, format, label, guides = [], band, he
           </g>
         ))}
         <path d={geo.path} className="lc-line" />
+        {points.length <= 15 &&
+          points.map((p) => <circle key={p.date} cx={geo.x(p.date)} cy={geo.y(p.value)} r={3} className="lc-dot" />)}
         {hp && (
           <g>
             <line x1={geo.x(hp.date)} x2={geo.x(hp.date)} y1={PAD.top} y2={PAD.top + geo.h} className="lc-cross" />

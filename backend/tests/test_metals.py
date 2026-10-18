@@ -89,3 +89,10 @@ def test_history(authed):
     assert pts[-1] == {"date": date.today().isoformat(), "value": 4000.0} and len(pts) <= 32
     ratio = authed.get("/api/metals/history?series=ratio&range=all").json()
     assert ratio[-1]["value"] == 80.0 and len(ratio) <= 401
+
+
+def test_week_range(authed):
+    _history({"gold": [(d, 3000.0 + d) for d in range(1, 40)], "silver": [(d, 30.0) for d in range(1, 40)]})
+    pts = authed.get("/api/metals/history?series=gold&range=1w").json()
+    assert 6 <= len(pts) <= 9 and pts[-1]["value"] == 4000.0  # a week of closes, then today's live price
+    assert len(authed.get("/api/metals/history?series=ratio&range=1w").json()) >= 6
