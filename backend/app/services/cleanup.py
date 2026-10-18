@@ -24,7 +24,7 @@ from ..series import BY_SLUG
 from . import details, series_match
 from .coins import _cert_key, find_duplicate_cert
 from .import_columns import COLUMNS, HEADERS
-from .importer import ALIASES, _key, _text, no_formulas, row_to_fields
+from .importer import ALIASES, _key, _text, no_formulas, row_to_fields, split_description
 
 NOTES = "notes_append"  # mapping choice: keep this column's text in Notes
 # Fields the importer reads that the standard columns don't cover, with the heading they get.
@@ -36,49 +36,8 @@ FIELD_HEADER = {**{f: h for h, f, *_ in COLUMNS}, **EXTRA}
 CHOICES = [{"field": f, "label": h} for h, f, *_ in COLUMNS] + [{"field": f, "label": h} for f, h in EXTRA.items()] + [
     {"field": NOTES, "label": "Add to Notes"}, {"field": "", "label": "Ignore"}]
 
-_SERVICE = re.compile(r"\b(PCGS|NGC|ANACS|CACG|ICG)\b", re.I)
-_GRADE = re.compile(r"\b(MS|PR|PF|SP|AU|XF|EF|VF|VG|AG|FR|PO|F|G)[\s-]?(\d{1,2})(\s?\+)?(\s?(?:★|\*))?(?![\d/])", re.I)
-_CERT = re.compile(r"(?:#\s*)?\b(\d{7}-\d{3}|\d{6,10})\b")
-_CAC = re.compile(r"\bCAC\b(?:\s+(green|gold))?|\b(green|gold)\s+(?:cac|bean|sticker)\b", re.I)
-_DESIG = re.compile(r"\b(DMPL|DPL|PL|DCAM|UCAM|CAM|RD|RB|BN|FBL|FB|FS|FH|FT)\b")
-
-
 def auto_field(header: str) -> str | None:
     return ALIASES.get(_key(header))
-
-
-def split_description(text: str) -> tuple[str, dict]:
-    """("1881-S Morgan Dollar", {"grading_service": "PCGS", "grade": "MS65+ DMPL", "cac_sticker": "Green",
-    "cert_number": "12345678"}) from "1881-S Morgan Dollar PCGS MS65+ DMPL CAC Green #12345678"."""
-    found: dict = {}
-    rest = text
-    if (m := _SERVICE.search(rest)):
-        found["grading_service"] = m.group(1).upper()
-        rest = rest[: m.start()] + " " + rest[m.end():]
-    if (m := _CAC.search(rest)):
-        found["cac_sticker"] = (m.group(1) or m.group(2) or "yes").title()
-        rest = rest[: m.start()] + " " + rest[m.end():]
-    # The cert (6+ digits, or NGC's 1234567-001) first, so it isn't taken for part of a Details problem.
-    if (m := _CERT.search(rest)):
-        found["cert_number"] = m.group(1)
-        rest = rest[: m.start()] + " " + rest[m.end():]
-    is_details, _ = details.detect(rest)
-    if (m := _GRADE.search(rest)):
-        grade = f"{m.group(1).upper().replace('PF', 'PR').replace('EF', 'XF')}{m.group(2)}"
-        grade += "+" if m.group(3) else ""
-        grade += "★" if m.group(4) else ""
-        tail = rest[m.end():]
-        desig = _DESIG.findall(tail[:20])
-        if desig:
-            grade += " " + " ".join(desig)
-            tail = _DESIG.sub(" ", tail, count=len(desig))
-        if is_details:
-            found_d = re.search(r"details?.*$", tail, re.I)
-            grade += " Details" + ((" " + re.sub(r"^details?\W*", "", found_d.group(0), flags=re.I)) if found_d else "")
-            tail = tail[: found_d.start()] if found_d else tail
-        found["grade"] = grade.strip()
-        rest = rest[: m.start()] + " " + tail
-    return " ".join(rest.replace(" ,", ",").split()).strip(" ,-·"), found
 
 
 def _money(v) -> str:

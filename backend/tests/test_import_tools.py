@@ -98,7 +98,7 @@ def test_cleanup_grade_cells_with_service_cert_and_designation(authed):
     assert got[:5] == [("PCGS", "32611221", "FR2"), ("Raw", "", "MS64 PL"), ("NGC", "2345678-004", "PR69 DCAM"),
                        ("PCGS", "23456789", "MS63"), ("NGC", "1234567-002", "AU58")]
     assert rows[0]["cleaned"]["Variety"] == "7TF" and not rows[0]["problems"]
-    assert rows[3]["cleaned"]["CAC sticker"] == "Green" and "Grade note: Toned" in rows[3]["cleaned"]["Notes"]
+    assert rows[3]["cleaned"]["CAC sticker"] == "Green" and rows[3]["cleaned"]["Toning"] == "Obverse"  # "Toned"
     assert rows[3]["notes"] and "cert number" in rows[3]["notes"][0]  # PCGS from an 8-digit cert: a guess, flagged
     assert not rows[4]["notes"]  # NGC's format is certain
     assert rows[5]["cleaned"]["Grading service"] == "ICG" and "10-digit" in rows[5]["notes"][0]
@@ -134,3 +134,22 @@ def test_other_grading_service(authed, morgan_collection):
     # Imported by name.
     rows = authed.post("/api/import/cleanup", files=_csv("Date,Type,Grading service,Cert #,Grade\n1881-S,Morgan Dollar,SEGS,77777,MS63\n")).json()["rows"]
     assert rows[0]["cleaned"]["Grading service"] == "SEGS" and not rows[0]["problems"]
+
+
+def test_import_reads_holders_and_descriptions_broadly(authed):
+    """Anything that says GSA is a GSA holder (Soft Pack only if it says soft); a run-together description is
+    split on a direct import too, not only in the cleaner."""
+    from app.services.importer import row_to_fields
+
+    def read(**v):
+        return row_to_fields(v)[0]
+
+    for cell in ("GSA", "GSA Slab", "GSA Box", "MS64 (GSA Box)", "GSA Hoard with box and COA"):
+        f = read(Date="1881-CC Morgan Dollar", Grade=cell)
+        assert f["gsa_hard_pack"] and not f["gsa_soft_pack"], cell
+    assert read(Date="1881-CC Morgan Dollar GSA soft pack", Grade="MS63")["gsa_soft_pack"]
+    assert read(Date="1881-CC Morgan Dollar", Grade="MS63", Packaging="GSA")["gsa_hard_pack"]
+    f = read(Date="1881-S Morgan Dollar PCGS MS65+ DMPL CAC Green #12345678")
+    assert (f["grading_service"], f["cert_number"], f["grade"], f["strike_designation"], f["cac_sticker"]) == (
+        "PCGS", "12345678", 65, "DMPL", "green")
+    assert read(Date="1884-O Morgan Dollar Rattler", Grade="MS64 (1234567 PCGS)")["slab_rattler"]

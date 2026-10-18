@@ -101,8 +101,9 @@ _CELL_HOLDERS = [
     (re.compile(r"\bsoap\s?box\b", re.I), "Soapbox"), (re.compile(r"\b(?:OGH|old green holder)\b", re.I), "OGH"),
 ]
 _CELL_PACKS = [
-    (re.compile(r"\bGSA\s+(?:hard\s*(?:pack(?:age)?)?|slab|holder)\b", re.I), "GSA Hard Pack"),
-    (re.compile(r"\bGSA\s+soft\s*(?:pack(?:age)?)?\b", re.I), "GSA Soft Pack"),
+    (re.compile(r"\bGSA\b[\w\s,-]*?\bsoft\b(?:\s*(?:pack(?:age)?|box|holder|case))?", re.I), "GSA Soft Pack"),
+    (_GSA_WORDS := re.compile(r"\bGSA\b(?:[\s,-]*(?:hoard|hard|soft|pack(?:age)?|box(?:ed)?|holder|slab|case|"
+                              r"capsule|plastic|envelope|w/|with|coa|certificate|and))*", re.I), "GSA Hard Pack"),
     (re.compile(r"\bOGP\b", re.I), "OGP"),
 ]
 
@@ -165,6 +166,48 @@ def service_from_cert(cert: str | None) -> tuple[str | None, str | None]:
     if re.fullmatch(r"\d{6}", c):
         return "ANACS", "ANACS worked out from the 6-digit cert number. Check it."
     return None, None
+
+
+# A run-together description in one column: "1881-S Morgan Dollar PCGS MS65+ DMPL CAC Green #12345678".
+_SERVICE = re.compile(r"\b(PCGS|NGC|ANACS|CACG|ICG)\b", re.I)
+_GRADE = re.compile(r"\b(MS|PR|PF|SP|AU|XF|EF|VF|VG|AG|FR|PO|F|G)[\s-]?(\d{1,2})(\s?\+)?(\s?(?:★|\*))?(?![\d/])", re.I)
+_CERT = re.compile(r"(?:#\s*)?\b(\d{7}-\d{3}|\d{6,10})\b")
+_CAC = re.compile(r"\bCAC\b(?:\s+(green|gold))?|\b(green|gold)\s+(?:cac|bean|sticker)\b", re.I)
+_DESIG = re.compile(r"\b(DMPL|DPL|PL|DCAM|UCAM|CAM|RD|RB|BN|FBL|FB|FS|FH|FT)\b")
+
+
+def split_description(text: str) -> tuple[str, dict]:
+    """("1881-S Morgan Dollar", {"grading_service": "PCGS", "grade": "MS65+ DMPL", "cac_sticker": "Green",
+    "cert_number": "12345678"}) from "1881-S Morgan Dollar PCGS MS65+ DMPL CAC Green #12345678"."""
+    found: dict = {}
+    rest = text
+    if (m := _SERVICE.search(rest)):
+        found["grading_service"] = m.group(1).upper()
+        rest = rest[: m.start()] + " " + rest[m.end():]
+    if (m := _CAC.search(rest)):
+        found["cac_sticker"] = (m.group(1) or m.group(2) or "yes").title()
+        rest = rest[: m.start()] + " " + rest[m.end():]
+    # The cert (6+ digits, or NGC's 1234567-001) first, so it isn't taken for part of a Details problem.
+    if (m := _CERT.search(rest)):
+        found["cert_number"] = m.group(1)
+        rest = rest[: m.start()] + " " + rest[m.end():]
+    is_details, _ = details.detect(rest)
+    if (m := _GRADE.search(rest)):
+        grade = f"{m.group(1).upper().replace('PF', 'PR').replace('EF', 'XF')}{m.group(2)}"
+        grade += "+" if m.group(3) else ""
+        grade += "★" if m.group(4) else ""
+        tail = rest[m.end():]
+        desig = _DESIG.findall(tail[:20])
+        if desig:
+            grade += " " + " ".join(desig)
+            tail = _DESIG.sub(" ", tail, count=len(desig))
+        if is_details:
+            found_d = re.search(r"details?.*$", tail, re.I)
+            grade += " Details" + ((" " + re.sub(r"^details?\W*", "", found_d.group(0), flags=re.I)) if found_d else "")
+            tail = tail[: found_d.start()] if found_d else tail
+        found["grade"] = grade.strip()
+        rest = rest[: m.start()] + " " + tail
+    return " ".join(rest.replace(" ,", ",").split()).strip(" ,-·"), found
 
 
 SERVICES = {"PCGS": "PCGS", "NGC": "NGC", "ANACS": "ANACS", "ICG": "ICG", "CACG": "CACG", "CAC": "CACG", "CACGRADING": "CACG",
@@ -289,6 +332,15 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     errors: list[str] = []
     f: dict = {}
 
+    # A run-together description in the date column: split out what has no column of its own.
+    described = _text(vals.get("date"))
+    if described:
+        remaining, found = split_description(described)
+        took = {k: v for k, v in found.items() if not _text(vals.get(k))}
+        if took:
+            vals["date"] = remaining
+            vals.update(took)
+
     # Date: "1881-S", "1878 8TF", or separate Year / Mint columns.
     year = mint = rest = None
     d = _text(vals.get("date"))
@@ -317,6 +369,16 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     hint = " ".join(x for x in (_text(vals.get("series_hint")), rest) if x)
     named = series_match.from_text(rest, year).series if rest else None
     f["variety"] = _text(vals.get("variety")) or (series_match.strip_series_words(rest, named) if named else rest)
+    # Holders named with the coin ("1881-CC GSA", "1884-O Rattler"): packaging and slab, not a variety.
+    holder_words = []
+    if f["variety"]:
+        if re.search(r"\bGSA\b", f["variety"], re.I):
+            holder_words.append("GSA soft" if re.search(r"\bsoft\b", f["variety"], re.I) else "GSA hard")
+            f["variety"] = _GSA_WORDS.sub(" ", f["variety"])
+        for pattern, name in _CELL_HOLDERS:
+            if pattern.search(f["variety"]):
+                holder_words.append(name)
+                f["variety"] = pattern.sub(" ", f["variety"])
     if f["variety"]:  # "(7TF)", "[VAM-3]" -> "7TF", "VAM-3"
         f["variety"] = " ".join(re.sub(r"[()\[\]{}]", " ", f["variety"]).split()).strip(" ,-") or None
     f["vam"] = _text(vals.get("vam"))
@@ -412,15 +474,28 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     f["cac_sticker"] = sticker if sticker in ("green", "gold") else (cac if cac in ("green", "gold") else None)
     f["cac"] = bool(f["cac_sticker"]) or cac in YES
 
-    slab = (_text(vals.get("slab")) or "").lower()
+    slab = " ".join(x for x in (_text(vals.get("slab")), *holder_words) if x).lower()
     f.update(slab_soapbox="soapbox" in slab, slab_ngc_fatty="fatty" in slab, slab_rattler="rattler" in slab,
              slab_ogh="ogh" in slab or "old green" in slab)
     pack = (_text(vals.get("packaging")) or "").lower() + " " + slab
-    f.update(gsa_hard_pack="hard" in pack, gsa_soft_pack="soft" in pack, ike_blue_pack="blue" in pack,
+    # Anything that says GSA is a GSA holder: Soft Pack if it says soft, otherwise Hard Pack (the usual one).
+    gsa = bool(re.search(r"\bgsa\b", pack))
+    soft = gsa and "soft" in pack or (not gsa and bool(re.search(r"\bsoft\s*pack", pack)))
+    hard = (gsa and not soft) or bool(re.search(r"\bhard\s*pack", pack))
+    f.update(gsa_hard_pack=hard, gsa_soft_pack=soft, ike_blue_pack="blue" in pack,
              ike_brown_pack="brown" in pack,
              ogp=bool(re.search(r"\bogp\b|original (government|mint) packag", pack)) or (_text(vals.get("ogp")) or "").lower() in YES,
              capital_holder="capital" in pack)
     toning = (_text(vals.get("toning")) or "").lower()
+    # Toning written with the grade or the coin ("MS64 Toned", "1881-S Rainbow toner"): broad on purpose.
+    elsewhere = " ".join(x for x in (f.get("grade_note"), f.get("variety"), _text(vals.get("grade"))) if x).lower()
+    if not toning and re.search(r"\bton(?:ed|er|ing)\b|\brainbow\b", elsewhere):
+        toning = "rainbow" if "rainbow" in elsewhere else "yes"
+        if f.get("grade_note"):
+            f["grade_note"] = re.sub(r"\b(?:rainbow\s+)?ton(?:ed|er|ing)\b|\brainbow\b", " ", f["grade_note"], flags=re.I).strip() or None
+        if f.get("variety"):
+            f["variety"] = re.sub(r"\b(?:rainbow\s+)?ton(?:ed|er|ing)\b|\brainbow\b", " ", f["variety"], flags=re.I)
+            f["variety"] = " ".join(f["variety"].split()).strip(" ,-") or None
     f.update(toning_obverse="obv" in toning, toning_reverse="rev" in toning, toning_dual="dual" in toning,
              toning_rainbow="rainbow" in toning, toning_rim="rim" in toning)
     if toning in YES and not any(f[k] for k in ("toning_obverse", "toning_reverse", "toning_dual", "toning_rainbow",
