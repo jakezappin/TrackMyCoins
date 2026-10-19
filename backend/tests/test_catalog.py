@@ -233,9 +233,18 @@ def test_get_cpg_resolves_pcgs_number(authed, morgan_collection):
 
 def test_get_cpg_ambiguous(authed, morgan_collection):
     coin = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], year=1878, mint_mark="P")).json()
-    r = authed.post(f"/api/coins/{coin['inventory_number']}/cpg")
-    assert r.status_code == 400
-    assert "More than one catalog match" in r.json()["detail"] and "7072" in r.json()["detail"]
+    inv = coin["inventory_number"]
+    r = authed.post(f"/api/coins/{inv}/cpg")
+    assert r.status_code == 409  # the page offers the listings that fit
+    detail = r.json()["detail"]
+    assert "More than one catalog listing" in detail["message"]
+    assert {c["pcgs_number"] for c in detail["candidates"]} >= {"7072", "7074"}
+    # Picking one saves its PCGS # (and variety) on the coin; prices come from it from then on.
+    d = authed.put(f"/api/coins/{inv}/pcgs-number", json={"pcgs_number": "7072", "variety": "8TF"}).json()
+    assert (d["pcgs_number"], d["variety"]) == ("7072", "8TF")
+    d = authed.post(f"/api/coins/{inv}/cpg").json()
+    assert d["latest_cpg"]["value"] == "1150.00"
+    assert authed.put(f"/api/coins/{inv}/pcgs-number", json={"pcgs_number": "abc"}).status_code == 422
 
 
 def test_greysheet_value_saved_when_present(authed, morgan_collection, monkeypatch):

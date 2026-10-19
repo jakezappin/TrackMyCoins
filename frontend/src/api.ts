@@ -1471,6 +1471,9 @@ export const api = {
   ) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/valuation`, b),
   getCpg: (inv: string) => request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/cpg`),
+  /** The catalog listing picked for a coin when more than one fit: its PCGS coin number (and variety, if none yet). */
+  setPcgsNumber: (inv: string, pcgs_number: string, variety: string | null) =>
+    request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/pcgs-number`, { pcgs_number, variety }),
   addQuote: (inv: string, value: string, source = "CPG", description?: string) =>
     request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/price-quotes`, { value, source, description }),
   deleteQuote: (quoteId: number) => request<void>("DELETE", `/api/price-quotes/${quoteId}`),
@@ -1615,4 +1618,10 @@ export interface DealerLinkSuggestion {
   fields: ("purchased_from" | "sold_to")[];
   purchased_from: string | null;
   sold_to: string | null;
+}
+
+/** Sent back with a 409 when more than one catalog listing fits a coin. */
+export interface CatalogChoice {
+  message: string;
+  candidates: CatalogCandidate[];
 }

@@ -1,5 +1,6 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
@@ -97,12 +98,42 @@ def fill_purchase_value(inventory_number: str, db: Session = Depends(get_db), us
     return coin_detail(coin)
 
 
+def _pick_one(e: "greysheet.AmbiguousMatch") -> HTTPException:
+    """409 with the listings that fit, for the coin page to offer as a choice."""
+    return HTTPException(status.HTTP_409_CONFLICT, {
+        "message": str(e),
+        "candidates": [{"pcgs_number": c.pcgs_number, "gsid": c.gsid, "name": c.name, "variety": c.variety,
+                        "designation": c.designation} for c in e.candidates],
+    })
+
+
+class PcgsNumberIn(BaseModel):
+    pcgs_number: str = Field(min_length=1, max_length=20, pattern=r"^\d+$")
+    variety: str | None = Field(default=None, max_length=150)
+
+
+@router.put("/coins/{inventory_number}/pcgs-number", response_model=CoinDetail)
+def set_pcgs_number(inventory_number: str, body: PcgsNumberIn, db: Session = Depends(get_db),
+                    user: User = Depends(current_user)):
+    """The catalog listing the user picked for this coin (when more than one fit): its PCGS coin number, and its
+    variety if the coin doesn't have one yet. Prices are looked up by this from now on."""
+    coin = get_owned_coin(db, user, inventory_number)
+    coin.pcgs_number = body.pcgs_number
+    if body.variety and not coin.variety:
+        coin.variety = body.variety.strip() or None
+    db.commit()
+    db.refresh(coin)
+    return coin_detail(coin)
+
+
 @router.post("/coins/{inventory_number}/cpg", response_model=CoinDetail)
 def get_cpg_price(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Fetch the current CPG value from Greysheet and add it to the coin's price history."""
     coin = get_owned_coin(db, user, inventory_number)
     try:
         price_refresh.refresh_cpg(db, coin)
+    except greysheet.AmbiguousMatch as e:
+        raise _pick_one(e)
     except greysheet.PricingError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:
@@ -118,6 +149,8 @@ def get_pcgs_market(inventory_number: str, db: Session = Depends(get_db), user: 
     coin = get_owned_coin(db, user, inventory_number)
     try:
         price_refresh.refresh_pcgs(db, coin)
+    except greysheet.AmbiguousMatch as e:
+        raise _pick_one(e)
     except (greysheet.PricingError, lookups.LookupError) as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:

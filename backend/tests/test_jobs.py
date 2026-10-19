@@ -34,7 +34,7 @@ def test_refresh_collection(authed, morgan_collection):
     assert job["scope"] == "Morgan Dollar Collection 1"
     j = wait(authed, job["id"])
     assert (j["status"], j["total"], j["done"], j["updated"], j["failed"], j["skipped"]) == ("finished", 3, 3, 1, 1, 1)
-    assert any("More than one catalog match" in m for m in j["messages"])
+    assert any("More than one catalog listing" in m for m in j["messages"])
     coin = authed.get(f"/api/coins/{a['inventory_number']}").json()
     assert coin["latest_cpg"]["value"] == "1400.00"
 

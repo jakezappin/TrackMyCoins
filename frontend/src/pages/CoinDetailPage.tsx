@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type CoinDetail, type CoinPublicState } from "../api";
+import { api, ApiError, type CatalogCandidate, type CatalogChoice, type CoinDetail, type CoinPublicState } from "../api";
 import { useApp, useNavCollection } from "../App";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import { ngcCertUrl } from "../ngcButton";
@@ -82,13 +82,22 @@ export default function CoinDetailPage() {
     refresh();
   }
 
+  // More than one catalog listing fits: the user picks one, it's saved on the coin, and the lookup runs again.
+  const [choice, setChoice] = useState<{ candidates: CatalogCandidate[]; then: "cpg" | "pcgs" } | null>(null);
+  const asChoice = (e: unknown) =>
+    e instanceof ApiError && e.status === 409 && (e.detail as CatalogChoice | undefined)?.candidates
+      ? (e.detail as CatalogChoice).candidates
+      : null;
+
   async function getCpg() {
     setCpgBusy(true);
     setCpgError(null);
     try {
       update(await api.getCpg(inv));
     } catch (e) {
-      setCpgError((e as Error).message);
+      const cands = asChoice(e);
+      if (cands) setChoice({ candidates: cands, then: "cpg" });
+      else setCpgError((e as Error).message);
     } finally {
       setCpgBusy(false);
     }
@@ -100,7 +109,9 @@ export default function CoinDetailPage() {
     try {
       update(await api.getPcgs(inv));
     } catch (e) {
-      setPcgsError((e as Error).message);
+      const cands = asChoice(e);
+      if (cands) setChoice({ candidates: cands, then: "pcgs" });
+      else setPcgsError((e as Error).message);
     } finally {
       setPcgsBusy(false);
     }
@@ -598,6 +609,19 @@ export default function CoinDetailPage() {
 
       {!coin.is_sold && <CoinLinkCard inv={coin.inventory_number} />}
 
+      {choice && (
+        <CatalogPicker
+          candidates={choice.candidates}
+          onClose={() => setChoice(null)}
+          onPick={async (c) => {
+            update(await api.setPcgsNumber(inv, c.pcgs_number!, c.variety));
+            setChoice(null);
+            if (choice.then === "cpg") await getCpg();
+            else await getPcgs();
+          }}
+        />
+      )}
+
       {!isSet && (
       <div className={`coin-row${coin.is_sold ? " single" : ""}`}>
         <AttachmentsCard inventoryNumber={coin.inventory_number} />
@@ -841,5 +865,64 @@ function CoinLinkCard({ inv }: { inv: string }) {
         </p>
       )}
     </section>
+  );
+}
+
+/** More than one catalog listing fits the coin: pick the right one (its PCGS # is saved on the coin). */
+function CatalogPicker({ candidates, onClose, onPick }: { candidates: CatalogCandidate[]; onClose: () => void; onPick: (c: CatalogCandidate) => Promise<void> }) {
+  const usable = candidates.filter((c) => c.pcgs_number);
+  const [picked, setPicked] = useState(usable.length === 1 ? usable[0].pcgs_number! : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Which coin is this?">
+        <div className="modal-head">
+          <h2>Which Coin Is This?</h2>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose} disabled={busy}>
+            ✕
+          </button>
+        </div>
+        <p className="muted small">
+          More than one catalog listing fits this coin. Pick the right one: its PCGS coin number is saved with the coin, so
+          prices come from it from now on.
+        </p>
+        <label className="field">
+          <span>Catalog listing</span>
+          <select value={picked} onChange={(e) => setPicked(e.target.value)} autoFocus>
+            <option value="">Choose…</option>
+            {candidates.map((c) => (
+              <option key={`${c.pcgs_number ?? ""}-${c.gsid ?? c.name}`} value={c.pcgs_number ?? ""} disabled={!c.pcgs_number}>
+                {c.name}
+                {c.pcgs_number ? ` · PCGS #${c.pcgs_number}` : " (no PCGS #, can't be priced)"}
+              </option>
+            ))}
+          </select>
+        </label>
+        {error && <p className="error small">{error}</p>}
+        <div className="row-end">
+          <button type="button" className="btn" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!picked || busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                await onPick(candidates.find((c) => c.pcgs_number === picked)!);
+              } catch (e) {
+                setError((e as Error).message);
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Saving…" : "Use this coin"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

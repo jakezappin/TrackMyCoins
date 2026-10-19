@@ -24,6 +24,14 @@ class PricingError(Exception):
     pass
 
 
+class AmbiguousMatch(PricingError):
+    """More than one catalog listing fits the coin: the user picks one (its PCGS # is then saved on the coin)."""
+
+    def __init__(self, message: str, candidates: list):
+        super().__init__(message)
+        self.candidates = candidates
+
+
 def _money(v) -> Decimal | None:
     if v in (None, ""):
         return None

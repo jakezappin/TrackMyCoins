@@ -20,7 +20,7 @@ from ..designations import canonical
 from ..models import CatalogEntry, Coin, CoinType
 from ..series import BY_SLUG, FINISHES
 from . import greysheet, quota
-from .greysheet import PricingError
+from .greysheet import AmbiguousMatch, PricingError
 
 _GSA_RE = re.compile(r"GSA Hoard(?:,\s*(?:Hard|Soft) Package)?", re.I)
 
@@ -554,12 +554,8 @@ def resolve_for_coin(db: Session, coin: Coin) -> Candidate:
     )
     if result.best is None:
         if result.candidates:
-            opts = "; ".join(
-                f"#{c.pcgs_number or '—'} {c.name}" for c in result.candidates[:6]
-            )
-            raise PricingError(
-                f"More than one catalog match. Use Find on the coin's edit page to pick one. Options: {opts}"
-            )
+            raise AmbiguousMatch("More than one catalog listing fits this coin. Pick the right one on the coin's page.",
+                                 result.candidates)
         raise PricingError(result.message or "No catalog match")
     if result.best.pcgs_number:
         coin.pcgs_number = result.best.pcgs_number
