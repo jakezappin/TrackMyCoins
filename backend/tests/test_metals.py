@@ -1,6 +1,6 @@
 """Precious Metals page: spot and changes, gold/silver ratio, melt table and the user's metal."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from test_api import coin_payload
@@ -86,7 +86,8 @@ def test_entry_rules():
 def test_history(authed):
     _history({"gold": [(d, 3000.0 + d) for d in range(1, 400)], "silver": [(d, 30.0) for d in range(1, 400)]})
     pts = authed.get("/api/metals/history?series=gold&range=1m").json()
-    assert pts[-1] == {"date": date.today().isoformat(), "value": 4000.0} and len(pts) <= 32
+    # The app's "today" is the UTC date (the test ran wrong between 8pm and midnight Eastern otherwise).
+    assert pts[-1] == {"date": datetime.now(timezone.utc).date().isoformat(), "value": 4000.0} and len(pts) <= 32
     ratio = authed.get("/api/metals/history?series=ratio&range=all").json()
     assert ratio[-1]["value"] == 80.0 and len(ratio) <= 401
 
