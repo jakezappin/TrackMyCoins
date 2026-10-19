@@ -16,6 +16,7 @@ import {
   type LookupResult,
   type SetOption,
   type SubmissionSummary,
+  isPcgsLimit,
 } from "../api";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
@@ -166,6 +167,8 @@ export default function CoinFormPage() {
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookup, setLookup] = useState<LookupResult | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  // PCGS's lookups are used up for today: verify on PCGS's site instead, like NGC.
+  const [pcgsOut, setPcgsOut] = useState(false);
   const [importUrls, setImportUrls] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [findBusy, setFindBusy] = useState(false);
@@ -396,8 +399,10 @@ export default function CoinFormPage() {
     setLookup(null);
     try {
       applyLookup(await api.lookup(service, cert));
+      if (service === "PCGS") setPcgsOut(false);
     } catch (e) {
-      setLookupError((e as Error).message);
+      if (service === "PCGS" && isPcgsLimit(e)) setPcgsOut(true);
+      else setLookupError((e as Error).message);
     } finally {
       setLookupBusy(false);
     }
@@ -770,7 +775,8 @@ export default function CoinFormPage() {
   const canLookUp = form.grading_service === "PCGS";
   const isNgc = form.grading_service === "NGC";
   // NGC and ANACS: no lookups we can automate, so cert + grade and a Verify button that's always there.
-  const verifyOnly = isNgc || form.grading_service === "ANACS" || form.grading_service === "ICG";
+  const pcgsVerify = pcgsOut && form.grading_service === "PCGS";
+  const verifyOnly = isNgc || form.grading_service === "ANACS" || form.grading_service === "ICG" || pcgsVerify;
   const vurl = lookup?.verify_url && form.grading_service !== "NGC" ? lookup.verify_url : verifyUrl(form.grading_service, form.cert_number ?? "", form.grade, form.details);
   const isSold = Boolean(form.sale_price || form.sale_date);
 
@@ -920,7 +926,7 @@ export default function CoinFormPage() {
               )}
             </label>
           )}
-          {canLookUp && (
+          {canLookUp && !pcgsVerify && (
             <button type="button" className="btn btn-primary" onClick={() => doLookup()} disabled={!form.cert_number || lookupBusy}>
               {lookupBusy ? "Looking up…" : "Look up"}
             </button>
@@ -963,6 +969,12 @@ export default function CoinFormPage() {
                 </button>
               </>
             )}
+          </p>
+        )}
+        {!isRaw && pcgsVerify && (
+          <p className="muted small">
+            PCGS lookups are used up for today. Use <strong>Verify ↗</strong> to check the cert on PCGS's site, then fill
+            in the date and grade below. After saving, you can add PCGS's photos from the coin's page.
           </p>
         )}
         {!isRaw && form.grading_service === "ANACS" && (

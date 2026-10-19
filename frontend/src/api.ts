@@ -1008,6 +1008,11 @@ export interface HistoryPoint {
   backfilled: boolean;
 }
 
+/** PCGS's daily lookups are used up (our allowance, or PCGS's own limit): fall back to its cert page. */
+export function isPcgsLimit(e: unknown): boolean {
+  return (e instanceof ApiError && e.status === 429) || /limit|used up/i.test((e as Error)?.message ?? "");
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,

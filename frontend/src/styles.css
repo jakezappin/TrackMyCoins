@@ -4172,6 +4172,15 @@ fieldset.field .check {
   }
 }
 
+.pcgs-paste {
+  flex-basis: 100%;
+}
+
+.pcgs-paste .row input {
+  flex: 1;
+  min-width: 0;
+}
+
 .pcgs-check {
   display: flex;
   align-items: center;

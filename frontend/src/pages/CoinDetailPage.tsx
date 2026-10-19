@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, type CatalogCandidate, type CatalogChoice, type CoinDetail, type CoinPublicState } from "../api";
+import { api, ApiError, isPcgsLimit, type CatalogCandidate, type CatalogChoice, type CoinDetail, type CoinPublicState } from "../api";
 import { useApp, useNavCollection } from "../App";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import { ngcCertUrl } from "../ngcButton";
@@ -333,7 +333,7 @@ export default function CoinDetailPage() {
               />
             )}
           </div>
-          {coin.grading_service === "PCGS" && coin.cert_number && <PcgsCheck inv={inv} onDone={update} />}
+          {coin.grading_service === "PCGS" && coin.cert_number && <PcgsCheck inv={inv} cert={coin.cert_number} onDone={update} />}
           {coin.grading_service === "NGC" && coin.photos.length <= 8 && (
             <details className="ngc-add" open={coin.photos.length === 0}>
               <summary className="small">Add NGC's photos</summary>
@@ -929,9 +929,11 @@ function CatalogPicker({ candidates, onClose, onPick }: { candidates: CatalogCan
 }
 
 /** Imported or typed-in PCGS coins weren't looked up: fetch PCGS's photos and details for the cert. */
-function PcgsCheck({ inv, onDone }: { inv: string; onDone: (c: CoinDetail) => void }) {
+function PcgsCheck({ inv, cert, onDone }: { inv: string; cert: string; onDone: (c: CoinDetail) => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // PCGS lookups used up, or PCGS had no photos: open the cert on PCGS and paste a photo's address instead.
+  const [paste, setPaste] = useState(false);
   return (
     <div className="pcgs-check">
       <button
@@ -945,8 +947,12 @@ function PcgsCheck({ inv, onDone }: { inv: string; onDone: (c: CoinDetail) => vo
             const r = await api.pcgsCheck(inv);
             onDone(r.coin);
             setMsg({ ok: true, text: r.message });
+            setPaste(r.added === 0);
           } catch (e) {
-            setMsg({ ok: false, text: (e as Error).message });
+            if (isPcgsLimit(e)) {
+              setMsg({ ok: true, text: "PCGS lookups are used up for today." });
+              setPaste(true);
+            } else setMsg({ ok: false, text: (e as Error).message });
           } finally {
             setBusy(false);
           }
@@ -959,6 +965,56 @@ function PcgsCheck({ inv, onDone }: { inv: string; onDone: (c: CoinDetail) => vo
       ) : (
         <span className="small muted">Saves PCGS's photos of this cert and fills in its PCGS #, designation and VAM.</span>
       )}
+      {paste && <PcgsPhotoLink inv={inv} cert={cert} onDone={onDone} />}
+    </div>
+  );
+}
+
+/** Add PCGS's photos by hand: open the cert on PCGS, copy a photo's address, paste it here. */
+function PcgsPhotoLink({ inv, cert, onDone }: { inv: string; cert: string; onDone: (c: CoinDetail) => void }) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    const u = url.trim();
+    if (!/^https?:\/\//i.test(u)) return setError("Paste a link that starts with https://");
+    if (/pcgs\.com\/cert\//i.test(u))
+      return setError("That's the cert page. On it, right-click (or long-press) a coin photo and copy the image address.");
+    setBusy(true);
+    setError(null);
+    try {
+      onDone(await api.importPhotos(inv, [u]));
+      setUrl("");
+    } catch (e) {
+      setError(`${(e as Error).message} Copy the photo's own address (right-click or long-press it, then Copy Image Address).`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pcgs-paste stack">
+      <p className="small muted">
+        Open{" "}
+        <a href={`https://www.pcgs.com/cert/${encodeURIComponent(cert)}`} target="_blank" rel="noreferrer">
+          this coin on PCGS ↗
+        </a>
+        , then copy a coin photo's address there and paste it below. Add the front and back one at a time.
+      </p>
+      <div className="row">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://images.pcgs.com/…"
+          aria-label="PCGS photo link"
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())}
+        />
+        <button type="button" className="btn small" onClick={add} disabled={busy || !url.trim()}>
+          {busy ? "Adding…" : "Add photo"}
+        </button>
+      </div>
+      {error && <p className="error small">{error}</p>}
     </div>
   );
 }
