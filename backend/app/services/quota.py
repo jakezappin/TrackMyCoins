@@ -4,6 +4,7 @@ Counted in the database so restarts don't reset them. Only calls that really go 
 saved all-grades results and cached PCGS data cost nothing.
 """
 
+import time
 from datetime import date
 
 from sqlalchemy import select, update
@@ -15,6 +16,7 @@ from ..models import ApiUsage
 
 SITE = 0
 ARCHIVE = -1  # the background price-data upkeep (services/price_archive.py), with its own allowance
+PAUSED = -2  # a service that refused us: its row's count is the Unix time it can be called again
 NAMES = {"claude": "label reading", "greysheet": "Greysheet price lookups", "pcgs": "PCGS lookups"}
 
 
@@ -46,10 +48,44 @@ def _take(db, day: date, user_id: int, service: str, n: int, cap: int) -> bool:
     return done.rowcount == 1
 
 
+def _wait_text(seconds: float) -> str:
+    hours = seconds / 3600
+    if hours >= 1.5:
+        return f"in about {round(hours)} hours"
+    minutes = max(1, round(seconds / 60))
+    return f"in about {minutes} minute{'s' if minutes != 1 else ''}"
+
+
+def pause(service: str, seconds: float) -> None:
+    """The service refused us (over its own limit): no calls to it until its Retry-After has passed."""
+    until = int(time.time() + max(60, seconds))
+    with SessionLocal() as db:
+        db.execute(sqlite_insert(ApiUsage).values(day=date(2000, 1, 1), user_id=PAUSED, service=service, count=until)
+                   .on_conflict_do_update(index_elements=["day", "user_id", "service"], set_={"count": until}))
+        db.commit()
+
+
+def paused_for(service: str) -> float:
+    """Seconds until the service can be called again (0: now)."""
+    with SessionLocal() as db:
+        until = db.scalar(select(ApiUsage.count).where(ApiUsage.day == date(2000, 1, 1), ApiUsage.user_id == PAUSED,
+                                                       ApiUsage.service == service))
+    return max(0.0, (until or 0) - time.time())
+
+
+def paused_message(service: str, seconds: float) -> str:
+    if service == "pcgs":
+        return (f"PCGS's daily limit for TrackMyCoins (100 lookups a day) is used up. It resets {_wait_text(seconds)}; "
+                "everything else works meanwhile.")
+    return f"{NAMES[service].capitalize()} are paused by the provider. Try again {_wait_text(seconds)}."
+
+
 def spend(user_id: int, service: str, n: int = 1, limit: int | None = None) -> None:
     """Record n calls about to be made, or raise QuotaExceeded. Uses its own session and commits at once, so it
     counts even if the caller's work fails, and doesn't disturb the caller's transaction. `limit` replaces the
     per-user allowance (the background upkeep's own); the site-wide limit still applies."""
+    if (wait := paused_for(service)) > 0:
+        raise QuotaExceeded(paused_message(service, wait), site_wide=True)
     per_user, site = _limits(service)
     per_user = limit if limit is not None else per_user
     today = date.today()

@@ -7,6 +7,8 @@ from decimal import Decimal, InvalidOperation
 
 import httpx
 
+from .. import quota
+
 from ...config import get_settings
 from ...designations import from_pcgs, with_designation
 from ...schemas import LookupResult
@@ -32,7 +34,14 @@ def _get(client: httpx.Client, path: str, **params) -> dict:
     if r.status_code == 401:
         raise LookupError("PCGS rejected the API token (401). Check PCGS_API_TOKEN.")
     if r.status_code == 429:
-        raise LookupError("PCGS daily API limit reached. Try again tomorrow.")
+        # Over PCGS's daily allowance: pause all PCGS calls until it says to try again, and say when that is.
+        try:
+            wait = float(r.headers.get("retry-after") or 0)
+        except ValueError:
+            wait = 0
+        wait = wait or 6 * 3600
+        quota.pause("pcgs", wait)
+        raise LookupError(quota.paused_message("pcgs", wait))
     r.raise_for_status()
     return r.json()
 

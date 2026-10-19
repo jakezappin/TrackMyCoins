@@ -43,8 +43,10 @@ class Settings(BaseSettings):
     # Daily limits on calls to paid / rate-limited services (only real outgoing calls count).
     claude_per_user_day: int = 30
     greysheet_per_user_day: int = 150
-    pcgs_per_user_day: int = 100  # PCGS calls (a coin's market data is 2)
-    pcgs_site_day: int = 900
+    # PCGS allows this account 100 calls a day for the whole site (its reply when over: "maximum admitted 100 per
+    # Day"), counted on its own clock. Keep a margin; a refusal also pauses PCGS calls until its Retry-After.
+    pcgs_per_user_day: int = 40  # PCGS calls (a coin's market data is 2)
+    pcgs_site_day: int = 90
     greysheet_site_day: int = 1500  # every Greysheet call the site makes in a day (users, catalogs, upkeep)
     # Monthly price-data upkeep in the background (services/price_archive.py): its own daily allowances, kept
     # small so it never crowds out people using the site. Off in tests.
@@ -52,9 +54,8 @@ class Settings(BaseSettings):
     gold_api_key: str = ""
     seed_catalog: bool = True  # load the bundled Greysheet catalog at start-up (off in tests)
     seed_spot_history: bool = True  # load the bundled daily spot prices at start-up (off in tests)  # gold-api.com: daily spot price history for bullion (free tier: 10 calls an hour)
-    archive_pcgs_day: int = 100
+    archive_pcgs_day: int = 15  # and only while the site has used under half its PCGS allowance
     archive_greysheet_day: int = 50
-    pcgs_site_day_note: str = ""  # PCGS allows 1,000 a day for the whole site; keep a margin
     # Bulk "Refresh prices" runs allowed per user in any rolling 7 days (each run spends Greysheet/PCGS calls).
     refresh_limit_per_week: int = 2
     # eBay Browse API (Production keyset: App ID / Cert ID) for "For sale on eBay now".

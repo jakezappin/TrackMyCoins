@@ -202,6 +202,9 @@ def run_due(max_seconds: float = 600) -> dict:
                 if time.time() - started > max_seconds:
                     done["stopped"] = "time"
                     break
+                if quota.used_today(quota.SITE, "pcgs") >= s.pcgs_site_day // 2:
+                    done["stopped"] = "PCGS allowance kept for people using the site"
+                    break
                 try:
                     quota.spend(quota.ARCHIVE, "pcgs", limit=s.archive_pcgs_day)
                     fetch_full(db, *key)

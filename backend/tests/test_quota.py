@@ -45,3 +45,27 @@ def test_claude_limit(authed, monkeypatch):
     Image.new("RGB", (50, 50)).save(b, "JPEG")
     r = authed.post("/api/read-label", files={"file": ("l.jpg", b.getvalue(), "image/jpeg")})
     assert r.status_code == 429 and "label reading" in r.json()["detail"]
+
+
+def test_pcgs_refusal_pauses_pcgs_until_its_retry_after(authed, monkeypatch):
+    """PCGS allows 100 calls a day; once it refuses, no more calls until its Retry-After, and the message says when."""
+    import httpx
+    import pytest as _pytest
+
+    from app.services import quota
+    from app.services.lookups import pcgs
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(429, headers={"retry-after": "63102"}, text='"maximum admitted 100 per Day"')
+
+    monkeypatch.setattr(pcgs, "_client", lambda: httpx.Client(base_url="https://pcgs.test", transport=httpx.MockTransport(handler)))
+    monkeypatch.setattr(pcgs.get_settings(), "pcgs_api_token", "t")
+    with _pytest.raises(pcgs.LookupError, match="resets in about 18 hours"):
+        pcgs.lookup("12345678")
+    assert quota.paused_for("pcgs") > 60000
+    with _pytest.raises(quota.QuotaExceeded, match="100 lookups a day"):
+        quota.spend(1, "pcgs", 2)  # stopped before calling PCGS again
+    assert len(calls) == 1
