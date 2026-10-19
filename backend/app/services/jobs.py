@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from ..db import SessionLocal
 from ..models import Coin, Collection, PriceRefreshRun
-from . import details, greysheet, lookups, price_refresh, purchase_value, quota
+from . import details, greysheet, lookups, price_refresh, quota
 from .coins import on_hand
 
 
@@ -140,7 +140,9 @@ def _run_refresh(job: Job, collection_id: int | None) -> None:
 
 
 def _refresh_one(db, job: Job, coin: Coin, is_set: bool, cpg_ok: bool, pcgs_ok: bool) -> tuple[bool, bool, bool, bool]:
-    """CPG, PCGS market data and the value at purchase for one coin. Returns (changed, called, cpg_ok, pcgs_ok)."""
+    """CPG, plus PCGS market data already stored this week, for one coin. PCGS allows 100 calls a day, so the bulk
+    refresh never calls it: PCGS prices and the value at purchase are fetched from a coin's own page. Returns
+    (changed, called, cpg_ok, pcgs_ok)."""
     changed = called = False
     try:
         if cpg_ok:
@@ -155,8 +157,7 @@ def _refresh_one(db, job: Job, coin: Coin, is_set: bool, cpg_ok: bool, pcgs_ok: 
         job.messages.append(f"{job.current}: CPG: Greysheet error ({e.__class__.__name__})")
     if pcgs_ok and not is_set:
         try:
-            called |= price_refresh.refresh_pcgs(db, coin)
-            changed = True
+            changed |= price_refresh.refresh_pcgs(db, coin, cache_only=True) or bool(coin.pcgs_market)
         except quota.QuotaExceeded as e:
             pcgs_ok = False
             job.pcgs_stopped = str(e)
@@ -168,17 +169,6 @@ def _refresh_one(db, job: Job, coin: Coin, is_set: bool, cpg_ok: bool, pcgs_ok: 
                 job.messages.append(f"{job.current}: PCGS: {e}")
         except httpx.HTTPError as e:
             job.messages.append(f"{job.current}: PCGS: error ({e.__class__.__name__})")
-    if pcgs_ok and purchase_value.needs_auctions(db, coin):  # value at purchase from auction sales
-        # Save what's been fetched first: the auction lookup archives sales in its own session.
-        db.commit()
-        try:
-            called |= purchase_value.fill_auctions(coin, job.user_id)
-            changed = True
-        except quota.QuotaExceeded as e:
-            pcgs_ok = False
-            job.pcgs_stopped = str(e)
-        except (lookups.LookupError, httpx.HTTPError):
-            pass  # it's tried again next time
     return changed, called, cpg_ok, pcgs_ok
 
 

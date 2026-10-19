@@ -10,10 +10,9 @@ interface Props {
   onDone: () => void;
 }
 
-/** "Refresh prices" button + progress for refreshing CPG (and optionally PCGS) on many coins at once. */
+/** "Refresh prices" button + progress for refreshing CPG on many coins (plus PCGS data already fetched this week) at once. */
 export default function RefreshPrices({ collectionId, coinCount, onDone }: Props) {
   const [asking, setAsking] = useState(false);
-  const [includePcgs, setIncludePcgs] = useState(false);
   const [job, setJob] = useState<RefreshJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
@@ -69,7 +68,7 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
     setError(null);
     setShowLog(false);
     try {
-      setJob(await api.refreshPrices(collectionId, includePcgs));
+      setJob(await api.refreshPrices(collectionId, true));
       loadAllowance();
     } catch (e) {
       setError((e as Error).message);
@@ -98,12 +97,10 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
               Gets the latest CPG value for {collectionId == null ? "every coin you own" : "every coin in this collection"}{" "}
               ({coinCount} coin{coinCount === 1 ? "" : "s"}). Sold coins and coins without a numeric grade are skipped.
             </p>
-            <label className="checks">
-              <span>
-                <input type="checkbox" checked={includePcgs} onChange={(e) => setIncludePcgs(e.target.checked)} /> Also
-                get PCGS Price Guide, population and auction sales
-              </span>
-            </label>
+            <p className="small muted">
+              PCGS Price Guide and auction data already fetched this week are included. To fetch new PCGS data, use Get
+              PCGS Data on a coin's page (PCGS allows only 100 lookups a day for the whole site).
+            </p>
             {allow && (
               <p className="small muted">
                 You can refresh prices {allow.limit} times a week to keep within our price providers' limits.{" "}
@@ -111,12 +108,6 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
                   {allow.left} of {allow.limit} left
                 </strong>{" "}
                 this week. Single coins can still be priced from their own page any time.
-              </p>
-            )}
-            {includePcgs && (
-              <p className="small warn">
-                Uses 2 of PCGS's 1,000 free API calls per day for each coin ({coinCount * 2} calls). If the limit is
-                reached, PCGS stops for the day and CPG keeps going.
               </p>
             )}
             <div className="row-end">

@@ -9,7 +9,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import CoinPhoto, User
 from ..schemas import CoinDetail, PhotoImportIn, PhotoReorderIn
-from ..services import lookups
+from ..services import lookups, pcgs_cache
 from ..services import photos as store
 from ..services.quota import QuotaExceeded
 from ..services.coins import coin_detail
@@ -92,7 +92,9 @@ def pcgs_check(inventory_number: str, db: Session = Depends(get_db), user: User 
     if coin.grading_service != "PCGS" or not coin.cert_number:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This needs a PCGS coin with a cert number.")
     try:
-        r = lookups.lookup("PCGS", coin.cert_number, user_id=user.id)
+        # A stored lookup without photos is asked again: PCGS may have imaged the coin since.
+        stored = pcgs_cache.get(pcgs_cache.cert_key(lookups.clean_cert(coin.cert_number)))
+        r = lookups.lookup("PCGS", coin.cert_number, user_id=user.id, fresh=stored is not None and not stored.get("image_urls"))
     except QuotaExceeded as e:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e)) from e
     except lookups.LookupError as e:

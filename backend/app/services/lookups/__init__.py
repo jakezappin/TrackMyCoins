@@ -3,7 +3,7 @@
 import httpx
 
 from ...schemas import LookupResult
-from .. import quota
+from .. import pcgs_cache, quota
 from . import cac, pcgs
 from .base import LookupError, clean_cert
 
@@ -11,22 +11,30 @@ from .base import LookupError, clean_cert
 # can't fetch them. We return the verification link and the user copies the details.
 VERIFY_URLS = {
     "NGC": "https://www.ngccoin.com/certlookup/{cert}/",
-    "ANACS": "https://anacs.com/verify/",
+    "ANACS": "https://portal.anacs.com/Verify/CertVerification.aspx?cert={cert}",
     "ICG": "https://www.icgcoin.com/verification/",
 }
 
 
-def lookup(service: str, cert: str, check_cac: bool = True, user_id: int | None = None) -> LookupResult:
-    """`user_id`: charge this user's daily PCGS allowance (a PCGS cert lookup is 2 calls)."""
+def lookup(
+    service: str, cert: str, check_cac: bool = True, user_id: int | None = None, fresh: bool = False
+) -> LookupResult:
+    """`user_id`: charge this user's daily PCGS allowance (a PCGS cert lookup is 2 calls). A PCGS cert is asked
+    once and kept (a cert doesn't change); `fresh` asks again (e.g. PCGS may have added photos since)."""
     service = service.upper()
     cert = clean_cert(cert)
     if not cert:
         raise LookupError("Enter a cert number")
 
     if service == "PCGS":
-        if user_id is not None:
-            quota.spend(user_id, "pcgs", 2)
-        result = pcgs.lookup(cert)
+        stored = None if fresh else pcgs_cache.get(pcgs_cache.cert_key(cert))
+        if stored is not None:
+            result = LookupResult.model_validate(stored)
+        else:
+            if user_id is not None:
+                quota.spend(user_id, "pcgs", 2)
+            result = pcgs.lookup(cert)
+            pcgs_cache.put(pcgs_cache.cert_key(cert), result.model_dump(mode="json"))
     elif service in VERIFY_URLS:
         result = LookupResult(
             grading_service=service,

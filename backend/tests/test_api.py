@@ -505,7 +505,7 @@ def test_pcgs_check_saves_photos_and_fills_details(authed, morgan_collection, mo
 
     buf = _io.BytesIO()
     Image.new("RGB", (30, 30), "white").save(buf, "JPEG")
-    monkeypatch.setattr(lookups, "lookup", lambda service, cert, user_id=None: LookupResult(
+    monkeypatch.setattr(lookups, "lookup", lambda service, cert, user_id=None, **kw: LookupResult(
         grading_service="PCGS", cert_number=cert, grade_prefix="MS", grade=64, pcgs_number="7130", strike_designation="PL",
         image_urls=["https://images.pcgs.com/a.jpg", "https://images.pcgs.com/b.jpg"], raw={"x": 1}))
     monkeypatch.setattr(photos, "download_image", lambda url: (buf.getvalue(), "image/jpeg"))

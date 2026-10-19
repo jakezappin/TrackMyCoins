@@ -686,3 +686,14 @@ class Dealer(Base):
     @property
     def display_name(self) -> str:
         return self.business or self.contact_name or "Dealer"
+
+
+class PcgsCache(Base):
+    """PCGS answers kept so the same question is never paid for twice (PCGS allows 100 calls a day): a cert's
+    lookup forever (a cert doesn't change), an issue and grade's Price Guide and auctions for a week."""
+
+    __tablename__ = "pcgs_cache"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)  # "cert:12345678" or "market:7130|65|0"
+    data: Mapped[dict] = mapped_column(JSON)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

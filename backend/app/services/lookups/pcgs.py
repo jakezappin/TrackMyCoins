@@ -1,13 +1,12 @@
-"""PCGS Public API. Docs: https://www.pcgs.com/publicapi/documentation (1,000 calls/day)."""
+"""PCGS Public API. Docs: https://www.pcgs.com/publicapi/documentation (100 calls/day)."""
 
 import re
-import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 import httpx
 
-from .. import quota
+from .. import pcgs_cache, quota
 
 from ...config import get_settings
 from ...designations import from_pcgs, with_designation
@@ -173,21 +172,24 @@ def market(pcgs_number: str, grade: int, plus: bool = False, auctions: int = 10)
     }
 
 
-# PCGS allows 1,000 calls a day and each market lookup costs 2, so one issue + grade is fetched at most once a day
-# (several coins of the same issue and grade, refreshes, repeat clicks). In memory: the server restarts often.
-MARKET_TTL = 24 * 60 * 60
-_market_cache: dict[tuple, tuple[float, dict]] = {}
+# PCGS allows 100 calls a day and each market lookup costs 2, so one issue + grade is fetched at most once a week
+# (several coins of the same issue and grade, refreshes, repeat clicks), kept in the database across restarts.
+MARKET_TTL = timedelta(days=pcgs_cache.MARKET_DAYS)
 
 
-def market_cached(pcgs_number: str, grade: int, plus: bool = False, before_call=None) -> tuple[dict, bool]:
+def market_cached(
+    pcgs_number: str, grade: int, plus: bool = False, before_call=None, cache_only: bool = False
+) -> tuple[dict | None, bool]:
     """(market data, whether PCGS was called). `before_call` runs only when PCGS will really be called (to
-    charge the daily allowance; it may raise to stop the call)."""
-    key = (str(pcgs_number), int(grade), bool(plus))
-    hit = _market_cache.get(key)
-    if hit and time.time() - hit[0] < MARKET_TTL:
-        return hit[1], False
+    charge the daily allowance; it may raise to stop the call). `cache_only`: never call PCGS (None when not stored)."""
+    key = pcgs_cache.market_key(str(pcgs_number), grade, plus)
+    hit = pcgs_cache.get(key, MARKET_TTL)
+    if hit is not None:
+        return hit, False
+    if cache_only:
+        return None, False
     if before_call is not None:
         before_call()
     data = {**market(pcgs_number, grade, plus), "fetched_at": datetime.now(timezone.utc).isoformat()}
-    _market_cache[key] = (time.time(), data)
+    pcgs_cache.put(key, data)
     return data, True

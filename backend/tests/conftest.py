@@ -65,9 +65,18 @@ def fixed_spot_prices(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fresh_pcgs_cache():
-    from app.services.lookups import pcgs
+    """Tables are recreated per client; this covers tests that call services without one."""
+    from sqlalchemy import delete
 
-    pcgs._market_cache.clear()
+    from app.db import SessionLocal
+    from app.models import PcgsCache
+
+    try:
+        with SessionLocal() as db:
+            db.execute(delete(PcgsCache))
+            db.commit()
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True)

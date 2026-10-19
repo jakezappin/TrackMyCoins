@@ -171,8 +171,8 @@ export default function ImportPage() {
         ) : (
           <div className="stack">
             <p className="muted small">
-              Paste PCGS cert numbers, one per line or separated by commas (up to 50 at a time). Each is looked up with
-              PCGS for its date, grade, designation and photos. PCGS allows 1,000 lookups a day.
+              Paste PCGS cert numbers, one per line or separated by commas (up to 20 at a time). Each is looked up with
+              PCGS for its date, grade, designation and photos. PCGS allows only 100 lookups a day, so any left over can be pasted again tomorrow.
             </p>
             <textarea rows={6} value={certs} onChange={(e) => setCerts(e.target.value)} placeholder={"12345678\n23456789"} />
             <div className="row">

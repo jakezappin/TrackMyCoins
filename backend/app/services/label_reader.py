@@ -132,7 +132,7 @@ def _from_barcodes(texts: list[str], user_id: int | None = None) -> dict | None:
                           notes="Cert number read from the NGC barcode.")
     if not get_settings().pcgs_api_token:
         return None
-    candidates = list(dict.fromkeys(d for t in texts for d in DIGITS.findall(t)))[:2]  # PCGS allows 1,000 calls/day
+    candidates = list(dict.fromkeys(d for t in texts for d in DIGITS.findall(t)))[:2]  # PCGS allows 100 calls/day
     for cert in candidates:
         try:
             found = lookups.lookup("PCGS", cert, user_id=user_id)

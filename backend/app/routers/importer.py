@@ -27,7 +27,7 @@ from .collections import get_owned_collection
 router = APIRouter(prefix="/api/import", tags=["import"])
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-MAX_CERTS = 50  # each PCGS cert costs a lookup call (1,000 a day)
+MAX_CERTS = 20  # each new PCGS cert costs 2 calls (PCGS allows 100 a day; certs looked up before are free)
 
 
 class ImportRow(BaseModel):

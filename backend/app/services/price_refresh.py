@@ -78,8 +78,9 @@ def premium_quote(coin: Coin, cpg: Decimal) -> PriceQuote:
     )
 
 
-def refresh_pcgs(db: Session, coin: Coin) -> bool:
-    """PCGS Price Guide, population and last 10 auction sales. Uses 2 of PCGS's 1,000 daily API calls."""
+def refresh_pcgs(db: Session, coin: Coin, cache_only: bool = False) -> bool:
+    """PCGS Price Guide, population and last 10 auction sales. Uses 2 of PCGS's 100 daily API calls, unless this
+    issue and grade was fetched in the last week. `cache_only`: only what's stored (the bulk refresh), never PCGS."""
     _not_error(coin)
     greysheet.require_grade(coin)
     if not coin.pcgs_number:
@@ -88,8 +89,11 @@ def refresh_pcgs(db: Session, coin: Coin) -> bool:
         raise greysheet.PricingError("This coin needs a PCGS number. Use Find on the edit page.")
     grade = details.price_grade(coin)
     data, called = pcgs.market_cached(
-        coin.pcgs_number, grade, coin.grade_plus and not coin.details, before_call=lambda: quota.spend(coin.user_id, "pcgs", 2)
+        coin.pcgs_number, grade, coin.grade_plus and not coin.details,
+        before_call=lambda: quota.spend(coin.user_id, "pcgs", 2), cache_only=cache_only,
     )
+    if data is None:
+        return False
     coin.pcgs_market = {**data, "fetched_at": data.get("fetched_at") or datetime.now(timezone.utc).isoformat()}
     price_archive.save_market(db, data, grade, coin.grade_plus and not coin.details)
     if data["price_guide"] is not None:

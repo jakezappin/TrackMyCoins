@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api", tags=["jobs"])
 
 class RefreshIn(BaseModel):
     collection_id: int | None = None  # None = every collection
-    include_pcgs: bool = False  # PCGS Price Guide + auctions too (2 PCGS calls per coin, 1,000/day)
+    include_pcgs: bool = False  # PCGS Price Guide + auctions too (only what was fetched this week; the bulk refresh never calls PCGS)
 
 
 WEEK = timedelta(days=7)

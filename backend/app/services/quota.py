@@ -116,3 +116,10 @@ def used_today(user_id: int, service: str) -> int:
         row = db.scalar(select(ApiUsage).where(ApiUsage.day == date.today(), ApiUsage.user_id == user_id,
                                                ApiUsage.service == service))
         return row.count if row else 0
+
+
+def room_for_automatic_pcgs() -> bool:
+    """Whether a PCGS call nobody clicked for (the value at purchase a coin page fills in by itself) may go ahead:
+    PCGS isn't paused and under half the site's day is used, keeping the rest for lookups people ask for. Otherwise
+    it waits; the coin stays pending and is filled on a later visit."""
+    return not paused_for("pcgs") and used_today(SITE, "pcgs") < get_settings().pcgs_site_day // 2

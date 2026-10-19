@@ -134,8 +134,10 @@ function verifyUrl(service: GradingService, cert: string, grade: number | null, 
     case "NGC":
       return ngcCertUrl(cert, grade, details);
     case "ANACS":
-      // ANACS's lookup form; it can't be prefilled from the address.
-      return "https://portal.anacs.com/Verify/CertVerification.aspx";
+      // Opens straight to the cert; without one, ANACS's lookup form.
+      return cert
+        ? `https://portal.anacs.com/Verify/CertVerification.aspx?cert=${encodeURIComponent(cert)}`
+        : "https://portal.anacs.com/Verify/CertVerification.aspx";
     case "ICG":
       // ICG's verification page (behind a reCAPTCHA; the serial is typed there).
       return "https://www.icgcoin.com/verification/";
