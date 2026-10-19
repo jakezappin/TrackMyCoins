@@ -4154,3 +4154,20 @@ fieldset.field .check {
   border: 1px solid var(--accent);
   font-size: 0.9rem;
 }
+
+/* Coin tables: the Variety column (phones show it under the date instead). */
+.coin-table .c-variety {
+  color: var(--muted);
+  max-width: 260px;
+}
+.coin-table .phone-only {
+  display: none;
+}
+@media (max-width: 640px) {
+  .coin-table .c-variety {
+    display: none;
+  }
+  .coin-table .phone-only {
+    display: inline;
+  }
+}

@@ -5,7 +5,10 @@ import CoinPlaceholder from "./CoinPlaceholder";
 import { useApp } from "../App";
 import { coinPath, dateMint, metalFor, serviceLabel, gradeLabel, money, profit, setLineName, shortDate, slabLabel, toningLabel } from "../format";
 
-type SortKey = "inventory" | "date" | "grade" | "paid" | "cpg" | "sold";
+/** A coin's variety and VAM: "8TF · VAM-14.8". */
+const varietyText = (c: Coin) => [c.variety, c.vam].filter(Boolean).join(" · ");
+
+type SortKey = "inventory" | "date" | "variety" | "grade" | "paid" | "cpg" | "sold";
 
 interface Props {
   coins: Coin[];
@@ -37,6 +40,7 @@ export default function CoinTable({ coins, mode }: Props) {
         gradeLabel(c),
         c.grading_service,
         c.cert_number,
+        c.variety,
         c.vam,
         c.purchased_from,
         c.sold_to,
@@ -53,6 +57,8 @@ export default function CoinTable({ coins, mode }: Props) {
           return c.inventory_number;
         case "date":
           return (c.year ?? 0) * 100 + "PCCDOS".indexOf(c.mint_mark);
+        case "variety":
+          return varietyText(c).toLowerCase() || "\uffff"; // coins without one last
         case "grade":
           return (c.grade ?? 0) + (c.grade_plus ? 0.5 : 0);
         case "paid":
@@ -87,6 +93,7 @@ export default function CoinTable({ coins, mode }: Props) {
   );
   const sortOptions: [SortKey, string][] = [
     ["date", "Date"],
+    ["variety", "Variety"],
     ["inventory", "Inventory #"],
     ["grade", "Grade"],
     ["paid", "Price paid"],
@@ -136,6 +143,7 @@ export default function CoinTable({ coins, mode }: Props) {
                 <th className="thumb-col" />
                 {th("inventory", "Inv #")}
                 {th("date", "Date")}
+                {th("variety", "Variety")}
                 {th("grade", "Grade")}
                 <th>Service</th>
                 <th>Tags</th>
@@ -166,8 +174,10 @@ export default function CoinTable({ coins, mode }: Props) {
                     </td>
                     <td className="strong c-date">
                       {dateMint(c)}
-                      {c.vam && <span className="sub"> {c.vam}</span>}
+                      {/* Phones: no Variety column, so it goes under the date. */}
+                      {varietyText(c) && <span className="sub phone-only"> {varietyText(c)}</span>}
                     </td>
+                    <td className="c-variety">{setTypeIds.has(c.coin_type_id) ? "" : varietyText(c)}</td>
                     <td className="c-grade">{setTypeIds.has(c.coin_type_id) ? setLineName(c.variety) : gradeLabel(c)}</td>
                     <td className="c-svc">
                       {setTypeIds.has(c.coin_type_id) ? "—" : serviceLabel(c.grading_service, c.other_service)}
