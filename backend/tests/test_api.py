@@ -492,3 +492,32 @@ def test_attachments_upload_view_delete(authed, morgan_collection, client):
     assert store.coin_dir(coin["id"]).exists()
     authed.delete(f"/api/coins/{inv}")
     assert not store.coin_dir(coin["id"]).exists()
+
+
+def test_pcgs_check_saves_photos_and_fills_details(authed, morgan_collection, monkeypatch):
+    """An imported PCGS coin wasn't looked up: Check PCGS for photos saves PCGS's photos and fills what's missing."""
+    import io as _io
+
+    from PIL import Image
+
+    from app.schemas import LookupResult
+    from app.services import lookups, photos
+
+    buf = _io.BytesIO()
+    Image.new("RGB", (30, 30), "white").save(buf, "JPEG")
+    monkeypatch.setattr(lookups, "lookup", lambda service, cert, user_id=None: LookupResult(
+        grading_service="PCGS", cert_number=cert, grade_prefix="MS", grade=64, pcgs_number="7130", strike_designation="PL",
+        image_urls=["https://images.pcgs.com/a.jpg", "https://images.pcgs.com/b.jpg"], raw={"x": 1}))
+    monkeypatch.setattr(photos, "download_image", lambda url: (buf.getvalue(), "image/jpeg"))
+
+    c = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], grade=63)).json()
+    inv = c["inventory_number"]
+    r = authed.post(f"/api/coins/{inv}/pcgs-check").json()
+    assert r["added"] == 2 and r["coin"]["photo_count"] == 2
+    assert (r["coin"]["pcgs_number"], r["coin"]["strike_designation"]) == ("7130", "PL")
+    assert "Saved 2 photos" in r["message"] and "PCGS has this cert as MS64" in r["message"]
+    again = authed.post(f"/api/coins/{inv}/pcgs-check").json()
+    assert again["added"] == 0 and "already saved" in again["message"]  # no duplicates
+
+    raw = authed.post("/api/coins", json=coin_payload(morgan_collection["id"], grading_service="NGC", cert_number="1234567-001")).json()
+    assert authed.post(f"/api/coins/{raw['inventory_number']}/pcgs-check").status_code == 400

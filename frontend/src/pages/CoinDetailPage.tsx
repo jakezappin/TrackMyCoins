@@ -333,6 +333,7 @@ export default function CoinDetailPage() {
               />
             )}
           </div>
+          {coin.grading_service === "PCGS" && coin.cert_number && <PcgsCheck inv={inv} onDone={update} />}
           {coin.grading_service === "NGC" && coin.photos.length <= 8 && (
             <details className="ngc-add" open={coin.photos.length === 0}>
               <summary className="small">Add NGC's photos</summary>
@@ -923,6 +924,41 @@ function CatalogPicker({ candidates, onClose, onPick }: { candidates: CatalogCan
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Imported or typed-in PCGS coins weren't looked up: fetch PCGS's photos and details for the cert. */
+function PcgsCheck({ inv, onDone }: { inv: string; onDone: (c: CoinDetail) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <div className="pcgs-check">
+      <button
+        type="button"
+        className="btn small"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setMsg(null);
+          try {
+            const r = await api.pcgsCheck(inv);
+            onDone(r.coin);
+            setMsg({ ok: true, text: r.message });
+          } catch (e) {
+            setMsg({ ok: false, text: (e as Error).message });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Checking PCGS…" : "Check PCGS for photos"}
+      </button>
+      {msg ? (
+        <span className={`small ${msg.ok ? "muted" : "error"}`}>{msg.text}</span>
+      ) : (
+        <span className="small muted">Saves PCGS's photos of this cert and fills in its PCGS #, designation and VAM.</span>
+      )}
     </div>
   );
 }

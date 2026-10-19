@@ -9,7 +9,9 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import CoinPhoto, User
 from ..schemas import CoinDetail, PhotoImportIn, PhotoReorderIn
+from ..services import lookups
 from ..services import photos as store
+from ..services.quota import QuotaExceeded
 from ..services.coins import coin_detail
 from .coins import get_owned_coin
 
@@ -80,6 +82,61 @@ def import_photos(
     if errors and len(errors) == len(urls):
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Could not import photos: " + "; ".join(errors))
     return coin_detail(coin)
+
+
+@router.post("/coins/{inventory_number}/pcgs-check")
+def pcgs_check(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Look up a PCGS coin's cert at PCGS (for coins imported or added without one): save PCGS's photos, and fill in
+    what the coin is missing (PCGS #, designation, VAM, variety). Says what it did, and if PCGS's grade differs."""
+    coin = get_owned_coin(db, user, inventory_number)
+    if coin.grading_service != "PCGS" or not coin.cert_number:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This needs a PCGS coin with a cert number.")
+    try:
+        r = lookups.lookup("PCGS", coin.cert_number, user_id=user.id)
+    except QuotaExceeded as e:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e)) from e
+    except lookups.LookupError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    except Exception as e:  # network trouble
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Couldn't reach PCGS: {e}") from e
+
+    notes: list[str] = []
+    filled = []
+    for field, label in (("pcgs_number", "PCGS #"), ("strike_designation", "designation"), ("vam", "VAM"), ("variety", "variety")):
+        value = getattr(r, field, None)
+        if value and not getattr(coin, field):
+            setattr(coin, field, value)
+            filled.append(f"{label} {value}")
+    if r.raw and not coin.lookup_raw:
+        coin.lookup_raw = r.raw
+    if filled:
+        notes.append("Filled in " + ", ".join(filled) + ".")
+    theirs = f"{r.grade_prefix or ''}{r.grade or ''}"
+    mine = f"{coin.grade_prefix or ''}{coin.grade or ''}"
+    if r.grade and theirs != mine:
+        notes.append(f"PCGS has this cert as {theirs}; this coin says {mine or 'no grade'}. Check it.")
+
+    added = 0
+    if any(p.source == "pcgs" for p in coin.photos):
+        notes.append("PCGS's photos were already saved.")
+    elif not r.image_urls:
+        notes.append("PCGS has no photos for this cert.")
+    else:
+        order = len(coin.photos)
+        for url in r.image_urls[: max(0, settings.max_photos_per_coin - len(coin.photos))]:
+            try:
+                data, ctype = store.download_image(url)
+                name, ctype = store.save_bytes(coin.id, data, ctype)
+            except Exception:  # keep going; one bad image shouldn't block the rest
+                continue
+            db.add(CoinPhoto(coin_id=coin.id, file_name=name, content_type=ctype, sort_order=order, source="pcgs"))
+            order += 1
+            added += 1
+        notes.insert(0, f"Saved {added} photo{'' if added == 1 else 's'} from PCGS." if added else
+                     "Couldn't save PCGS's photos.")
+    db.commit()
+    db.refresh(coin)
+    return {"coin": coin_detail(coin), "message": " ".join(notes) or "Nothing new from PCGS.", "added": added}
 
 
 @router.put("/coins/{inventory_number}/photos/order", response_model=CoinDetail)

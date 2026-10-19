@@ -1471,6 +1471,9 @@ export const api = {
   ) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/valuation`, b),
   getCpg: (inv: string) => request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/cpg`),
+  /** Look the cert up at PCGS: save its photos and fill in what the coin is missing. */
+  pcgsCheck: (inv: string) =>
+    request<{ coin: CoinDetail; message: string; added: number }>("POST", `/api/coins/${encodeURIComponent(inv)}/pcgs-check`),
   /** The catalog listing picked for a coin when more than one fit: its PCGS coin number (and variety, if none yet). */
   setPcgsNumber: (inv: string, pcgs_number: string, variety: string | null) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/pcgs-number`, { pcgs_number, variety }),
