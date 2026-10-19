@@ -91,16 +91,6 @@ const GRADE_NUMBERS: [string, number[]][] = [
 const SHELDON_NUMBERS = GRADE_NUMBERS.flatMap(([, ns]) => ns);
 const letterGrade = (n: number) => GRADE_NUMBERS.find(([, ns]) => ns.includes(n))?.[0] ?? "MS";
 
-/** A grade typed the way NGC and the others write it: "MS64", "64", "AU 58", "PF69", "64+", "65★". */
-function parseGrade(s: string): { prefix: string | null; grade: number; plus: boolean; star: boolean } | null {
-  const m = /^\s*(MS|SP|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FR|PO|P)?\s*-?\s*(\d{1,2})\s*(\+)?\s*(\*|★)?\s*$/i.exec(s);
-  if (!m) return null;
-  const grade = Number(m[2]);
-  if (grade < 1 || grade > 70) return null;
-  const p = m[1]?.toUpperCase() ?? null;
-  const prefix = p === "PF" ? "PR" : p === "EF" ? "XF" : p === "P" ? "PO" : p;
-  return { prefix, grade, plus: Boolean(m[3]), star: Boolean(m[4]) };
-}
 // Used until the catalog's designations for the series load (or if it can't be reached).
 const FALLBACK_DESIGNATIONS: Record<string, string[]> = {
   MS: ["PL", "DMPL", "RD", "RB", "BN", "FB", "FS", "FH"],
@@ -209,7 +199,6 @@ export default function CoinFormPage() {
   const [grading, setGrading] = useState<GradingPick>({ submission: "", company: "NGC", expected: "", declared: "" });
   const [currentGrading, setCurrentGrading] = useState<Coin["grading"]>(null);
   const [errorValue, setErrorValue] = useState(""); // error coins: the owner's estimated value
-  const [gradeText, setGradeText] = useState<string | null>(null); // the grade beside the cert, while it's typed
 
   useEffect(() => {
     if (editInv === null) return;
@@ -864,10 +853,11 @@ export default function CoinFormPage() {
               }}
             />
           </label>
-          {verifyOnly && (
-            <label className={`field grade-mini${isNgc ? " ngc-grade" : ""}`}>
+          {isNgc && (
+            // Only NGC's cert page needs the grade; the other services' grade goes in the Coin box.
+            <label className="field grade-mini ngc-grade">
               <span>Grade</span>
-              {isNgc ? (
+              {
                 // NGC's cert page is by grade number, or NGCDetails for a Details coin: pick from NGC's grades.
                 <select
                   value={form.details ? "details" : form.grade ?? ""}
@@ -899,31 +889,7 @@ export default function CoinFormPage() {
                     ))}
                   <option value="details">NGC Details</option>
                 </select>
-              ) : (
-              <input
-                inputMode="text"
-                placeholder="MS62"
-                maxLength={12}
-                value={gradeText ?? (form.grade ? `${isProof ? "PR" : form.grade_prefix ?? ""}${form.grade}${form.grade_plus ? "+" : ""}${form.grade_star ? "★" : ""}` : "")}
-                aria-invalid={gradeText !== null && gradeText.trim() !== "" && !parseGrade(gradeText)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setGradeText(v);
-                  if (!v.trim()) return set("grade", null);
-                  const g = parseGrade(v);
-                  // Fills the Coin box's grade (and its MS/AU..., + and ★) as it's typed.
-                  if (g)
-                    setForm((f) => ({
-                      ...f,
-                      grade: g.grade,
-                      grade_plus: g.plus,
-                      grade_star: g.star,
-                      grade_prefix: isProof ? "PR" : g.prefix ?? f.grade_prefix,
-                    }));
-                }}
-                onBlur={() => setGradeText(null)}
-              />
-              )}
+              }
             </label>
           )}
           {canLookUp && !pcgsVerify && (
@@ -980,7 +946,7 @@ export default function CoinFormPage() {
         {!isRaw && form.grading_service === "ANACS" && (
           <p className="muted small">
             ANACS doesn't allow automated lookups. Use <strong>Verify ↗</strong> to check the cert on ANACS's site, then
-            fill in the date below.
+            fill in the date and grade below.
           </p>
         )}
         {!isRaw && form.grading_service === "ICG" && (
