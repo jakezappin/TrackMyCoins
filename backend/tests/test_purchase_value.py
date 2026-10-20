@@ -27,7 +27,30 @@ def _quote(inv, value, days_ago):
         db.commit()
 
 
-def test_order_of_preference(authed, morgan_collection, monkeypatch):
+def test_value_at_purchase_is_own_value_recent_cpg_or_price_paid(authed, morgan_collection):
+    col = morgan_collection["id"]
+    today = date.today()
+    recent = _coin(authed, col, purchase_date=(today - timedelta(days=20)).isoformat(), price_paid="150")
+    _quote(recent["inventory_number"], "175", 0)
+    assert (_detail(authed, recent["inventory_number"])["value"], _detail(authed, recent["inventory_number"])["source"]) == ("175.00", "cpg")
+
+    # Bought 2 years ago: no auction or history lookups (off for now), so the price paid.
+    old = _coin(authed, col, purchase_date=(today - timedelta(days=730)).isoformat(), price_paid="120")
+    _quote(old["inventory_number"], "175", 0)
+    pv = _detail(authed, old["inventory_number"])
+    assert (pv["value"], pv["source"], pv["pending"]) == ("120.00", "paid", False)
+
+    # Set from the coin page, and cleared back to the worked-out value.
+    r = authed.put(f"/api/coins/{old['inventory_number']}/purchase-value", json={"value": "140"})
+    assert (r.json()["purchase_value"]["value"], r.json()["purchase_value"]["source"]) == ("140.00", "custom")
+    r = authed.put(f"/api/coins/{old['inventory_number']}/purchase-value", json={"value": None})
+    assert r.json()["purchase_value"]["source"] == "paid"
+
+
+def test_dormant_sources_when_switched_on(authed, morgan_collection, monkeypatch):
+    """History and PCGS auctions are off for now; they still work when switched back on."""
+    monkeypatch.setattr(purchase_value, "USE_HISTORY", True)
+    monkeypatch.setattr(purchase_value, "USE_AUCTIONS", True)
     col = morgan_collection["id"]
     today = date.today()
 
@@ -72,6 +95,7 @@ def test_order_of_preference(authed, morgan_collection, monkeypatch):
 
 
 def test_no_sales_means_price_paid(authed, morgan_collection, monkeypatch):
+    monkeypatch.setattr(purchase_value, "USE_AUCTIONS", True)
     c = _coin(authed, morgan_collection["id"], purchase_date="2015-03-01", price_paid="95")
     monkeypatch.setattr(purchase_value, "_sales", lambda *a, **k: [("2024-01", Decimal(200))])  # too far away
     pv = authed.post(f"/api/coins/{c['inventory_number']}/purchase-value").json()["purchase_value"]

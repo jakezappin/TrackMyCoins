@@ -1417,8 +1417,6 @@ export const api = {
       "POST", `/api/bullion/collections/${collectionId}/import/commit`, { rows }),
   sets: (coinTypeId: number, year?: number) =>
     request<SetOption[]>("GET", `/api/coin-types/${coinTypeId}/sets${year ? `?year=${year}` : ""}`),
-  fillPurchaseValue: (inv: string) =>
-    request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/purchase-value`),
   moveTargets: (inv: string) =>
     request<{ id: number; name: string; finish: string }[]>("GET", `/api/coins/${encodeURIComponent(inv)}/move-targets`),
   moveCoin: (inv: string, collectionId: number) =>
@@ -1476,6 +1474,15 @@ export const api = {
   ) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/valuation`, b),
   getCpg: (inv: string) => request<CoinDetail>("POST", `/api/coins/${encodeURIComponent(inv)}/cpg`),
+  /** CPG at a grade the coin doesn't have yet; the coin isn't changed. */
+  cpgAtGrade: (inv: string, grade: number) =>
+    request<{ value: string | null; grade_used: string | null; grade: number; grade_label: string }>(
+      "POST", `/api/coins/${encodeURIComponent(inv)}/cpg-at-grade`, { grade }),
+  /** Give the coin a numeric grade and record its CPG. */
+  saveGrade: (inv: string, grade: number) => request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/grade`, { grade }),
+  /** The owner's own value at purchase; null goes back to the worked-out one. */
+  setPurchaseValue: (inv: string, value: string | null) =>
+    request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}/purchase-value`, { value }),
   /** Look the cert up at PCGS: save its photos and fill in what the coin is missing. */
   pcgsCheck: (inv: string) =>
     request<{ coin: CoinDetail; message: string; added: number }>("POST", `/api/coins/${encodeURIComponent(inv)}/pcgs-check`),

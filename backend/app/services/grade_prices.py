@@ -44,13 +44,14 @@ def record_history(db: Session, key: str, rows: list[dict], when: datetime) -> N
 REUSE_FOR = timedelta(hours=24)  # Greysheet updates CPG weekly at most; a day-old sheet is current
 
 
-def recent_entry(db: Session, key: str) -> dict | None:
-    """A saved all-grades response for this issue from the last 24 hours, shaped like Greysheet's, or None."""
+def recent_entry(db: Session, key: str, max_age: timedelta | None = None) -> dict | None:
+    """A saved all-grades response for this issue from the last 24 hours (or `max_age`), shaped like Greysheet's,
+    or None."""
     sheet = db.scalar(select(GradePriceSheet).where(GradePriceSheet.key == key))
     if sheet is None:
         return None
     fetched = sheet.fetched_at if sheet.fetched_at.tzinfo else sheet.fetched_at.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc) - fetched > REUSE_FOR:
+    if datetime.now(timezone.utc) - fetched > (max_age or REUSE_FOR):
         return None
     return {
         "GsId": sheet.gsid,

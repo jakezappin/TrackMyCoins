@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -139,6 +141,58 @@ def get_cpg_price(inventory_number: str, db: Session = Depends(get_db), user: Us
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except httpx.HTTPError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Greysheet error: {e}")
+    db.commit()
+    db.refresh(coin)
+    return coin_detail(coin)
+
+
+class GradeIn(BaseModel):
+    grade: int = Field(ge=1, le=70)
+
+
+@router.post("/coins/{inventory_number}/cpg-at-grade")
+def cpg_at_grade(inventory_number: str, body: GradeIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """CPG at a grade the coin doesn't have yet (a raw coin with no number): the coin itself isn't changed."""
+    coin = get_owned_coin(db, user, inventory_number)
+    try:
+        out = price_refresh.cpg_at_grade(db, coin, body.grade)
+    except greysheet.AmbiguousMatch as e:
+        raise _pick_one(e)
+    except greysheet.PricingError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Greysheet error: {e}")
+    db.commit()  # keeps the price sheet, so saving this grade needs no second Greysheet call
+    value = None if out["value"] is None else f"{out['value']:.2f}"
+    return {**out, "value": value, "grade": body.grade, "grade_label": f"{price_refresh.prefix_for(coin, body.grade)}{body.grade}"}
+
+
+@router.put("/coins/{inventory_number}/grade", response_model=CoinDetail)
+def save_grade(inventory_number: str, body: GradeIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Give the coin this numeric grade (kept from CPG at a grade) and record its CPG."""
+    coin = get_owned_coin(db, user, inventory_number)
+    coin.grade, coin.grade_prefix = body.grade, price_refresh.prefix_for(coin, body.grade)
+    if not (45 <= body.grade <= 69):
+        coin.grade_plus = False
+    try:
+        price_refresh.refresh_cpg(db, coin)
+    except (greysheet.PricingError, httpx.HTTPError):
+        pass  # the grade is saved either way; Get CPG Price can be tried again
+    db.commit()
+    db.refresh(coin)
+    return coin_detail(coin)
+
+
+class PurchaseValueIn(BaseModel):
+    value: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
+@router.put("/coins/{inventory_number}/purchase-value", response_model=CoinDetail)
+def set_purchase_value(inventory_number: str, body: PurchaseValueIn, db: Session = Depends(get_db),
+                       user: User = Depends(current_user)):
+    """The owner's own value at purchase; None goes back to the worked-out one."""
+    coin = get_owned_coin(db, user, inventory_number)
+    coin.purchase_value_custom = body.value
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)

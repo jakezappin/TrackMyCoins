@@ -10,7 +10,7 @@ from .. import grades
 from ..series import BY_SLUG, type_set_members
 from ..schemas import CoinDetail, CoinFields, CoinIn, CoinUpdate
 from ..services.coins import coin_detail, duplicate_info, find_duplicate_cert, next_inventory_number
-from ..services import attachments, series_match
+from ..services import attachments, price_refresh, series_match
 from ..services.photos import delete_coin_photo_files
 from .collections import get_owned_collection
 from .dealers import apply_dealer_links
@@ -135,6 +135,7 @@ def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depend
     db.flush()
     _apply_location(db, user, coin, body)
     _apply_error_value(db, coin, body)
+    price_refresh.fill_cpg_from_saved(db, coin)  # CPG from a price sheet already saved this week, if any
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)
@@ -225,7 +226,11 @@ def _apply_location(db: Session, user: User, coin: Coin, body: CoinIn | CoinUpda
 
 @router.get("/{inventory_number}", response_model=CoinDetail)
 def get_coin(inventory_number: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return coin_detail(get_owned_coin(db, user, inventory_number))
+    coin = get_owned_coin(db, user, inventory_number)
+    if price_refresh.fill_cpg_from_saved(db, coin):  # another coin of this issue was priced this week
+        db.commit()
+        db.refresh(coin)
+    return coin_detail(coin)
 
 
 @router.put("/{inventory_number}", response_model=CoinDetail)
@@ -247,6 +252,7 @@ def update_coin(inventory_number: str, body: CoinUpdate, db: Session = Depends(g
     coin.collection_id = col.id
     _apply_location(db, user, coin, body)
     _apply_error_value(db, coin, body)
+    price_refresh.fill_cpg_from_saved(db, coin)  # e.g. a new grade another coin of this issue was priced at
     db.commit()
     db.refresh(coin)
     return coin_detail(coin)

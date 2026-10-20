@@ -18,6 +18,7 @@ import {
   type SubmissionSummary,
   isPcgsLimit,
 } from "../api";
+import { SHELDON_NUMBERS, letterGrade } from "../sheldon";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import PhotoButtons from "../components/PhotoButtons";
 import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNgcHandoff, saveCoinDraft } from "../ngcButton";
@@ -84,12 +85,6 @@ const EMPTY: CoinFields = {
 const SERVICES: GradingService[] = ["PCGS", "NGC", "ANACS", "CACG", "ICG", "OTHER", "RAW"];
 const CIRC_PREFIXES = ["MS", "SP", "AU", "XF", "VF", "F", "VG", "G", "AG", "FR", "PO"];
 // The grades the services use, by letter grade (the Sheldon scale).
-const GRADE_NUMBERS: [string, number[]][] = [
-  ["PO", [1]], ["FR", [2]], ["AG", [3]], ["G", [4, 6]], ["VG", [8, 10]], ["F", [12, 15]], ["VF", [20, 25, 30, 35]],
-  ["XF", [40, 45]], ["AU", [50, 53, 55, 58]], ["MS", [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70]],
-];
-const SHELDON_NUMBERS = GRADE_NUMBERS.flatMap(([, ns]) => ns);
-const letterGrade = (n: number) => GRADE_NUMBERS.find(([, ns]) => ns.includes(n))?.[0] ?? "MS";
 
 // Used until the catalog's designations for the series load (or if it can't be reached).
 const FALLBACK_DESIGNATIONS: Record<string, string[]> = {
@@ -1451,9 +1446,8 @@ export default function CoinFormPage() {
             <span>Est. value at purchase (optional)</span>
             <input type="text" inputMode="decimal" {...money_("purchase_value_custom")} placeholder="Automatic" />
             <small className="muted">
-              Leave blank and it's worked out: CPG if the coin was priced within 2 months of buying it, else CPG from
-              TrackMyCoins' price history for that date, else the average of PCGS auction sales around then, else the
-              price paid.
+              Leave blank and it's worked out: CPG if the coin was priced within 2 months of buying it, else the price
+              paid.
             </small>
           </label>
         </section>

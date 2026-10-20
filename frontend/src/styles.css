@@ -4184,3 +4184,16 @@ fieldset.field .check {
   flex-wrap: wrap;
   margin-top: 10px;
 }
+
+.grade-for-cpg {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.grade-for-cpg-result p {
+  margin: 0 0 8px;
+}
+.pv-edit input {
+  width: 120px;
+}

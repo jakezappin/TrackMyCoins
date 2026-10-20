@@ -3,11 +3,11 @@
 In order of preference:
 1. The owner's own figure.
 2. The coin's own CPG, if one was recorded within 2 months of the purchase (a recent purchase priced now).
-3. CPG from the app's own price history (every price sheet fetched is kept), if it covers the purchase date.
-   It starts empty, so this takes over gradually as the history grows.
-4. The average of up to 10 PCGS auction sales of the issue and grade nearest the purchase date (within a year).
-   Sales come from the app's auction archive (services/price_archive.py), topped up from PCGS when stale.
-5. The price paid.
+3. The price paid.
+
+Off for now (USE_HISTORY / USE_AUCTIONS), between 2 and 3: CPG from the app's own price history if it covers the
+purchase date, then the average of up to 10 PCGS auction sales nearest the purchase date. PCGS allows only 100
+calls a day; an auction source of our own (e.g. Heritage, Stack's Bowers) may replace it later.
 
 The purchase date is the day the coin was added if none was entered.
 """
@@ -28,6 +28,8 @@ RECENT = timedelta(days=61)  # "within 2 months" of the purchase
 HISTORY_GAP = timedelta(days=61)  # a history price unconfirmed for longer than this before the purchase doesn't count
 AUCTION_WINDOW_MONTHS = 12
 AUCTION_SALES = 10
+USE_HISTORY = False  # CPG from the app's price history (step off for now; see the module docstring)
+USE_AUCTIONS = False  # PCGS auction sales
 
 
 @dataclass
@@ -118,10 +120,10 @@ def _estimate(db: Session, coin: Coin) -> Estimate:
     q = _own_cpg(coin, start)
     if q is not None:
         return Estimate(q.value, "cpg", f"CPG on {_fmt(_day(q.fetched_at) or date.today())}")
-    h = _history_cpg(db, coin, start)
+    h = _history_cpg(db, coin, start) if USE_HISTORY else None
     if h is not None:
         return Estimate(h.value, "cpg_history", f"CPG as of {_fmt(_day(h.first_seen))} (TrackMyCoins price history)")
-    key = auction_key(coin)
+    key = auction_key(coin) if USE_AUCTIONS else None
     pending = key is not None and coin.purchase_auction_key != key
     if key is not None and not pending and coin.purchase_auction_value is not None:
         n = coin.purchase_auction_count or 0

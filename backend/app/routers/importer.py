@@ -18,7 +18,7 @@ from ..models import (CatalogEntry, Coin, CoinPhoto, CoinType, Collection, Colle
                       StorageSpot, User)
 from ..schemas import CoinFields, ImportValuation, small_json
 from ..series import BY_SLUG, FINISHES, Series
-from ..services import cleanup, import_columns, importer, lookups, quota, series_match
+from ..services import cleanup, import_columns, importer, lookups, price_refresh, quota, series_match
 from ..services import photos as store
 from ..services.coins import _cert_key, find_duplicate_cert, next_collection_number, next_inventory_number
 from .coins import _validate
@@ -481,6 +481,7 @@ def commit(body: CommitIn, db: Session = Depends(get_db), user: User = Depends(c
         coin.lowball_premium = v.lowball_premium
         db.add(coin)
         db.flush()
+        price_refresh.fill_cpg_from_saved(db, coin)  # CPG from a price sheet already saved this week, if any
         places.apply(coin, r.hints)  # Stored in / At Grading, only if the file had those columns
         created.append((coin, r.photo_urls[:4] if body.import_photos else []))
         entry = per_collection.setdefault(target.id, {"id": target.id, "name": target.name, "count": 0,

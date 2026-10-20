@@ -13,6 +13,7 @@ import MoveCoin from "../components/MoveCoin";
 import EbayCard from "../components/EbayCard";
 import GradePricesCard from "../components/GradePricesCard";
 import PcgsMarketCard from "../components/PcgsMarketCard";
+import { SHELDON_NUMBERS, letterGrade } from "../sheldon";
 import ValueHistoryChart from "../components/ValueHistoryChart";
 import {
   coinPath,
@@ -41,6 +42,8 @@ const SOURCE_LABEL: Record<string, string> = {
 
 // The PCGS Market box (and Coin Facts' Get PCGS Data) is off for now (PCGS allows 100 lookups a day for the whole site).
 const SHOW_PCGS_MARKET = false;
+// Value Over Time is hidden for now.
+const SHOW_VALUE_HISTORY = false;
 
 export default function CoinDetailPage() {
   const inv = useParams().inv ?? "";
@@ -51,6 +54,7 @@ export default function CoinDetailPage() {
   const [active, setActive] = useState(0);
   const [cpgBusy, setCpgBusy] = useState(false);
   const [cpgError, setCpgError] = useState<string | null>(null);
+  const [pickGrade, setPickGrade] = useState(false);
   const [manual, setManual] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const busyRef = useRef(false);
@@ -68,17 +72,6 @@ export default function CoinDetailPage() {
     api.coin(inv).then(setCoin).catch((e) => setError(e.message));
   }, [inv]);
 
-  // Value at purchase from PCGS auction sales: looked up once, the first time the coin needs it.
-  const pvTried = useRef<string | null>(null);
-  const pvPending = Boolean(coin?.purchase_value?.pending);
-  useEffect(() => {
-    if (!pvPending || pvTried.current === inv) return;
-    pvTried.current = inv;
-    api
-      .fillPurchaseValue(inv)
-      .then(setCoin)
-      .catch(() => undefined); // e.g. today's PCGS allowance used up: price paid stands in, tried again later
-  }, [pvPending, inv]);
 
   function update(c: CoinDetail) {
     setCoin(c);
@@ -93,6 +86,8 @@ export default function CoinDetailPage() {
       : null;
 
   async function getCpg() {
+    // CPG is by numeric grade: a coin without one picks a grade to price it at (kept on the coin, or not).
+    if (coin && !coin.grade && !coin.details) return setPickGrade(true); // (sets have no CPG box)
     setCpgBusy(true);
     setCpgError(null);
     try {
@@ -456,17 +451,7 @@ export default function CoinDetailPage() {
             )}
             <dt>Value at purchase</dt>
             <dd>
-              {coin.purchase_value?.value != null ? (
-                <>
-                  {money(coin.purchase_value.value)}
-                  <span className="muted small dd-note">
-                    {coin.purchase_value.detail}
-                    {coin.purchase_value.pending && " · checking PCGS auction sales…"}
-                  </span>
-                </>
-              ) : (
-                "—"
-              )}
+              <PurchaseValueEdit coin={coin} onSaved={update} />
             </dd>
           </dl>
 
@@ -488,10 +473,12 @@ export default function CoinDetailPage() {
         </section>
       </div>
 
+      {SHOW_VALUE_HISTORY && (
       <ValueHistoryChart
         coinInv={coin.inventory_number}
         refreshKey={`${coin.value_estimate}-${coin.purchase_value?.value}-${coin.price_quotes.map((q) => q.id).join(",")}`}
       />
+      )}
 
       <div className="coin-row">
         <EstimatedValueCard coin={coin} onChange={update} />
@@ -519,6 +506,19 @@ export default function CoinDetailPage() {
               <span className="details-badge">Details</span> This is the CPG for a problem-free {coin.latest_cpg.grade_used ?? "coin"}.
               Your coin is valued at {money(coin.details_value)}; see Estimated Value.
             </p>
+          )}
+          {pickGrade && (
+            <GradeForCpg
+              inv={inv}
+              proof={coin.finish !== "MS"}
+              asChoice={asChoice}
+              onChoice={(cands) => setChoice({ candidates: cands, then: "cpg" })}
+              onClose={() => setPickGrade(false)}
+              onSaved={(c) => {
+                setPickGrade(false);
+                update(c);
+              }}
+            />
           )}
           {cpgError && <p className="error small">{cpgError}</p>}
           <form className="row tight manual-quote" onSubmit={addManual}>
@@ -696,9 +696,7 @@ function CoinSummary({ coin }: { coin: CoinDetail }) {
         <div className="stat-label">Value at Purchase</div>
         <div className="stat-value">{money(pvNum)}</div>
         <div className="stat-note">
-          {pv?.pending
-            ? "Checking PCGS auctions…"
-            : pvNum == null
+          {pvNum == null
               ? "—"
               : `${PV_SOURCE[pv?.source ?? ""] ?? ""}${
                   paid && pvNum && pv?.source !== "paid" && Math.round(Math.abs(paid - pvNum)) > 0
@@ -708,6 +706,179 @@ function CoinSummary({ coin }: { coin: CoinDetail }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** CPG for a coin with no numeric grade: pick one, see the price, then keep the grade on the coin or discard it. */
+function GradeForCpg({
+  inv,
+  proof,
+  asChoice,
+  onChoice,
+  onClose,
+  onSaved,
+}: {
+  inv: string;
+  proof: boolean;
+  /** The listings to choose from when more than one catalog listing fits (409), else null. */
+  asChoice: (e: unknown) => CatalogCandidate[] | null;
+  onChoice: (c: CatalogCandidate[]) => void;
+  onClose: () => void;
+  onSaved: (c: CoinDetail) => void;
+}) {
+  const [grade, setGrade] = useState<number | "">("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [found, setFound] = useState<{ value: string | null; label: string; grade: number } | null>(null);
+  const label = (n: number) => `${proof ? "PR" : letterGrade(n)}${n}`;
+
+  async function look() {
+    if (grade === "") return;
+    setBusy(true);
+    setError(null);
+    setFound(null);
+    try {
+      const r = await api.cpgAtGrade(inv, grade);
+      setFound({ value: r.value, label: r.grade_label, grade: r.grade });
+    } catch (e) {
+      const cands = asChoice(e);
+      if (cands) onChoice(cands); // pick the listing, then Get price again
+      else setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function keep() {
+    if (!found) return;
+    setBusy(true);
+    try {
+      onSaved(await api.saveGrade(inv, found.grade));
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grade-for-cpg stack">
+      <p className="small muted">CPG prices are by numeric grade. Pick a grade to price this coin at.</p>
+      <div className="row tight">
+        <select value={grade} onChange={(e) => (setGrade(e.target.value ? Number(e.target.value) : ""), setFound(null))} aria-label="Grade to price at" disabled={busy}>
+          <option value="">Grade…</option>
+          {SHELDON_NUMBERS.slice()
+            .reverse()
+            .map((n) => (
+              <option key={n} value={n}>
+                {label(n)}
+              </option>
+            ))}
+        </select>
+        <button type="button" className="btn btn-primary" onClick={look} disabled={busy || grade === ""}>
+          {busy && !found ? "Fetching…" : "Get price"}
+        </button>
+        {!found && (
+          <button type="button" className="btn" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+        )}
+      </div>
+      {found && (
+        <div className="grade-for-cpg-result">
+          <p>
+            CPG at {found.label}: <strong>{found.value != null ? money(found.value) : "no price at this grade"}</strong>
+          </p>
+          <div className="row tight">
+            <button type="button" className="btn btn-primary" onClick={keep} disabled={busy}>
+              {busy ? "Saving…" : `Save ${found.label} to this coin`}
+            </button>
+            <button type="button" className="btn" onClick={onClose} disabled={busy}>
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="error small">{error}</p>}
+    </div>
+  );
+}
+
+/** Value at purchase, with the owner able to set their own figure (or go back to the worked-out one). */
+function PurchaseValueEdit({ coin, onSaved }: { coin: CoinDetail; onSaved: (c: CoinDetail) => void }) {
+  const pv = coin.purchase_value;
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(value: string | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await api.setPurchaseValue(coin.inventory_number, value));
+      setEditing(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing)
+    return (
+      <form
+        className="pv-edit"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const v = text.replace(/[$,\s]/g, "");
+          if (!/^\d+(\.\d{1,2})?$/.test(v)) return setError("Enter a dollar amount, like 250 or 249.99.");
+          save(v);
+        }}
+      >
+        <div className="row tight">
+          <input
+            inputMode="decimal"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="250.00"
+            aria-label="Value at purchase"
+            autoFocus
+          />
+          <button className="btn small btn-primary" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+          <button type="button" className="btn small" onClick={() => (setEditing(false), setError(null))} disabled={busy}>
+            Cancel
+          </button>
+        </div>
+        {error && <p className="error small">{error}</p>}
+      </form>
+    );
+
+  return (
+    <>
+      {pv?.value != null ? money(pv.value) : "—"}{" "}
+      <button
+        type="button"
+        className="link-btn small"
+        onClick={() => {
+          setText(pv?.value != null ? Number(pv.value).toFixed(2) : "");
+          setEditing(true);
+        }}
+      >
+        Edit
+      </button>
+      {pv?.source === "custom" && (
+        <>
+          {" · "}
+          <button type="button" className="link-btn small" onClick={() => save(null)} disabled={busy}>
+            Use {coin.price_paid != null ? "price paid / CPG" : "automatic"}
+          </button>
+        </>
+      )}
+      {pv?.detail && <span className="muted small dd-note">{pv.detail}</span>}
+      {error && <p className="error small">{error}</p>}
+    </>
   );
 }
 

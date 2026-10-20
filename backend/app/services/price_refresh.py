@@ -4,11 +4,12 @@ These add rows to the session but don't commit. They raise PricingError / Lookup
 should see (no grade, ambiguous catalog match...) and httpx.HTTPError for service failures.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from .. import grades
 from ..models import Coin, PriceQuote
 from . import catalog, details, grade_prices, greysheet, price_archive, quota
 from .coins import CPG, GREYSHEET, PCGS_GUIDE, PREMIUM, coin_melt, latest_quote
@@ -20,9 +21,12 @@ def _not_error(coin: Coin) -> None:
         raise greysheet.PricingError("Error coins aren't in the price guides. Enter your own estimated value.")
 
 
-def refresh_cpg(db: Session, coin: Coin) -> bool:
-    """Record the coin's current CPG. Returns True if Greysheet was called (False: priced from a sheet saved for
-    the same issue in the last day)."""
+SAVED_FOR = timedelta(days=7)  # Greysheet updates CPG weekly: a saved sheet this old still prices a coin by itself
+
+
+def _cpg(db: Session, coin: Coin, saved_only: bool = False) -> tuple[dict, bool] | None:
+    """(the coin's CPG quote, whether Greysheet was called). `saved_only`: only from a price sheet saved for the
+    same issue this week (None if there isn't one), never Greysheet."""
     _not_error(coin)
     greysheet.require_grade(coin)
     gsid = None
@@ -30,20 +34,70 @@ def refresh_cpg(db: Session, coin: Coin) -> bool:
         # Find the PCGS number from date/mint/designation via the Greysheet catalog.
         match = catalog.resolve_for_coin(db, coin)
         gsid = None if match.pcgs_number else match.gsid
-    cached = grade_prices.recent_entry(db, greysheet.sheet_key(coin, gsid))
+    cached = grade_prices.recent_entry(db, greysheet.sheet_key(coin, gsid), SAVED_FOR if saved_only else None)
     if cached is None:
+        if saved_only:
+            return None
         quota.spend(coin.user_id, "greysheet")
     q = greysheet.fetch_cpg(coin, gsid=gsid, cached=cached)
     sheet = q.pop("sheet")
     if cached is None:
         grade_prices.save_sheet(db, sheet)
+    return q, cached is None
+
+
+def _record_cpg(coin: Coin, q: dict) -> None:
     grey = q.pop("greysheet_value")
     record(coin, PriceQuote(source=CPG, **q))
     if grey is not None:
         record(coin, PriceQuote(source=GREYSHEET, **{**q, "value": grey}))
     if coin.value_source != "custom" and (coin.toner_premium or coin.holder_premium or coin.lowball_premium) and q["value"] is not None:
         record(coin, premium_quote(coin, q["value"]))
-    return cached is None
+
+
+def refresh_cpg(db: Session, coin: Coin) -> bool:
+    """Record the coin's current CPG. Returns True if Greysheet was called (False: priced from a sheet saved for
+    the same issue in the last day)."""
+    q, called = _cpg(db, coin)
+    _record_cpg(coin, q)
+    return called
+
+
+def fill_cpg_from_saved(db: Session, coin: Coin) -> bool:
+    """A coin with no CPG at its grade yet takes it from a price sheet already saved this week for the same issue
+    (another coin's lookup): no Greysheet call. Returns True if a price was recorded. Never raises."""
+    if coin.is_error or not coin.pcgs_number or greysheet.is_set(coin) or not details.price_grade(coin):
+        return False
+    last = latest_quote(coin, CPG)
+    if last is not None and (last.raw or {}).get("row", {}).get("Grade") == details.price_grade(coin):
+        return False
+    try:
+        got = _cpg(db, coin, saved_only=True)
+    except Exception:  # no match, no price at this grade...: the button still works
+        return False
+    if got is None:
+        return False
+    _record_cpg(coin, got[0])
+    return True
+
+
+def cpg_at_grade(db: Session, coin: Coin, grade: int) -> dict:
+    """What CPG would be if the coin had this numeric grade, without changing the coin (for a raw coin with none
+    yet). The price sheet it comes from is saved, so saving the grade afterwards needs no second call."""
+    before = coin.grade, coin.grade_prefix, coin.grade_plus
+    coin.grade, coin.grade_prefix, coin.grade_plus = grade, prefix_for(coin, grade), False
+    try:
+        q, _ = _cpg(db, coin)
+    finally:
+        coin.grade, coin.grade_prefix, coin.grade_plus = before
+    return {"value": q["value"], "grade_used": q["grade_used"], "description": q["description"]}
+
+
+def prefix_for(coin: Coin, grade: int) -> str:
+    """The letters a numeric grade goes with: PR in a proof collection, else MS / AU / XF... by number."""
+    if coin.collection and coin.collection.finish != "MS":
+        return "PR"
+    return grades.letters_for(grade) or "MS"
 
 
 def record(coin: Coin, quote: PriceQuote) -> None:
