@@ -266,7 +266,7 @@ function PriceCodeCard() {
     setMsg(null);
     try {
       setUser(await api.setPriceCode({ phrase: phrase.trim() || null, start: phrase.trim() ? start : null, length: len }));
-      setMsg({ ok: true, text: phrase.trim() ? "Saved." : "Price code removed." });
+      setMsg(phrase.trim() ? null : { ok: true, text: "Price code removed." });
     } catch (err) {
       setMsg({ ok: false, text: (err as Error).message });
     } finally {

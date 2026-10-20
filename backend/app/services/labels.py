@@ -25,7 +25,7 @@ from .short_names import short_name
 
 IN = 72.0
 SIZES = ("2x2", "avery5160", "thermal2x1")
-SIZE_LABELS = {"2x2": '2x2 flip inserts on letter paper (20 per sheet, printed both sides)', "avery5160": 'Avery address labels, 1" × 2⅝" '
+SIZE_LABELS = {"2x2": '2x2 flip inserts on letter paper (42.8 mm squares, 24 per sheet, printed both sides)', "avery5160": 'Avery address labels, 1" × 2⅝" '
                '(5160 / 8160, 30 per sheet)', "thermal2x1": 'Thermal 2" × 1"'}
 MIN_FONT = 5.0  # below this, the preview warns that the text is very small
 FLOOR_FONT = 3.5
@@ -49,11 +49,17 @@ class Sheet:
     spread: bool = False  # spread the lines under the QR code down to the bottom edge (no dead space)
 
 
-def sheet_for(size: str, square: float = 2.0) -> Sheet:
+# 2x2 flip inserts: 42.8 mm squares (they slide into standard 2x2 flips). As many as fit inside a printer's margins.
+SQUARE_MM = 42.8
+SQUARE = SQUARE_MM / 25.4  # inches
+
+
+def sheet_for(size: str, square: float = SQUARE) -> Sheet:
     if size == "2x2":
         s = square * IN
-        return Sheet(letter, (s, s), 4, 5, (letter[0] - 4 * s) / 2, (letter[1] - 5 * s) / 2, (s, s), (9, 9),
-                     0.8 * IN, 14, spread=True)
+        cols, rows = int((letter[0] - 0.5 * IN) // s), int((letter[1] - 0.8 * IN) // s)
+        return Sheet(letter, (s, s), cols, rows, (letter[0] - cols * s) / 2, (letter[1] - rows * s) / 2, (s, s),
+                     (8, 8), 0.4 * s, 14 * s / (2 * IN), spread=True)
     if size == "avery5160":
         return Sheet(letter, (2.625 * IN, IN), 3, 10, 0.1875 * IN, 0.5 * IN, (2.75 * IN, IN), (7, 5), 0.62 * IN, 10,
                      ("side", "corner"))
@@ -67,7 +73,7 @@ def sheet_for(size: str, square: float = 2.0) -> Sheet:
 @dataclass
 class Options:
     size: str = "2x2"
-    square: float = 2.0  # 2x2 squares: 2" or 1.875" (a size that slides into flips)
+    square: float = SQUARE  # 2x2 squares: 42.8 mm
     cut_lines: bool = True
     start: int = 1  # sheets: the first unused spot (1 = top left), for a partly used sheet
     inventory: bool = True
@@ -438,7 +444,7 @@ def pages(labels: list[LabelData], opts: Options, preview: bool = False) -> tupl
     return out, smallest
 
 
-def alignment_test(square: float = 2.0) -> list[Drawing]:
+def alignment_test(square: float = SQUARE) -> list[Drawing]:
     """Two pages to print double-sided: numbered fronts with a cross in each square, and the backs (mirrored) with the
     same numbers and crosses. Held up to a light, each back's cross should sit on its front's."""
     sheet = sheet_for("2x2", square)

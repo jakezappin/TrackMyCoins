@@ -16,11 +16,11 @@ import DownloadLink from "../components/DownloadLink";
 import { coinPath, money, parseMoney } from "../format";
 
 const SIZES: { key: LabelSize; label: string; note: string }[] = [
-  { key: "2x2", label: "2x2 flip inserts", note: "Raw coins · 20 a sheet, printed both sides" },
+  { key: "2x2", label: "2x2 flip inserts", note: "Raw coins · 24 a sheet, printed both sides" },
   { key: "avery5160", label: "Avery address labels", note: '1" × 2⅝", 30 a sheet (5160, 8160)' },
   { key: "thermal2x1", label: 'Thermal 2" × 1"', note: "One label at a time, for label printers" },
 ];
-const PER_SHEET: Record<LabelSize, number> = { "2x2": 20, avery5160: 30, thermal2x1: 1 };
+const PER_SHEET: Record<LabelSize, number> = { "2x2": 24, avery5160: 30, thermal2x1: 1 };
 const FIELDS: { key: keyof LabelOptions; label: string }[] = [
   { key: "inventory", label: "Inventory #" },
   { key: "variety", label: "Variety / VAM" },
@@ -232,13 +232,7 @@ export default function LabelsPage() {
             </div>
             {opts.size === "2x2" && (
               <div className="square-opts">
-                <label className="field">
-                  <span>Square size</span>
-                  <select value={opts.square} onChange={(e) => set("square", Number(e.target.value) as 2 | 1.875)}>
-                    <option value={2}>2" (2x2 flip or holder)</option>
-                    <option value={1.875}>1⅞" (slides into most flips)</option>
-                  </select>
-                </label>
+                <span className="small muted">42.8 mm squares, sized to slide into 2x2 flips.</span>
                 <label className="check">
                   <input type="checkbox" checked={opts.cut_lines} onChange={(e) => set("cut_lines", e.target.checked)} /> Print cut lines
                 </label>
@@ -369,7 +363,7 @@ export default function LabelsPage() {
           </p>
           {opts.size === "2x2" && (
             <p className="small">
-              <DownloadLink href={api.alignmentTestUrl(opts.square)}>Print an alignment test</DownloadLink>{" "}
+              <DownloadLink href={api.alignmentTestUrl()}>Print an alignment test</DownloadLink>{" "}
               <span className="muted">first: hold it up to a light and each back's cross should sit on its front's.</span>
             </p>
           )}

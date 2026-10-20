@@ -39,6 +39,9 @@ const SOURCE_LABEL: Record<string, string> = {
   GREYSHEET: "Greysheet",
 };
 
+// The PCGS Market box is off for now (PCGS allows 100 lookups a day for the whole site).
+const SHOW_PCGS_MARKET = false;
+
 export default function CoinDetailPage() {
   const inv = useParams().inv ?? "";
   const navigate = useNavigate();
@@ -576,6 +579,7 @@ export default function CoinDetailPage() {
         </div>
       ) : (
         <>
+      {SHOW_PCGS_MARKET && (
       <PcgsMarketCard
         market={coin.pcgs_market}
         cpgValue={coin.latest_cpg?.value ?? null}
@@ -583,6 +587,7 @@ export default function CoinDetailPage() {
         error={pcgsError}
         onFetch={getPcgs}
       />
+      )}
 
       <div className="coin-row">
         <GradePricesCard

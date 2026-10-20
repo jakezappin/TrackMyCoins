@@ -186,5 +186,5 @@ def test_2x2_front_and_back(authed, morgan_collection):
     assert labels._slot(sheet, 0, mirror=True)[0] == labels._slot(sheet, 3)[0]
     r = authed.post("/api/labels/pdf", json=_job(items, size="2x2"))
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
-    r = authed.get("/api/labels/alignment-test?square=1.875")
+    r = authed.get("/api/labels/alignment-test")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")

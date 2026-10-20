@@ -98,8 +98,7 @@ export default function RefreshPrices({ collectionId, coinCount, onDone }: Props
               ({coinCount} coin{coinCount === 1 ? "" : "s"}). Sold coins and coins without a numeric grade are skipped.
             </p>
             <p className="small muted">
-              PCGS Price Guide and auction data already fetched this week are included. To fetch new PCGS data, use Get
-              PCGS Data on a coin's page (PCGS allows only 100 lookups a day for the whole site).
+              PCGS Price Guide and auction data already fetched this week are included.
             </p>
             {allow && (
               <p className="small muted">

@@ -36,7 +36,7 @@ NEEDS_CODE = "Set up your price code in Account settings before printing coded p
 
 class LabelOptions(BaseModel):
     size: Literal["2x2", "avery5160", "thermal2x1"] = "2x2"
-    square: Literal[2.0, 1.875] = 2.0
+    square: float | None = Field(None, exclude=True)  # retired choice (2" / 1⅞"): 2x2s are 42.8 mm squares now
     cut_lines: bool = True
     start: int = Field(1, ge=1, le=30)
     inventory: bool = True
@@ -278,9 +278,9 @@ def print_pdf(body: JobIn, request: Request, db: Session = Depends(get_db), user
 
 
 @router.get("/alignment-test")
-def alignment_test(square: Literal["2", "1.875"] = "2", user: User = Depends(current_user)):
+def alignment_test(user: User = Depends(current_user)):
     """A double-sided test sheet for 2x2 inserts: checks that backs line up with fronts on this printer."""
-    return Response(svc.pdf(svc.alignment_test(float(square)), "2x2 alignment test"), media_type="application/pdf",
+    return Response(svc.pdf(svc.alignment_test(), "2x2 alignment test"), media_type="application/pdf",
                     headers={"Content-Disposition": 'attachment; filename="2x2_Alignment_Test.pdf"'})
 
 

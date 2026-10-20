@@ -600,7 +600,11 @@ export default function CoinFormPage() {
 
   /** A coin picked in the search: its collection (or a new one), date, mint, variety, designation and PCGS #. */
   function pickFromCatalog(h: CatalogHit) {
-    if (h.collection_id) {
+    // The collection already picked holds this series: stay on it (the hit names the user's first one).
+    const current = collections.find((c) => c.id === collectionId);
+    if (current && current.coin_type_id === h.coin_type_id && current.finish === h.finish) {
+      setNewCollection(null);
+    } else if (h.collection_id) {
       setNewCollection(null);
       setCollectionId(h.collection_id);
     } else {
@@ -808,10 +812,24 @@ export default function CoinFormPage() {
       {!isSetSeries && (
       <section className="card form-section lookup">
         <div className="section-head">
-          <h2>Grading Service</h2>
-          <label className="raw-toggle">
-            <input type="checkbox" checked={isRaw} onChange={(e) => setRaw(e.target.checked)} /> Raw (ungraded)
-          </label>
+          <h2>Grading</h2>
+          <div className="segmented raw-switch" role="radiogroup" aria-label="Graded or raw">
+            {([
+              [false, "Graded (slabbed)"],
+              [true, "Raw (ungraded)"],
+            ] as const).map(([raw, label]) => (
+              <button
+                type="button"
+                key={label}
+                role="radio"
+                aria-checked={isRaw === raw}
+                className={`seg${isRaw === raw ? " active" : ""}`}
+                onClick={() => isRaw !== raw && setRaw(raw)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {isRaw ? (
           <p className="muted small">
@@ -961,6 +979,7 @@ export default function CoinFormPage() {
           </p>
         )}
         {cacNote && <p className="small muted">{cacNote}</p>}
+        {!isRaw && (
         <div className="read-label">
           <span className="small muted">Or read it from a photo of the slab label:</span>
           <PhotoButtons
@@ -971,6 +990,7 @@ export default function CoinFormPage() {
             onFiles={(fs) => readLabel(fs[0])}
           />
         </div>
+        )}
         {ngcState === "busy" && <p className="muted small">Reading NGC's page…</p>}
         {ngcPreviews.length > 0 && (
           <div className="ngc-photos">
@@ -1036,7 +1056,7 @@ export default function CoinFormPage() {
         <h2>{isSetSeries ? "Set" : "Coin"}</h2>
         {!editInv && <CoinSearch onPick={pickFromCatalog} />}
         <div className="grid-4">
-          <label className="field">
+          <label className="field span-2">
             <span>Collection</span>
             <select
               value={collectionId ?? (newCollection ? "new" : "")}

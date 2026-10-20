@@ -1246,7 +1246,7 @@ export const api = {
   dealerVcardUrl: (id: number) => `/api/dealers/${id}/vcard`,
   dealerLinkSuggestions: (id: number) => request<DealerLinkSuggestion[]>("GET", `/api/dealers/${id}/link-suggestions`),
   linkDealerItems: (id: number, items: string[]) => request<DealerDetail>("POST", `/api/dealers/${id}/link`, { items }),
-  alignmentTestUrl: (square: number) => `/api/labels/alignment-test?square=${square}`,
+  alignmentTestUrl: () => "/api/labels/alignment-test",
   newCoinLink: (inv: string) => request<CoinPublicState>("POST", `/api/labels/coins/${encodeURIComponent(inv)}/public/new-link`),
   publicCoin: (token: string) => request<PublicCoin>("GET", `/api/c/${encodeURIComponent(token)}`),
   changePassword: (current_password: string, new_password: string) =>
@@ -1494,8 +1494,6 @@ export type CodeMode = "off" | "plain" | "code";
 
 export interface LabelOptions {
   size: LabelSize;
-  /** 2x2 squares: 2" or 1⅞" (slides into flips). */
-  square: 2 | 1.875;
   cut_lines: boolean;
   /** Sheets: the first unused spot (1 = top left). */
   start: number;

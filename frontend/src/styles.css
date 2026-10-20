@@ -1246,12 +1246,8 @@ table {
   cursor: not-allowed;
 }
 
-.raw-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.raw-switch .seg {
   font-weight: 600;
-  cursor: pointer;
 }
 
 .mode-switch .seg {
