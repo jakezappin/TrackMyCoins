@@ -10,6 +10,8 @@ from .urls import absolute_url
 
 GradingService = Literal["PCGS", "NGC", "ANACS", "CACG", "ICG", "OTHER", "RAW"]
 CacSticker = Literal["green", "gold"]
+# Where a coin or bullion item was sold (models.SOLD_VIA).
+SoldVia = Literal["dealer", "customer", "coin_show", "website", "ebay", "whatnot", "trade", "other"]
 
 
 class ORM(BaseModel):
@@ -210,6 +212,8 @@ class CoinFields(BaseModel):
     sale_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     sale_date: date | None = None
     sold_to: str | None = Field(default=None, max_length=200)
+    sold_via: SoldVia | None = None
+    sold_via_other: str | None = Field(default=None, max_length=60)  # "Other (specify)"
 
     notes: str | None = Field(default=None, max_length=5000)
 
@@ -319,7 +323,8 @@ class CoinFields(BaseModel):
         return v
 
     @field_validator("cert_number", "vam", "variety", "pcgs_number", "purchased_from", "sold_to", "notes",
-                     "storage_position", "error_description", "other_service", mode="before")
+                     "storage_position", "error_description", "other_service", "sold_via_other", "sold_via",
+                     mode="before")
     @classmethod
     def _blank_to_none(cls, v):
         if isinstance(v, str):

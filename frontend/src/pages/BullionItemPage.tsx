@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type BullionItem } from "../api";
+import { api, soldViaLabel, type BullionItem, type SoldVia } from "../api";
+import SoldViaField from "../components/SoldViaField";
 import { useApp, useNavCollection } from "../App";
 import { METAL_LABEL, heldLabel, ozLabel, purityLabel, quantityLabel, termLabel, weightLabel } from "../bullionFormat";
 import AttachmentsCard from "../components/AttachmentsCard";
@@ -249,6 +250,7 @@ export default function BullionItemPage() {
                 <dd>
                   {money(item.sale_price)} {item.sale_date && <span className="muted">on {shortDate(item.sale_date)}</span>}
                   {item.sold_to && <span className="muted"> to {item.sold_to}</span>}
+                  {item.sold_via && <span className="muted"> · {soldViaLabel(item.sold_via, item.sold_via_other)}</span>}
                 </dd>
                 <dt>Holding</dt>
                 <dd>{termLabel(item)}</dd>
@@ -294,6 +296,8 @@ function SellDialog({ item, onClose, onSold }: { item: BullionItem; onClose: () 
   const [price, setPrice] = useState("");
   const [day, setDay] = useState(todayISO());
   const [to, setTo] = useState("");
+  const [via, setVia] = useState<SoldVia | null>(null);
+  const [viaOther, setViaOther] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -314,6 +318,8 @@ function SellDialog({ item, onClose, onSold }: { item: BullionItem; onClose: () 
         sale_price: p.value,
         sale_date: day,
         sold_to: to || null,
+        sold_via: via,
+        sold_via_other: via === "other" ? viaOther : null,
         ...(byFace ? { face_value: part } : many ? { quantity: Number(part) } : {}),
       };
       onSold(await api.sellBullion(item.inventory_number, body));
@@ -351,10 +357,13 @@ function SellDialog({ item, onClose, onSold }: { item: BullionItem; onClose: () 
             <input type="date" max={todayISO()} value={day} onChange={(e) => setDay(e.target.value)} />
           </label>
         </div>
-        <label className="field">
-          <span>Sold to (optional)</span>
-          <input value={to} onChange={(e) => setTo(e.target.value)} />
-        </label>
+        <div className="grid-2">
+          <SoldViaField via={via} other={viaOther} includeTrade={false} onChange={(v, o) => (setVia(v), setViaOther(o))} />
+          <label className="field">
+            <span>Sold to (optional)</span>
+            <input value={to} onChange={(e) => setTo(e.target.value)} />
+          </label>
+        </div>
         {error && <p className="error small">{error}</p>}
         <div className="row-end">
           <button type="button" className="btn" onClick={onClose}>

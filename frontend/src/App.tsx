@@ -25,6 +25,7 @@ import LabelsPage from "./pages/LabelsPage";
 import DealersPage from "./pages/DealersPage";
 import DealerPage from "./pages/DealerPage";
 import SoldPage from "./pages/SoldPage";
+import SalesPage from "./pages/SalesPage";
 import StatusPage from "./pages/StatusPage";
 import BullionCollectionPage from "./pages/BullionCollectionPage";
 import BullionFormPage from "./pages/BullionFormPage";
@@ -182,6 +183,7 @@ export default function App() {
           <Route path="/collections/:typeSlug/:number/upgrades" element={<Fresh><UpgradesPage /></Fresh>} />
           {NGC_BOOKMARK_ENABLED && <Route path="/ngc-button" element={<NgcButtonPage />} />}
           <Route path="/collections/:typeSlug/sold" element={<Fresh><SoldPage /></Fresh>} />
+          <Route path="/sales" element={<SalesPage />} />
           <Route path="/collections/:typeSlug/:number" element={<Fresh><CollectionPage /></Fresh>} />
           <Route path="/collections/:typeSlug/:number/status" element={<Fresh><StatusPage /></Fresh>} />
           <Route path="/coins/new" element={<Fresh><CoinFormPage /></Fresh>} />

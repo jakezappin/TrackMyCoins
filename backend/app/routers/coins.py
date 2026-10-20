@@ -10,7 +10,7 @@ from .. import grades
 from ..series import BY_SLUG, type_set_members
 from ..schemas import CoinDetail, CoinFields, CoinIn, CoinUpdate
 from ..services.coins import coin_detail, duplicate_info, find_duplicate_cert, next_inventory_number
-from ..services import attachments, price_refresh, series_match
+from ..services import attachments, price_refresh, sales, series_match
 from ..services.photos import delete_coin_photo_files
 from .collections import get_owned_collection
 from .dealers import apply_dealer_links
@@ -130,6 +130,7 @@ def create_coin(body: CoinIn, db: Session = Depends(get_db), user: User = Depend
         inventory_number=next_inventory_number(db, user.id, coin_type),
         lookup_raw=body.lookup_raw,
     )
+    sales.tidy(coin)
     apply_dealer_links(db, user, coin)
     db.add(coin)
     db.flush()
@@ -248,6 +249,7 @@ def update_coin(inventory_number: str, body: CoinUpdate, db: Session = Depends(g
         _reject_duplicate(db, user, data, exclude_coin_id=coin.id)
     for key, value in data.items():
         setattr(coin, key, value)
+    sales.tidy(coin)
     apply_dealer_links(db, user, coin)
     coin.collection_id = col.id
     _apply_location(db, user, coin, body)

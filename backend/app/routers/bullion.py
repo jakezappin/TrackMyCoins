@@ -17,8 +17,10 @@ from ..auth import current_user
 from ..config import get_settings
 from ..db import get_db
 from ..models import BullionAttachment, BullionCollection, BullionItem, BullionPhoto, User
+from ..schemas import SoldVia
 from ..services import attachments as docs
 from ..services import bullion as svc
+from ..services import sales as sales_svc
 from ..services import bullion_io as bio
 from ..services.importer import ImportError_
 from ..services import photos as store
@@ -63,12 +65,15 @@ class ItemIn(BaseModel):
     sale_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     sale_date: date | None = None
     sold_to: str | None = Field(default=None, max_length=200)
+    sold_via: SoldVia | None = None
+    sold_via_other: str | None = Field(default=None, max_length=60)
     notes: str | None = Field(default=None, max_length=5000)
     # Where it's kept (a Storage spot) and where in it.
     storage_id: int | None = None
     storage_position: str | None = Field(default=None, max_length=60)
 
-    @field_validator("description", "purchased_from", "sold_to", "notes", "storage_position", mode="before")
+    @field_validator("description", "purchased_from", "sold_to", "notes", "storage_position", "sold_via",
+                     "sold_via_other", mode="before")
     @classmethod
     def _blank(cls, v):
         return v.strip() or None if isinstance(v, str) else v
@@ -98,6 +103,8 @@ class SellIn(BaseModel):
     sale_price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
     sale_date: date
     sold_to: str | None = Field(default=None, max_length=200)
+    sold_via: SoldVia | None = None
+    sold_via_other: str | None = Field(default=None, max_length=60)
 
 
 # ---- Helpers ------------------------------------------------------------------------------------------------
@@ -146,6 +153,7 @@ def _item_out(item: BullionItem, series: svc.SpotSeries | None, spot_now: Decima
         "purchased_from": item.purchased_from, "purchased_from_dealer_id": item.purchased_from_dealer_id,
         "sold_to_dealer_id": item.sold_to_dealer_id, "sale_price": str(item.sale_price) if item.sale_price is not None else None,
         "sale_date": item.sale_date, "sold_to": item.sold_to, "notes": item.notes, "is_sold": sold,
+        "sold_via": item.sold_via, "sold_via_other": item.sold_via_other, "sale_id": item.sale_id,
         "created_at": item.created_at,
         "oz": str(v.oz), "spot_now": str(v.spot_now.quantize(svc.CENTS)) if v.spot_now is not None else None,
         "value_now": str(v.value_now) if v.value_now is not None else None,
@@ -200,6 +208,7 @@ def _apply(item: BullionItem, body: ItemIn) -> None:
         setattr(item, k, v)
     if body.face_value is not None:  # junk silver: the face value is the amount
         item.weight, item.quantity = None, 1
+    sales_svc.tidy(item)
 
 
 # ---- Reference data -----------------------------------------------------------------------------------------
@@ -352,6 +361,8 @@ def sell_item(inv: str, body: SellIn, db: Session = Depends(get_db), user: User 
         except ValueError as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
     target.sale_price, target.sale_date, target.sold_to = body.sale_price, body.sale_date, (body.sold_to or None)
+    target.sold_via = body.sold_via
+    target.sold_via_other = (body.sold_via_other or "").strip() or None if body.sold_via == "other" else None
     db.commit()
     return {"sold": target.inventory_number, "kept": item.inventory_number if partial else None}
 

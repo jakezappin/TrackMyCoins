@@ -4,6 +4,7 @@ import { api, type BullionItemIn, type BullionMeta } from "../api";
 import { useApp, useNavCollection } from "../App";
 import { useUnsavedGuard } from "../components/useUnsavedGuard";
 import DealerInput from "../components/DealerInput";
+import SoldViaField from "../components/SoldViaField";
 import { FACE_NOTE, FACE_OZ, METAL_LABEL, PACKAGING_LABEL, PRESETS, parsePurity, purityLabel, pureOz } from "../bullionFormat";
 import { money, parseMoney, todayISO } from "../format";
 import StoragePicker from "../components/StoragePicker";
@@ -25,6 +26,8 @@ const EMPTY: Omit<BullionItemIn, "collection_id"> = {
   sale_price: null,
   sale_date: null,
   sold_to: null,
+  sold_via: null,
+  sold_via_other: null,
   notes: null,
   storage_id: null,
   storage_position: null,
@@ -75,6 +78,7 @@ export default function BullionFormPage() {
           purchased_from_dealer_id: i.purchased_from_dealer_id ?? null,
           sold_to_dealer_id: copy ? null : i.sold_to_dealer_id ?? null,
           sale_price: copy ? null : i.sale_price, sale_date: copy ? null : i.sale_date, sold_to: copy ? null : i.sold_to,
+          sold_via: copy ? null : i.sold_via ?? null, sold_via_other: copy ? null : i.sold_via_other ?? null,
           notes: copy ? null : i.notes,
           storage_id: i.storage_id ?? null,
           storage_position: copy ? null : i.storage_position ?? null,
@@ -402,14 +406,22 @@ export default function BullionFormPage() {
               <input type="date" min="1900-01-01" max={todayISO()} value={form.sale_date ?? ""} onChange={(e) => set("sale_date", e.target.value || null)} />
             </label>
           </div>
+          <div className="grid-2 sold-who">
+          <SoldViaField
+            via={form.sold_via}
+            other={form.sold_via_other}
+            includeTrade={false}
+            onChange={(via, other) => setForm((f) => ({ ...f, sold_via: via, sold_via_other: other }))}
+          />
           <label className="field">
-            <span>Sold to</span>
+            <span>{form.sold_via === "dealer" ? "Dealer" : "Sold to"}</span>
             <DealerInput
               text={form.sold_to}
               dealerId={form.sold_to_dealer_id}
               onChange={(t, id) => setForm((f) => ({ ...f, sold_to: t, sold_to_dealer_id: id }))}
             />
           </label>
+          </div>
           <p className="muted small">Selling only part of a roll or tube? Use Sell on the item's page instead.</p>
         </section>
       </div>

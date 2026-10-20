@@ -71,6 +71,9 @@ export default function Layout() {
           <NavLink to="/labels" className="nav-item">
             Labels
           </NavLink>
+          <NavLink to="/sales" className="nav-item">
+            Sales Tracker
+          </NavLink>
           <NavLink to="/dealers" className="nav-item">
             Dealers
           </NavLink>

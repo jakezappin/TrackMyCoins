@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, isPcgsLimit, type CatalogCandidate, type CatalogChoice, type CoinDetail, type CoinPublicState } from "../api";
+import { api, ApiError, isPcgsLimit, soldViaLabel, type CatalogCandidate, type CatalogChoice, type CoinDetail, type CoinPublicState } from "../api";
 import { useApp, useNavCollection } from "../App";
 import NgcPhotoLink from "../components/NgcPhotoLink";
 import { ngcCertUrl } from "../ngcButton";
@@ -463,6 +463,7 @@ export default function CoinDetailPage() {
                 <dd>
                   {money(coin.sale_price)} {coin.sale_date && <span className="muted">on {shortDate(coin.sale_date)}</span>}
                   {coin.sold_to && <span className="muted"> to {coin.sold_to}</span>}
+                  {coin.sold_via && <span className="muted"> · {soldViaLabel(coin.sold_via, coin.sold_via_other)}</span>}
                 </dd>
                 <dt>Profit / loss</dt>
                 <dd className={pl == null ? "" : pl >= 0 ? "pos" : "neg"}>{pl == null ? "—" : money(pl)}</dd>

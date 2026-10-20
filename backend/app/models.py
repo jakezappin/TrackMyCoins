@@ -379,6 +379,14 @@ class Coin(Base):
     sold_to: Mapped[str | None] = mapped_column(String(200))
     sold_to_dealer_id: Mapped[int | None] = mapped_column(
         ForeignKey("dealers.id", ondelete="SET NULL", name="fk_coins_sold_to_dealer"), index=True)
+    # Where it was sold (see SOLD_VIA); "other" is described in sold_via_other.
+    sold_via: Mapped[str | None] = mapped_column(String(20))
+    sold_via_other: Mapped[str | None] = mapped_column(String(60))
+    # The sale or trade it went out in, and the trade it came in from (see Sale).
+    sale_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sales.id", ondelete="SET NULL", name="fk_coins_sale"), index=True)
+    acquired_sale_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sales.id", ondelete="SET NULL", name="fk_coins_acquired_sale"), index=True)
 
     notes: Mapped[str | None] = mapped_column(Text)
     lookup_raw: Mapped[dict | None] = mapped_column(JSON)
@@ -494,6 +502,14 @@ class BullionItem(Base):
     sold_to: Mapped[str | None] = mapped_column(String(200))
     sold_to_dealer_id: Mapped[int | None] = mapped_column(
         ForeignKey("dealers.id", ondelete="SET NULL", name="fk_bullion_sold_to_dealer"), index=True)
+    # Where it was sold (see SOLD_VIA); "other" is described in sold_via_other.
+    sold_via: Mapped[str | None] = mapped_column(String(20))
+    sold_via_other: Mapped[str | None] = mapped_column(String(60))
+    # The sale or trade it went out in, and the trade it came in from (see Sale).
+    sale_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sales.id", ondelete="SET NULL", name="fk_bullion_sale"), index=True)
+    acquired_sale_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sales.id", ondelete="SET NULL", name="fk_bullion_acquired_sale"), index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     # Where it's kept (see StorageSpot) and where in it.
@@ -697,3 +713,28 @@ class PcgsCache(Base):
     key: Mapped[str] = mapped_column(String(80), primary_key=True)  # "cert:12345678" or "market:7130|65|0"
     data: Mapped[dict] = mapped_column(JSON)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# Where a coin or bullion item was sold.
+SOLD_VIA = ("dealer", "customer", "coin_show", "website", "ebay", "whatnot", "trade", "other")
+
+
+class Sale(Base):
+    """One sale (one or more items to one buyer) or trade (items out, items in, maybe cash either way), recorded in
+    the Sales Tracker. Each item keeps its own sale price / price paid, so profit and loss work as before."""
+
+    __tablename__ = "sales"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(10))  # sale | trade
+    sale_date: Mapped[date] = mapped_column(Date)
+    sold_via: Mapped[str | None] = mapped_column(String(20))
+    sold_via_other: Mapped[str | None] = mapped_column(String(60))
+    counterparty: Mapped[str | None] = mapped_column(String(200))  # who it was sold to / traded with
+    dealer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dealers.id", ondelete="SET NULL", name="fk_sales_dealer"), index=True)
+    cash_received: Mapped[Decimal | None] = mapped_column(Money)  # trade: cash that came with what came in
+    cash_paid: Mapped[Decimal | None] = mapped_column(Money)  # trade: cash added to what went out
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

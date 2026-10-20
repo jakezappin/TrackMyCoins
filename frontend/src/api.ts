@@ -1,3 +1,18 @@
+/** Where a coin or bullion item was sold. */
+export type SoldVia = "dealer" | "customer" | "coin_show" | "website" | "ebay" | "whatnot" | "trade" | "other";
+export const SOLD_VIA: [SoldVia, string][] = [
+  ["dealer", "Dealer"],
+  ["customer", "Customer"],
+  ["coin_show", "Coin Show"],
+  ["website", "Website"],
+  ["ebay", "eBay"],
+  ["whatnot", "Whatnot"],
+  ["trade", "Trade"],
+  ["other", "Other"],
+];
+export const soldViaLabel = (via: SoldVia | null | undefined, other?: string | null) =>
+  via === "other" ? other || "Other" : SOLD_VIA.find(([v]) => v === via)?.[1] ?? null;
+
 export type GradingService = "PCGS" | "NGC" | "ANACS" | "CACG" | "ICG" | "OTHER" | "RAW";
 export type CacSticker = "green" | "gold";
 
@@ -194,7 +209,7 @@ export interface LabelReading {
 export type SharedCoin = Omit<
   CoinFields,
   | "pcgs_number" | "price_paid" | "purchase_value_custom" | "purchase_date" | "purchased_from" | "sale_price" | "sale_date"
-  | "sold_to" | "notes" | "asking_price"
+  | "sold_to" | "notes" | "asking_price" | "sold_via" | "sold_via_other"
 > & {
   id: number;
   value_estimate: string | null;
@@ -274,6 +289,8 @@ export interface CoinFields {
   sale_price: string | null;
   sale_date: string | null;
   sold_to: string | null;
+  sold_via: SoldVia | null;
+  sold_via_other: string | null;
   notes: string | null;
 }
 
@@ -438,6 +455,8 @@ export interface BullionItemIn {
   sale_price: string | null;
   sale_date: string | null;
   sold_to: string | null;
+  sold_via?: SoldVia | null;
+  sold_via_other?: string | null;
   notes: string | null;
   /** Where it's kept (a Storage spot) and where in it. */
   storage_id?: number | null;
@@ -1013,6 +1032,58 @@ export function isPcgsLimit(e: unknown): boolean {
   return (e instanceof ApiError && e.status === 429) || /limit|used up/i.test((e as Error)?.message ?? "");
 }
 
+// ---- Sales Tracker ----
+
+/** A coin or bullion item as the Sales Tracker shows it. `ref` is "coin:MOR-00012" or "bullion:AG-00003". */
+export interface SaleItem {
+  ref: string;
+  kind: "coin" | "bullion";
+  inventory_number: string;
+  title: string;
+  thumb_url: string | null;
+  collection_id: number;
+  collection_name: string;
+  /** The coin's series slug, or "bullion". */
+  series: string;
+  path: string;
+  price_paid: string | null;
+  purchase_date: string | null;
+  est_value: string | null;
+  sale_price: string | null;
+  sale_date: string | null;
+  sold_to: string | null;
+  sold_via: SoldVia | null;
+  sold_via_other: string | null;
+  is_sold: boolean;
+}
+
+/** One sale or trade. `id` null: an item sold on its own page (edit it there). */
+export interface SaleEntry {
+  id: number | null;
+  kind: "sale" | "trade";
+  sale_date: string;
+  sold_via: SoldVia | null;
+  sold_via_other: string | null;
+  counterparty: string | null;
+  dealer_id: number | null;
+  cash_received: string | null;
+  cash_paid: string | null;
+  notes: string | null;
+  out: SaleItem[];
+  in: SaleItem[];
+  total: string;
+  cost: string;
+  profit: string | null;
+  without_cost: number;
+}
+
+export interface SaleParty {
+  sale_date: string;
+  counterparty: string | null;
+  dealer_id: number | null;
+  notes: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -1327,6 +1398,15 @@ export const api = {
   updateCoin: (inv: string, b: CoinFields & { collection_id: number; coin_type_id?: number | null }) =>
     request<CoinDetail>("PUT", `/api/coins/${encodeURIComponent(inv)}`, b),
   deleteCoin: (inv: string) => request<void>("DELETE", `/api/coins/${encodeURIComponent(inv)}`),
+  sales: () => request<SaleEntry[]>("GET", "/api/sales"),
+  saleItems: (q: string) => request<SaleItem[]>("GET", `/api/sales/items?q=${encodeURIComponent(q)}`),
+  recordSale: (b: SaleParty & { sold_via: SoldVia | null; sold_via_other: string | null; items: { ref: string; price: string }[] }) =>
+    request<{ id: number }>("POST", "/api/sales/sale", b),
+  recordTrade: (
+    b: SaleParty & { out: { ref: string; price: string }[]; came_in: { ref: string; price: string }[]; cash_received: string | null; cash_paid: string | null },
+  ) => request<{ id: number }>("POST", "/api/sales/trade", b),
+  deleteSale: (id: number, deleteReceived = false) =>
+    request<void>("DELETE", `/api/sales/${id}${deleteReceived ? "?delete_received=true" : ""}`),
 
   /** collectionId null: sort each coin into the collection for its series. */
   importPreview: (collectionId: number | null, file: File) => {
@@ -1394,7 +1474,7 @@ export const api = {
   deleteBullionItem: (inv: string) => request<void>("DELETE", `/api/bullion/items/${encodeURIComponent(inv)}`),
   bullionItemHistory: (inv: string) =>
     request<HistoryPoint[]>("GET", `/api/bullion/items/${encodeURIComponent(inv)}/history`),
-  sellBullion: (inv: string, b: { quantity?: number; face_value?: string; sale_price: string; sale_date: string; sold_to?: string | null }) =>
+  sellBullion: (inv: string, b: { quantity?: number; face_value?: string; sale_price: string; sale_date: string; sold_to?: string | null; sold_via?: SoldVia | null; sold_via_other?: string | null }) =>
     request<{ sold: string; kept: string | null }>("POST", `/api/bullion/items/${encodeURIComponent(inv)}/sell`, b),
   uploadBullionPhotos: (inv: string, files: File[]) => {
     const fd = new FormData();

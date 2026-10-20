@@ -25,6 +25,7 @@ import { clearCoinDraft, NGC_BOOKMARK_ENABLED, ngcCertUrl, readCoinDraft, readNg
 import DuplicateCertModal from "../components/DuplicateCertModal";
 import StoragePicker from "../components/StoragePicker";
 import DealerInput from "../components/DealerInput";
+import SoldViaField from "../components/SoldViaField";
 import CoinSearch from "../components/CoinSearch";
 import { COMPANIES as GRADING_COMPANIES } from "./GradingPage";
 import { useApp, useNavCollection } from "../App";
@@ -79,6 +80,8 @@ const EMPTY: CoinFields = {
   sale_price: null,
   sale_date: null,
   sold_to: null,
+  sold_via: null,
+  sold_via_other: null,
   notes: null,
 };
 
@@ -1470,14 +1473,22 @@ export default function CoinFormPage() {
               <input type="date" min={form.purchase_date || "1900-01-01"} max={todayISO()} {...text("sale_date")} />
             </label>
           </div>
+          <div className="grid-2 sold-who">
+          <SoldViaField
+            via={form.sold_via}
+            other={form.sold_via_other}
+            includeTrade={false}
+            onChange={(via, other) => setForm((f) => ({ ...f, sold_via: via, sold_via_other: other }))}
+          />
           <label className="field">
-            <span>Sold to</span>
+            <span>{form.sold_via === "dealer" ? "Dealer" : "Sold to"}</span>
             <DealerInput
               text={form.sold_to}
               dealerId={form.sold_to_dealer_id}
               onChange={(t, id) => setForm((f) => ({ ...f, sold_to: t, sold_to_dealer_id: id }))}
             />
           </label>
+          </div>
           <p className="muted small">Filling in a sale moves the coin to the Sold list.</p>
         </section>
       </div>
