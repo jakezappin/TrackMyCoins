@@ -26,8 +26,8 @@ export default function CoinFactsCard({
         {!collapsed && (
         <>
         <p className="muted small">
-          Mintage, specifications and PCGS population appear here after a PCGS cert lookup or when PCGS data is fetched
-          for this coin.
+          Mintage, specifications and PCGS population appear here after a PCGS cert lookup (Check PCGS for photos on a
+          PCGS coin).
         </p>
         {canFetch && (
           <div>

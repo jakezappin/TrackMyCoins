@@ -39,7 +39,7 @@ const SOURCE_LABEL: Record<string, string> = {
   GREYSHEET: "Greysheet",
 };
 
-// The PCGS Market box is off for now (PCGS allows 100 lookups a day for the whole site).
+// The PCGS Market box (and Coin Facts' Get PCGS Data) is off for now (PCGS allows 100 lookups a day for the whole site).
 const SHOW_PCGS_MARKET = false;
 
 export default function CoinDetailPage() {
@@ -602,7 +602,7 @@ export default function CoinDetailPage() {
         />
         <CoinFactsCard
           facts={coin.facts}
-          canFetch={Boolean(coin.grade && (coin.pcgs_number || coin.grading_service !== "RAW"))}
+          canFetch={SHOW_PCGS_MARKET && Boolean(coin.grade && (coin.pcgs_number || coin.grading_service !== "RAW"))}
           busy={pcgsBusy}
           onFetch={getPcgs}
         />
