@@ -224,6 +224,7 @@ def _yes(v) -> bool:
 
 
 PHOTOS_KEY = "__photos"  # photo links carried with a row (MyCoinWorx exports), not a column
+NOTE_KEY = "__note"  # a note for the preview about the row (e.g. MyCoinWorx's series overruled), not a column
 
 
 def read_rows(filename: str, data: bytes, sheets: tuple[str, ...] = ("Coins", "Sold")) -> list[tuple[str, int, dict]]:

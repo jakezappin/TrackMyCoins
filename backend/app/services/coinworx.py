@@ -10,6 +10,7 @@ import re
 # Headers only a MyCoinWorx export has together.
 SIGNATURE = {"Coin Series", "Grading Company", "Cert Number", "Catalog PCGS #"}
 MINTS = {"P", "D", "S", "O", "CC", "W", "C"}
+NOTE_KEY = "__note"  # a note for the import preview, not a column
 # Special Designations that are strike designations (as we write them).
 DESIGNATIONS = {"FBL": "FBL", "FB": "FB", "FT": "FT", "FS": "FS", "FH": "FH", "PL": "PL", "DMPL": "DMPL",
                 "CAMEO": "CAM", "CAM": "CAM", "DCAM": "DCAM", "ULTRA CAMEO": "DCAM", "DEEP CAMEO": "DCAM",
@@ -55,6 +56,36 @@ def _mint(raw: dict) -> str:
         if m in MINTS:
             return m
     return ""
+
+
+# NGC's label: "1922 $1", "1936-S 50C", "1849 G$1". Its denomination is the grader's; MyCoinWorx's series is a guess
+# from it, and "$1" alone has been guessed wrong (a 1922 Peace Dollar listed as a Grant gold dollar).
+_NGC_LABEL = re.compile(r"^NGC:\s*(\d{4})(?:-([A-Z]{1,2}))?\s+(G?\$\d+(?:\.\d+)?|\d+C[SN]?|H10C)\b", re.I)
+_NGC_FACE = {"1C": 1, "2C": 2, "3CS": 3, "3CN": 3, "H10C": 5, "5C": 5, "10C": 10, "20C": 20, "25C": 25, "50C": 50,
+             "$1": 100, "G$1": 100, "$2.50": 250, "$3": 300, "$5": 500, "$10": 1000, "$20": 2000}
+
+
+def _label_conflict(raw: dict, series_name: str) -> tuple[str, str | None] | None:
+    """(NGC's denomination, its mint) when NGC's label contradicts the series MyCoinWorx gave, else None."""
+    from . import series_match as sm
+
+    m = _NGC_LABEL.match(_t(raw.get("Notes")))
+    if not m or not _t(raw.get("Year")).isdigit():
+        return None
+    den = m.group(3).upper()
+    face = _NGC_FACE.get(den)
+    if face is None:
+        return None
+    ser = sm.from_text(series_name, int(_t(raw.get("Year")))).series
+    if ser is None:
+        return None
+    gold_label = den.startswith("G$") or face >= 250
+    gold_series = ser.category == "Gold" or "gold" in ser.slug
+    series_face = sm.FACE.get(ser.slug)
+    commem = ser.slug == "classic-commemoratives"  # 25c, 50c and $1 issues: NGC's label names it separately
+    if gold_label != gold_series or (series_face is not None and not commem and series_face != face):
+        return den, (m.group(2) or "").upper() or None
+    return None
 
 
 def convert(raw: dict) -> tuple[dict, list[str]]:
@@ -154,5 +185,15 @@ def convert(raw: dict) -> tuple[dict, list[str]]:
     }
     if not sold and status in ("", "ON_HAND"):
         row["Status"] = "In Inventory"
+    conflict = _label_conflict(raw, row["Type"])
+    if conflict:
+        den, mint = conflict
+        listed = re.sub(r"\s*\([^)]*\)\s*$", "", _t(raw.get("Coin Series"))) or row["Type"]
+        row["Type"] = den  # with the year, NGC's denomination picks the series ("1922 $1": a Peace Dollar)
+        if mint:
+            row["Date"] = f"{year}-{mint}"
+        row["PCGS #"] = row["Variety"] = None  # MyCoinWorx's catalog number and issue were for its guess
+        row[NOTE_KEY] = (f"MyCoinWorx listed this as {listed}, but NGC's label says {year} {den}. "
+                         "Sorted by NGC's label. Check it.")
     photos = [u for i in range(1, 9) if (u := _t(raw.get(f"Image URL {i}")))]
     return row, photos

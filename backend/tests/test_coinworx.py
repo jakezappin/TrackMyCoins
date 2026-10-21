@@ -74,3 +74,26 @@ def test_preview_sorts_into_series(authed):
 def test_detects_only_coinworx():
     assert coinworx.is_coinworx(HEADERS)
     assert not coinworx.is_coinworx(["Date", "Grade", "Cert", "Grading service"])
+
+
+def test_ngc_label_beats_a_wrong_series():
+    """MyCoinWorx guessed a 1922 Peace Dollar (NGC "1922 $1") was a Grant gold dollar: NGC's label wins."""
+    row = {"Category": "Classic Commemoratives (1892-1954)", "Coin Type": "Dollar", "Metal": "Silver",
+           "Coin Series": "Grant Gold Dollar - No Star", "Design": "No Star", "Year": "1922", "Program": "Grant",
+           "Catalog PCGS #": "7458", "PCGS ID": "7458", "Grade": "VF 30", "Grading Company": "NGC",
+           "Cert Number": "2191390-002", "Special Designations": "GSA SOFT PACK", "Notes": "NGC: 1922 $1",
+           "Status": "ON_HAND"}
+    (_, _, raw), = importer.read_rows("export.csv", _csv([row]))
+    note = raw.pop(importer.NOTE_KEY)
+    raw.pop(importer.PHOTOS_KEY)
+    f, _, errors, _ = importer.row_to_fields(raw)
+    from app.services import series_match
+
+    assert not errors and series_match.from_text(raw["Type"], f["year"]).series.slug == "peace-dollars"
+    assert f["pcgs_number"] is None and f["variety"] is None and f["gsa_soft_pack"]
+    assert "Grant Gold Dollar - No Star" in note and "1922 $1" in note
+    # A label that agrees changes nothing.
+    ok = {**row, "Category": "Dollars", "Coin Series": "Peace Dollar (1921 - 1935)", "Program": "", "Design": "",
+          "Catalog PCGS #": "7357", "PCGS ID": "7357"}
+    (_, _, raw2), = importer.read_rows("export.csv", _csv([ok]))
+    assert importer.NOTE_KEY not in raw2 and raw2["PCGS #"] == "7357"

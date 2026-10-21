@@ -357,6 +357,7 @@ async def _read_upload(file: UploadFile) -> list[tuple[str, int, dict]]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"At most {importer.MAX_ROWS} rows at a time.")
     for _, _, raw in raw_rows:  # photo links aren't a column (import the file itself to keep its photos)
         raw.pop(importer.PHOTOS_KEY, None)
+        raw.pop(importer.NOTE_KEY, None)
     return raw_rows
 
 
@@ -409,7 +410,10 @@ async def preview_file(
     rows = []
     for sheet, n, raw in raw_rows:
         photos = [u for u in (raw.pop(importer.PHOTOS_KEY, None) or []) if store.importable_url(u)][:10]
+        note = raw.pop(importer.NOTE_KEY, None)
         fields, valuation, errors, hints = importer.row_to_fields(raw, sold_sheet=sheet == "Sold")
+        if note:
+            hints["label_note"] = note
         rows.append(ImportRow(row=n, sheet=sheet, fields=fields, valuation=valuation, errors=errors, hints=hints,
                               photo_urls=photos))
     return _preview(db, user, col, rows)
