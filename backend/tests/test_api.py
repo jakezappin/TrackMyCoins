@@ -245,21 +245,21 @@ def test_coin_types_and_finishes(authed):
     types = authed.get("/api/coin-types").json()
     from app.series import SERIES
 
-    assert len(types) == len(SERIES) == 65
+    assert len(types) == len(SERIES) == 96
     assert types[0]["slug"] == "half-cents"  # catalog order
     ken = _type(authed, "kennedy-half-dollars")
     assert [f["code"] for f in ken["finishes"]] == ["MS", "PR", "SPR"]
     assert ken["finishes"][2]["collection_type_slug"] == "kennedy-half-dollars-silver-proof"
     assert ken["finishes"][1]["collection_type_label"] == "Kennedy Half Dollars – Proof"
-    peace = _type(authed, "peace-dollars")
-    assert [f["code"] for f in peace["finishes"]] == ["MS"]
-    assert peace["finishes"][0]["collection_type_label"] == "Peace Dollars"
+    slq = _type(authed, "standing-liberty-quarters")
+    assert [f["code"] for f in slq["finishes"]] == ["MS"]
+    assert slq["finishes"][0]["collection_type_label"] == "Standing Liberty Quarters"
     assert len({t["inventory_prefix"] for t in types}) == len(types)  # prefixes unique
     gold = _type(authed, "saint-gaudens-double-eagles")
     assert gold["metal"] == "gold" and "C" not in gold["mint_marks"]
     assert _type(authed, "gold-eagles-50")["metal"] == "gold"
     assert _type(authed, "american-silver-eagles")["metal"] == "silver"
-    assert authed.get("/api/public/stats").json() == {"series": 65, "collection_types": 126, "categories": 11}
+    assert authed.get("/api/public/stats").json() == {"series": 96, "collection_types": 180, "categories": 11}
     stella = _type(authed, "four-dollar-stella")
     assert [f["code"] for f in stella["finishes"]] == ["PR"]  # proof-only
     gts = _type(authed, "gold-type-set")
@@ -281,8 +281,8 @@ def test_proof_collections(authed):
     assert authed.get("/api/collections/by-number/nonsense-proof/1").status_code == 404
 
     # Peace dollars have no proof collection type
-    peace = _type(authed, "peace-dollars")
-    r = authed.post("/api/collections", json={"name": "Peace PR", "coin_type_id": peace["id"], "finish": "PR"})
+    slq = _type(authed, "standing-liberty-quarters")
+    r = authed.post("/api/collections", json={"name": "SLQ PR", "coin_type_id": slq["id"], "finish": "PR"})
     assert r.status_code == 400
 
     # Proof collections take PR grades (defaulting to PR); MS collections reject PR

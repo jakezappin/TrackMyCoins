@@ -99,12 +99,28 @@ ISSUE_RULES = {
     "us-silver-proof-sets": [(lambda y, m: True, lambda v: set_line_name("us-silver-proof-sets", v))],
     "modern-morgan-dollars": [(lambda y, m: True, _full)],
     "modern-peace-dollars": [(lambda y, m: True, _full)],
+    # Several designs a year: one line each.
+    "presidential-dollars": [(lambda y, m: True, _full)],
+    "gobrecht-dollars": [(lambda y, m: True, _full)],
+    "fractional-gold-buffalos": [(lambda y, m: True, _full)],
+    "innovation-dollars": [(lambda y, m: True, _full)],
+    "first-spouse-gold": [(lambda y, m: True, _full)],
+    "youth-sports-quarters": [(lambda y, m: True, _full)],
+    "paralympic-half-dollars": [(lambda y, m: True, _full)],
+    "platinum-eagles-100": [(lambda y, m: True, _full)],
+    "mint-special-issues": [(lambda y, m: True, _full)],
+    "classic-gold-commemoratives": [(lambda y, m: True, _variety_with_overdate)],
+    "modern-commemorative-gold-5": [(lambda y, m: True, _variety_with_overdate)],
+    "modern-commemorative-gold-10": [(lambda y, m: True, _variety_with_overdate)],
+    "bullion-eagle-sets": [(lambda y, m: True, _full)],
+    "modern-commemorative-sets": [(lambda y, m: True, _full)],
     # 8TF, 7TF Reverse of 1878, 7TF Reverse of 1879, 7/8TF Strong, 7/8TF Weak are collected as separate coins.
     "morgan-dollars": [(lambda y, m: y == 1878 and m == "P", _full)],
 }
 
 # Series that also offer a type set: one line per design, any date or mint.
-TYPE_SET_SERIES = {"classic-commemoratives", "modern-commemorative-halves", "modern-commemorative-dollars"}
+TYPE_SET_SERIES = {"classic-commemoratives", "modern-commemorative-halves", "modern-commemorative-dollars",
+                   "classic-gold-commemoratives", "modern-commemorative-gold-5", "modern-commemorative-gold-10"}
 MODES = ("full", "type")
 
 
