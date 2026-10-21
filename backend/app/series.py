@@ -83,8 +83,9 @@ SERIES: list[Series] = [
     Series("indian-head-cents", "Indian Head Cent", "Indian Head Cents", "IHC", C, ("P", "S"), (8910,), (8911,)),
     Series("lincoln-cents", "Lincoln Cent", "Lincoln Cents", "LIN", C, ("P", "D", "S", "W"),
            (8912, 9645, 9687), (8913, 9646, 9688)),
+    Series("two-cent-pieces", "Two Cent Piece", "Two Cent Pieces", "TWC", C, ("P",), (8914,), (8915,)),
     # Nickels & three cents
-    Series("three-cent-silver", "Trime", "Trimes", "TCS", N, ("P", "O"), (8927,), (8928,)),
+    Series("three-cent-silver", "Three Cent Silver", "Three Cent Silver (Trimes)", "TCS", N, ("P", "O"), (8927,), (8928,)),
     Series("three-cent-nickels", "Three Cent Nickel", "Three Cent Nickels", "TCN", N, ("P",), (8916,), (8917,)),
     Series("shield-nickels", "Shield Nickel", "Shield Nickels", "SHN", N, ("P",), (8918,), (8919,)),
     Series("liberty-head-nickels", "Liberty Head (V) Nickel", "Liberty Head (V) Nickels", "LHN", N,
@@ -100,7 +101,8 @@ SERIES: list[Series] = [
     Series("mercury-dimes", "Mercury Dime", "Mercury Dimes", "MER", D, ("P", "D", "S"), (8937,), (8938,)),
     Series("roosevelt-dimes", "Roosevelt Dime", "Roosevelt Dimes", "ROS", D, ("P", "D", "S", "W"),
            (8939,), (8940,), silver_proofs=True),
-    # Quarters
+    # Quarters (and the short-lived twenty cent piece)
+    Series("twenty-cent-pieces", "Twenty Cent Piece", "Twenty Cent Pieces", "TWN", Q, ("P", "S", "CC"), (8941,), (8942,)),
     Series("barber-quarters", "Barber Quarter", "Barber Quarters", "BRQ", Q, ("P", "O", "S", "D"), (8946,), (8947,)),
     Series("standing-liberty-quarters", "Standing Liberty Quarter", "Standing Liberty Quarters", "SLQ", Q,
            ("P", "D", "S"), (8948,)),
@@ -115,6 +117,10 @@ SERIES: list[Series] = [
            ("P", "O", "S", "CC"), (8955,), (8956,)),
     Series("barber-half-dollars", "Barber Half Dollar", "Barber Half Dollars", "BRH", H,
            ("P", "O", "S", "D"), (8957,), (8958,)),
+    Series("walking-liberty-half-dollars", "Walking Liberty Half Dollar", "Walking Liberty Half Dollars", "WLH", H,
+           ("P", "D", "S"), (8959,), (8960,)),
+    Series("franklin-half-dollars", "Franklin Half Dollar", "Franklin Half Dollars", "FRH", H, ("P", "D", "S"),
+           (8961,), (8962,)),
     Series("kennedy-half-dollars", "Kennedy Half Dollar", "Kennedy Half Dollars", "KEN", H, ("P", "D", "S", "W"),
            (8963,), (8964,), silver_proofs=True),
     # Dollars

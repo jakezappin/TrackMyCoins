@@ -146,7 +146,7 @@ function MarketPreview() {
 
 export default function LandingPage() {
   // Counts come from the server so they stay right as series are added.
-  const [stats, setStats] = useState({ series: 61, collection_types: 118 });
+  const [stats, setStats] = useState({ series: 65, collection_types: 126 });
   useEffect(() => {
     api.publicStats().then(setStats).catch(() => undefined);
   }, []);
