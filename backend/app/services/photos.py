@@ -32,6 +32,7 @@ IMPORT_HOST_SUFFIXES = (
     "collectors.com",
     "cloudfront.net",  # PCGS image CDN
     "ccg-imaging-ngc-coins-production.s3.amazonaws.com",  # NGC's photos (only this bucket)
+    "backblazeb2.com",  # MyCoinWorx's photo storage (photos in its inventory exports)
 )
 
 
@@ -161,6 +162,11 @@ def _host_allowed(url: str) -> bool:
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
     return parsed.scheme == "https" and any(host == s or host.endswith("." + s) for s in IMPORT_HOST_SUFFIXES)
+
+
+def importable_url(url: str) -> bool:
+    """Whether import may download photos from this link (grading services' and MyCoinWorx's photo hosts)."""
+    return _host_allowed(url)
 
 
 def download_image(url: str) -> tuple[bytes, str]:

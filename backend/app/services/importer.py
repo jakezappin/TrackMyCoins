@@ -62,6 +62,7 @@ ALIASES = {
     "dealer": "purchased_from", "from": "purchased_from", "wherepurchased": "purchased_from",
     "wherebought": "purchased_from", "boughtfrom": "purchased_from", "purchasedat": "purchased_from", "vendor": "purchased_from",
     "saleprice": "sale_price", "soldfor": "sale_price",
+    "askingprice": "asking_price", "asking": "asking_price", "listprice": "asking_price",
     "saledate": "sale_date", "datesold": "sale_date",
     "soldto": "sold_to", "buyer": "sold_to",
     "notes": "notes", "note": "notes", "comments": "notes",
@@ -222,7 +223,25 @@ def _yes(v) -> bool:
     return (_text(v) or "").strip().lower() in YES
 
 
+PHOTOS_KEY = "__photos"  # photo links carried with a row (MyCoinWorx exports), not a column
+
+
 def read_rows(filename: str, data: bytes, sheets: tuple[str, ...] = ("Coins", "Sold")) -> list[tuple[str, int, dict]]:
+    """[(sheet, row number, {header: value})] from a CSV or Excel file. A MyCoinWorx export is turned into our
+    columns (its photo links under PHOTOS_KEY)."""
+    from . import coinworx
+
+    rows = _read_rows(filename, data, sheets)
+    if rows and coinworx.is_coinworx(rows[0][2].keys()):
+        out = []
+        for sheet, n, raw in rows:
+            row, photos = coinworx.convert(raw)
+            out.append((sheet, n, {**row, PHOTOS_KEY: photos}))
+        return out
+    return rows
+
+
+def _read_rows(filename: str, data: bytes, sheets: tuple[str, ...] = ("Coins", "Sold")) -> list[tuple[str, int, dict]]:
     """[(sheet, row number, {header: value})] from a CSV or Excel file. In a workbook, the named sheets (our own
     export's) are read if there; otherwise the first sheet."""
     name = filename.lower()
@@ -521,6 +540,8 @@ def row_to_fields(raw: dict, sold_sheet: bool = False) -> tuple[dict, dict, list
     if not source or source.startswith("your own"):
         f["purchase_value_custom"] = _money(vals.get("purchase_value"), errors, "Est. value at purchase")
     f["sale_price"] = _money(vals.get("sale_price"), errors, "Sale price")
+    if _text(vals.get("asking_price")):
+        f["asking_price"] = _money(vals.get("asking_price"), errors, "Asking price")
     f["sale_date"] = _date(vals.get("sale_date"), errors, "Sale date")
     f["sold_to"] = _text(vals.get("sold_to"))
     f["notes"] = _text(vals.get("notes"))

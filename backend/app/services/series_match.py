@@ -99,6 +99,17 @@ FACE: dict[str, int] = {
     "early-eagles": 1000, "liberty-eagles": 1000, "indian-eagles": 1000, "gold-eagles-10": 1000,
     "liberty-double-eagles": 2000, "saint-gaudens-double-eagles": 2000,
     "gold-eagles-25": 2500, "gold-eagles-50": 5000, "gold-buffalos": 5000,
+    "two-cent-pieces": 2, "twenty-cent-pieces": 20,
+    "early-half-dimes": 5, "capped-bust-half-dimes": 5, "draped-bust-dimes": 10, "capped-bust-dimes": 10,
+    "draped-bust-quarters": 25, "capped-bust-quarters": 25, "seated-liberty-quarters": 25, "youth-sports-quarters": 25,
+    "early-half-dollars": 50, "capped-bust-half-dollars": 50, "walking-liberty-half-dollars": 50,
+    "franklin-half-dollars": 50, "paralympic-half-dollars": 50,
+    "early-dollars": 100, "gobrecht-dollars": 100, "susan-b-anthony-dollars": 100, "presidential-dollars": 100,
+    "innovation-dollars": 100,
+    "platinum-eagles-10": 1000, "platinum-eagles-25": 2500, "platinum-eagles-50": 5000, "platinum-eagles-100": 10000,
+    "palladium-eagles": 2500, "first-spouse-gold": 1000,
+    "modern-commemorative-gold-5": 500, "modern-commemorative-gold-10": 1000,
+    "silver-ike-blue-packs": 100, "silver-ike-brown-packs": 100,
 }
 
 # Compound names folded into one token before matching, so "liberty" (Liberty gold) doesn't also hit
@@ -113,14 +124,22 @@ _FOLD: list[tuple[str, str]] = [
     (r"indian head nickel|indian nickel", "buffalo nickel"),
     (r"flying eagle", "flyingeagle"),
     (r"saint gaudens|st\.? gaudens", "saint"),
-    (r"draped bust|capped bust", "bust"),
+    (r"draped bust", "drapedbust"),
+    (r"capped bust", "cappedbust"),
+    (r"flowing hair", "flowinghair"),
+    (r"half disme", "halfdisme"),
+    (r"twenty cents?|20 cents?|20c piece", "twentycent"),
+    (r"two cents?|(?<!/)2 cents?|(?<!/)2c piece", "twocent"),  # not the "2 cent" in "1/2 cent"
+    (r"susan b\.? anthony|susan anthony|sba dollar", "sba"),
+    (r"platinum eagle|american platinum", "platinumeagle"),
+    (r"palladium eagle|american palladium", "palladiumeagle"),
     (r"silver eagle", "silvereagle"),
     (r"gold eagle", "goldeagle"),
     (r"gold buffalo|american buffalo", "goldbuffalo"),
-    (r"three cent silver|3 cent silver", "3cs"),
-    (r"three cent nickel|3 cent nickel", "3cn"),
-    (r"half cent", "halfcent"),
-    (r"large cent", "largecent"),
+    (r"three cents? silver|3 cents? silver", "3cs"),
+    (r"three cents? nickel|3 cents? nickel", "3cn"),
+    (r"half cents?", "halfcent"),
+    (r"large cents?|coronet head cents?|coronet cents?|matron head cents?|braided hair cents?", "largecent"),
     (r"half dime", "halfdime"),
     (r"half dollar", "halfdollar"),
 ]
@@ -165,16 +184,53 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "modern-peace-dollars": ("peace",),
     "ike-dollars": ("ike", "eisenhower"),
     "sacagawea-dollars": ("sacagawea", "native american"),
-    "early-quarter-eagles": ("bust",),
+    "early-quarter-eagles": ("drapedbust", "cappedbust", "bust"),
     "classic-head-quarter-eagles": ("classic head",),
-    "early-half-eagles": ("bust",),
+    "early-half-eagles": ("drapedbust", "cappedbust", "bust"),
     "classic-head-half-eagles": ("classic head",),
-    "early-eagles": ("bust",),
-    "gold-dollars": ("gold dollar", "g$1", "gold"),
+    "early-eagles": ("drapedbust", "bust"),
+    "gold-dollars": ("gold dollar", "g$1", "gold", "princess"),
     "liberty-quarter-eagles": ("liberty", "coronet"),
     "four-dollar-stella": ("stella",),
     "indian-quarter-eagles": ("indian",),
     "three-dollar-gold": ("princess", "three dollar"),
+    "two-cent-pieces": ("twocent",),
+    "twenty-cent-pieces": ("twentycent",),
+    "early-half-dimes": ("halfdisme", "flowinghair", "drapedbust", "bust"),
+    "capped-bust-half-dimes": ("cappedbust", "bust"),
+    "draped-bust-dimes": ("drapedbust", "bust"),
+    "capped-bust-dimes": ("cappedbust", "bust"),
+    "draped-bust-quarters": ("drapedbust", "bust"),
+    "capped-bust-quarters": ("cappedbust", "bust"),
+    "seated-liberty-quarters": ("seated",),
+    "youth-sports-quarters": ("youth sports",),
+    "early-half-dollars": ("flowinghair", "drapedbust", "bust"),
+    "capped-bust-half-dollars": ("cappedbust", "bust"),
+    "walking-liberty-half-dollars": ("walkinglib", "walker"),
+    "franklin-half-dollars": ("franklin", "ben franklin"),
+    "paralympic-half-dollars": ("paralympic",),
+    "early-dollars": ("flowinghair", "drapedbust", "bust"),
+    "gobrecht-dollars": ("gobrecht",),
+    "susan-b-anthony-dollars": ("sba", "anthony"),
+    "presidential-dollars": ("presidential",),
+    "innovation-dollars": ("innovation",),
+    "fractional-gold-buffalos": ("goldbuffalo",),
+    "platinum-eagles-10": ("platinumeagle", "platinum"),
+    "platinum-eagles-25": ("platinumeagle", "platinum"),
+    "platinum-eagles-50": ("platinumeagle", "platinum"),
+    "platinum-eagles-100": ("platinumeagle", "platinum"),
+    "palladium-eagles": ("palladiumeagle", "palladium"),
+    "first-spouse-gold": ("first spouse", "spouse"),
+    "classic-gold-commemoratives": ("gold commemorative", "gold commem", "grant gold", "mckinley gold",
+                                    "lewis and clark gold", "louisiana purchase gold", "panama pacific gold"),
+    "modern-commemorative-gold-5": ("commemorative", "commem"),
+    "modern-commemorative-gold-10": ("commemorative", "commem"),
+    "mint-special-issues": ("ultra high relief", "uhr", "centennial gold", "american liberty", "liberty britannia",
+                            "liberty and britannia", "comic art", "best of the mint", "230th"),
+    "silver-ike-blue-packs": ("blue pack", "blue ike"),
+    "silver-ike-brown-packs": ("brown pack", "brown ike"),
+    "bullion-eagle-sets": ("eagle set", "buffalo set"),
+    "modern-commemorative-sets": ("commemorative set", "commem set"),
     "liberty-half-eagles": ("liberty", "coronet"),
     "indian-half-eagles": ("indian",),
     "liberty-eagles": ("liberty", "coronet"),
@@ -187,7 +243,7 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "gold-eagles-25": ("goldeagle",),
     "gold-eagles-50": ("goldeagle",),
     "gold-buffalos": ("goldbuffalo",),
-    "classic-commemoratives": ("commemorative", "commem"),
+    "classic-commemoratives": ("commemorative", "commem", "isabella", "lafayette", "columbian exposition"),
     "modern-commemorative-halves": ("commemorative", "commem"),
     "modern-commemorative-dollars": ("commemorative", "commem"),
 }
@@ -197,11 +253,12 @@ DOMINANT = {"atb-5oz-silver", "america-250"}
 
 # Face value written out: (pattern, cents), checked in order on folded text; the first hit wins.
 _FACE_PATTERNS: list[tuple[re.Pattern, int]] = [
-    (re.compile(r"\bhalfcent\b|\b1/2\s*c\b"), 0),
+    (re.compile(r"\bhalfcent\b|\b1/2\s*c(?:ents?)?\b"), 0),
     (re.compile(r"\bhalfdime\b|\bh10\s*c\b"), 5),
     (re.compile(r"\$\s*2(?:\.50?|\s*1/2)(?![0-9])|\bquarter eagle\b"), 250),
     (re.compile(r"\bhalf eagle\b"), 500),
     (re.compile(r"\bdouble eagle\b"), 2000),
+    (re.compile(r"\$\s*100(?![0-9])"), 10000),
     (re.compile(r"\$\s*50(?![0-9])"), 5000),
     (re.compile(r"\$\s*25(?![0-9])"), 2500),
     (re.compile(r"\$\s*20(?![0-9])"), 2000),
@@ -214,7 +271,9 @@ _FACE_PATTERNS: list[tuple[re.Pattern, int]] = [
     (re.compile(r"\b25\s*c\b|\bquarter\b"), 25),
     (re.compile(r"\b10\s*c\b|\bdime\b"), 10),
     (re.compile(r"\b5\s*c\b|\bnickel\b"), 5),
-    (re.compile(r"\b3\s*c[ns]?\b|\b3cs\b|\b3cn\b"), 3),
+    (re.compile(r"\b3\s*c(?:ents?|[ns])?\b|\b3cs\b|\b3cn\b"), 3),
+    (re.compile(r"\btwentycent\b|\b20\s*c\b"), 20),
+    (re.compile(r"\btwocent\b|\b2\s*c\b"), 2),
     (re.compile(r"\b1\s*c\b|\bcent\b|\bpenny\b"), 1),
 ]
 
@@ -230,9 +289,23 @@ def _latest_year() -> int:
     return _this_year() + 1
 
 
+def _ranges(slug: str) -> tuple[tuple[int, int | None], ...]:
+    """The years a series was struck: the list above, else runs of the catalog's dates."""
+    if slug in YEARS:
+        return YEARS[slug]
+    years = sorted(_issues().get(slug, {}))
+    out: list[list[int]] = []
+    for y in years:
+        if out and y == out[-1][1] + 1:
+            out[-1][1] = y
+        else:
+            out.append([y, y])
+    return tuple((lo, hi) for lo, hi in out)
+
+
 def year_ok(slug: str, year: int | None) -> bool:
-    """Was this series struck in that year? (Series without a list, or no year, aren't flagged.)"""
-    ranges = YEARS.get(slug)
+    """Was this series struck in that year? (Series without dates, or no year, aren't flagged.)"""
+    ranges = _ranges(slug)
     if not ranges or year is None:
         return True
     return any(lo <= year <= (hi or _latest_year()) for lo, hi in ranges)
@@ -240,7 +313,7 @@ def year_ok(slug: str, year: int | None) -> bool:
 
 def years_label(slug: str) -> str:
     """'1878–1904, 1921, 2021, 2023 on'."""
-    return ", ".join(f"{lo}–{hi}" if hi and hi != lo else (str(lo) if hi else f"{lo} on") for lo, hi in YEARS.get(slug, ()))
+    return ", ".join(f"{lo}–{hi}" if hi and hi != lo else (str(lo) if hi else f"{lo} on") for lo, hi in _ranges(slug))
 
 
 # Real dates Greysheet's catalog leaves out: {slug: {year: {"MS"|"PR": mints}}}.
@@ -332,6 +405,10 @@ def face_value(text: str) -> int | None:
         for pat, cents in _EAGLE_SIZES:
             if pat.search(t):
                 return cents
+    if "platinumeagle" in t or "platinum" in t:  # Platinum Eagles: 1/10 oz $10 ... 1 oz $100
+        for pat, cents in _EAGLE_SIZES:
+            if pat.search(t):
+                return {500: 1000, 1000: 2500, 2500: 5000, 5000: 10000}[cents]
     american = re.search(r"\bamerican\b|silvereagle|goldeagle|flyingeagle", t)
     for pat, cents in _FACE_PATTERNS:
         if american and pat.pattern.endswith(r"|\beagle\b") and not pat.search(t.replace("eagle", "")):

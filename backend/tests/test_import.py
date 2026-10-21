@@ -127,7 +127,7 @@ Peace Dollar,1922,MS63,PCGS,90000002
 Barber Dime,1900-O,MS62,NGC,90000003
 ,1895 Morgan,PR64 CAM,PCGS,90000004
 Morgan,1910,MS63,PCGS,90000005
-Franklin Half,1955,MS64,PCGS,90000006
+Philippine Peso,1907,MS64,PCGS,90000006
 ,1881 $1,MS63,PCGS,90000007
 ,1882-S,MS64,PCGS,90000008
 ,1922-S Peace,MS63,PCGS,90000009
@@ -182,7 +182,7 @@ def test_paste_certs_sorted_by_pcgs_series(authed, monkeypatch):
 
     facts = {"1": ("Morgan Dollars 1878-1921", "1881-S $1", 1881, "S"),
              "2": ("Peace Dollars 1921-1935", "1923 $1", 1923, None),
-             "3": ("Franklin Half Dollars 1948-1963", "1955 50C", 1955, None)}
+             "3": ("Philippines Peso 1903-1912", "1907-S P1", 1907, "S")}
 
     def fake(service, cert, check_cac=True, user_id=None):
         series, name, year, mint = facts[cert]
