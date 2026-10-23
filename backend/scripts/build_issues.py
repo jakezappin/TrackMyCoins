@@ -28,7 +28,8 @@ def main() -> None:
     out: dict = {}
     for t in sorted(types, key=lambda t: t.slug):
         years: dict = defaultdict(lambda: defaultdict(set))
-        for e in db.query(CatalogEntry).filter(CatalogEntry.coin_type_id == t.id, CatalogEntry.year.isnot(None)):
+        for e in db.query(CatalogEntry).filter(CatalogEntry.coin_type_id == t.id, CatalogEntry.year.isnot(None),
+                                          CatalogEntry.vam.is_(None)):
             years[str(e.year)][STRIKE.get(e.strike, "MS")].add(e.mint_mark or "P")
         out[t.slug] = {y: {k: " ".join(sorted(v)) for k, v in sorted(s.items())} for y, s in sorted(years.items())}
     OUT.parent.mkdir(exist_ok=True)

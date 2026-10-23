@@ -77,6 +77,15 @@ _IGNORED_VARIETIES = {"MORGAN", "SILVER EAGLE", "5OZ SILVER", "PEACE", "S$1 MORG
 # Die-marriage and attribution numbers: sub-listings carrying one are varieties for specialists, not separate issues.
 # Any "letters-number" code: VAM-3, FS-101, JD-1, BD-2, HM-8, O-101 (Overton), B-3 (Bolender), S-189, C-1, N-10...
 _ATTRIBUTION = re.compile(r"\b[A-Z]{1,4}-\s*\d")
+# Morgan and Peace VAM sub-listings are kept, though: Greysheet prices them on their own ("Doubled Ear, VAM-11").
+_VAM = re.compile(r"\bVAM[\s-]*(\d+(?:\.\d+)?[A-Z]?)\b", re.I)
+
+
+def vam_key(text: str | None) -> str | None:
+    """'VAM-11', 'vam 2a', '11', '14.1' -> '11', '2A', '14.1' (how VAM listings are keyed)."""
+    t = (text or "").strip()
+    m = _VAM.search(t) or re.fullmatch(r"\s*(\d+(?:\.\d+)?[A-Z]?)\s*", t, re.I)
+    return m.group(1).upper() if m else None
 
 
 def _designation_of(d: dict) -> str | None:
@@ -107,9 +116,13 @@ def parse_collectible(d: dict, top: dict | None = None) -> dict | None:
     """Normalize a Greysheet CollectibleDto. Returns None for entries that aren't a specific coin. `top`: a
     sub-listing's (UiParentId) top-level ancestor."""
     name = _clean(d.get("Name")) or ""
-    # Sub-listings are kept only when they're the parent coin with a designation (see designation_child).
+    # Sub-listings are kept only when they're the parent coin with a designation (see designation_child), or a VAM.
+    vam = None
     if d.get("UiParentId") and not designation_child(d, top):
-        return None
+        m = _VAM.search(" ".join(x for x in (name, _clean(d.get("Variety")), _clean(d.get("Variety2"))) if x))
+        if not m:
+            return None
+        vam = m.group(1).upper()
     if "[TYPE]" in name.upper() or d.get("IsSet") is True or d.get("IsType") is True:
         return None
     coin_date = _clean(d.get("CoinDate")) or ""
@@ -175,6 +188,7 @@ def parse_collectible(d: dict, top: dict | None = None) -> dict | None:
         "variety": re.sub(r"^(\S+), ", r"\1 ", ", ".join(parts))[:255] if with_denom and len(parts) > 1
         else (", ".join(parts)[:255] or None),
         "name": name[:255],
+        "vam": vam,
     }
 
 
@@ -250,7 +264,8 @@ def sync(db: Session, coin_type: CoinType) -> SyncResult:
 # needed.
 
 BUNDLE = Path(__file__).resolve().parent.parent / "catalog_bundle.json.gz"
-_FIELDS = ("gsid", "node_id", "pcgs_number", "ngc_id", "year", "mint_mark", "designation", "strike", "variety", "name")
+_FIELDS = ("gsid", "node_id", "pcgs_number", "ngc_id", "year", "mint_mark", "designation", "strike", "variety", "name",
+           "vam")
 
 
 def export_bundle(db: Session, path: Path = BUNDLE) -> int:
@@ -337,7 +352,7 @@ def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:
     strike = FINISHES[finish][2]
     rows = db.scalars(
         select(CatalogEntry.designation)
-        .where(CatalogEntry.coin_type_id == coin_type_id, CatalogEntry.strike == strike)
+        .where(CatalogEntry.coin_type_id == coin_type_id, CatalogEntry.strike == strike, CatalogEntry.vam.is_(None))
         .distinct()
     ).all()
     found = {r for r in rows if r}
@@ -449,6 +464,7 @@ def match(
     finish: str = "MS",
     variety: str | None = None,
     gsa: str | None = None,  # "hard" | "soft" for coins in GSA holders
+    vam: str | None = None,  # a Morgan / Peace VAM: its own listing when Greysheet has one
 ) -> MatchResult:
     strike = FINISHES.get(finish, FINISHES["MS"])[2]
     designation = canonical(designation)
@@ -462,9 +478,27 @@ def match(
             CatalogEntry.strike == strike,
         )
     ).all()
+    vams = [e for e in entries if e.vam]
+    entries = [e for e in entries if not e.vam]
     all_entries = entries
     entries = [e for e in entries if (e.designation or None) == designation]
     label = f"{year}{'' if mint_mark == 'P' else '-' + mint_mark} {designation or ''}".strip()
+    key = vam_key(vam)
+    if key and vams:
+        listed = [e for e in vams if e.vam == key]
+        hit = [e for e in listed if (e.designation or None) == designation]
+        if hit:
+            hit.sort(key=lambda e: (e.pcgs_number is None, e.gsid))
+            e = hit[0]
+            best = Candidate(pcgs_number=e.pcgs_number, gsid=e.gsid, name=e.name, variety=e.variety,
+                             designation=e.designation)
+            best.exact = True
+            return MatchResult(candidates=[best], best=best)
+        plain = match(db, coin_type_id, year, mint_mark, designation, finish, variety, gsa)
+        what = f"VAM-{key} {designation}" if listed and designation else f"VAM-{key}"
+        note = f"Greysheet doesn't list {what} for {label.split()[0]}, so it's priced as the regular date."
+        plain.message = f"{note} {plain.message}" if plain.message else note
+        return plain
     if not entries and strike == "PR" and designation and set(designation.split()) & set(_CAMEO):
         # A Cameo / Deep Cameo proof the catalog doesn't list: PCGS's number for it, from the plain proof's.
         base = _without_cameo(designation)
@@ -550,7 +584,8 @@ def resolve_for_coin(db: Session, coin: Coin) -> Candidate:
     ensure_synced(db, coin.coin_type)
     gsa = "hard" if coin.gsa_hard_pack else "soft" if coin.gsa_soft_pack else None
     result = match(
-        db, coin.coin_type_id, coin.year, coin.mint_mark, coin.strike_designation, coin.collection.finish, coin.variety, gsa
+        db, coin.coin_type_id, coin.year, coin.mint_mark, coin.strike_designation, coin.collection.finish, coin.variety, gsa,
+        vam=coin.vam,
     )
     if result.best is None:
         if result.candidates:
@@ -562,3 +597,24 @@ def resolve_for_coin(db: Session, coin: Coin) -> Candidate:
     if result.best.variety and not coin.variety:
         coin.variety = result.best.variety
     return result.best
+
+
+def vam_listing(db: Session, coin: Coin, sync: bool = True) -> CatalogEntry | None:
+    """The coin's own VAM listing (same date, mint, strike and designation), if Greysheet has one. `sync`: download
+    the series' catalog first if there's none (not while a coin is being saved)."""
+    key = vam_key(coin.vam)
+    if not key or coin.is_error:
+        return None
+    if sync:
+        try:
+            ensure_synced(db, coin.coin_type)
+        except (PricingError, httpx.HTTPError, quota.QuotaExceeded):
+            return None  # no catalog to hand: priced as the date
+    strike = FINISHES.get(coin.collection.finish, FINISHES["MS"])[2]
+    rows = db.scalars(select(CatalogEntry).where(
+        CatalogEntry.coin_type_id == coin.coin_type_id, CatalogEntry.year == coin.year,
+        CatalogEntry.mint_mark == (coin.mint_mark or "P").upper(), CatalogEntry.strike == strike,
+        CatalogEntry.vam == key)).all()
+    designation = canonical(coin.strike_designation)
+    rows = sorted((e for e in rows if (e.designation or None) == designation), key=lambda e: (e.pcgs_number is None, e.gsid))
+    return rows[0] if rows else None

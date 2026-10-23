@@ -208,7 +208,8 @@ def _best_variety_match(rows: list["Row"], coin_variety: str | None) -> "Row | N
 def _catalog_entries(db: Session, col: Collection) -> list[CatalogEntry]:
     strike = FINISHES[col.finish][2]
     entries = db.scalars(
-        select(CatalogEntry).where(CatalogEntry.coin_type_id == col.coin_type_id, CatalogEntry.strike == strike)
+        select(CatalogEntry).where(CatalogEntry.coin_type_id == col.coin_type_id, CatalogEntry.strike == strike,
+                                   CatalogEntry.vam.is_(None))  # VAMs are priced on their own, not checklist lines
     ).all()
     if col.finish == "SPR":
         # Silver proofs: dates struck in both silver and clad (e.g. 1992-S onward); keep the silver ones.
@@ -236,7 +237,8 @@ def _build_mixed_type_set(db: Session, col: Collection, series) -> Checklist:
     for ct in members:
         catalog.ensure_synced(db, ct)
     entries = db.scalars(
-        select(CatalogEntry).where(CatalogEntry.coin_type_id.in_([ct.id for ct in members]), CatalogEntry.strike == "MS")
+        select(CatalogEntry).where(CatalogEntry.coin_type_id.in_([ct.id for ct in members]), CatalogEntry.strike == "MS",
+                                   CatalogEntry.vam.is_(None))
     ).all()
     by_node: dict[int, list[CatalogEntry]] = {}
     for e in entries:

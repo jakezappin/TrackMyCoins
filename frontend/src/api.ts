@@ -730,6 +730,8 @@ export interface CatalogHit {
   coin_type_id: number;
   series_name: string;
   finish: Finish;
+  /** A Morgan / Peace VAM listing ("11"): searched for only when "VAM" is typed. */
+  vam: string | null;
   /** The user's collection for it; null: one is created when the coin is saved. */
   collection_id: number | null;
   collection_name: string | null;
@@ -1535,6 +1537,7 @@ export const api = {
     finish?: Finish;
     variety?: string | null;
     gsa?: "hard" | "soft" | null;
+    vam?: string | null;
   }) => {
     const qs = new URLSearchParams();
     Object.entries(p).forEach(([k, v]) => v != null && v !== "" && qs.set(k, String(v)));

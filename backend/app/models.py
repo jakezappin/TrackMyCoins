@@ -79,6 +79,8 @@ class CatalogEntry(Base):
     year: Mapped[int | None] = mapped_column(Integer, index=True)
     mint_mark: Mapped[str | None] = mapped_column(String(5))
     designation: Mapped[str | None] = mapped_column(String(20))  # e.g. PL, DMPL, RD, FB, RD CAM, DCAM; None if plain
+    # Morgan and Peace VAM listings ("11", "2A", "14.1"): priced on their own, kept out of checklists and searches.
+    vam: Mapped[str | None] = mapped_column(String(20), index=True)
     strike: Mapped[str] = mapped_column(String(5), default="MS")  # MS (business) | PR (proof)
     variety: Mapped[str | None] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))

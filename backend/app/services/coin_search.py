@@ -83,6 +83,8 @@ def search(db: Session, user_id: int, q: str, limit: int = 12) -> list[dict]:
         stmt = stmt.where(CatalogEntry.coin_type_id.in_(p.series_ids))
     if p.mint:
         stmt = stmt.where(CatalogEntry.mint_mark == p.mint)
+    if not re.search(r"\bvam\b", q, re.I):
+        stmt = stmt.where(CatalogEntry.vam.is_(None))  # VAM listings only when asked for ("1888 VAM 11")
     rows = db.execute(stmt.limit(5000)).all()  # scored below, so a match isn't cut off before it's ranked
 
     def score(e: CatalogEntry) -> tuple:
@@ -120,7 +122,7 @@ def search(db: Session, user_id: int, q: str, limit: int = 12) -> list[dict]:
             "detail": " · ".join(x for x in (e.variety, FINISHES[finish][1] if finish != "MS" else None,
                                              e.designation) if x),
             "year": e.year, "mint_mark": e.mint_mark or "P", "variety": e.variety, "designation": e.designation,
-            "coin_type_id": ct.id, "series_name": ct.name, "finish": finish,
+            "vam": e.vam, "coin_type_id": ct.id, "series_name": ct.name, "finish": finish,
             "collection_id": col.id if col else None, "collection_name": col.name if col else None,
         })
     return out

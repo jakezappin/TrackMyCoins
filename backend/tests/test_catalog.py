@@ -29,7 +29,7 @@ MORGANS = [
     item(5, "7074", "1878 7TF", variety="Reverse of 1878"),
     item(17, "7078", "1878 7/8TF", variety="Strong"),
     item(18, "7070", "1878 7/8TF", variety="Weak"),
-    item(11, "133784", "1878 8TF", variety="Spear Point", variety2="VAM-1", parent=4),  # VAM child: skipped
+    item(11, "133784", "1878 8TF", variety="Spear Point", variety2="VAM-1", parent=4),  # VAM child: its own listing
     item(6, "7184", "1888-O"),
     item(7, "7308", "1888-O", variety="Hot Lips"),
     item(12, "7108", "1880/79-CC", variety="Reverse of 1878"),
@@ -157,7 +157,8 @@ def test_parse_collectible():
     assert parse_collectible(item(13, "7296", "1921", variety="Morgan"))["variety"] is None
     assert parse_collectible(item(15, "x", "1880-S", "DCAM", strike="PR"))["designation"] == "DCAM"
     assert parse_collectible(MORGANS[-1]) is None  # [Type] entry
-    assert parse_collectible(next(m for m in MORGANS if m["UiParentId"])) is None  # VAM child
+    vam = parse_collectible(next(m for m in MORGANS if m["UiParentId"]), top=MORGANS[4])  # VAM child: kept, tagged
+    assert (vam["vam"], vam["pcgs_number"], vam["year"]) == ("1", "133784", 1878)
 
 
 def test_sync_pulls_series_nodes(authed):
@@ -165,7 +166,7 @@ def test_sync_pulls_series_nodes(authed):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["nodes"] == [8971, 8972]
-    assert body["count"] == 26  # 23 business strikes + 4 proofs (cameos kept, the VAM cameo not) - [Type] - VAM child
+    assert body["count"] == 27  # 23 business strikes + 4 proofs (cameos kept) + the VAM-1 listing - [Type]
     assert {c.split("NodeId=")[1].split("&")[0] for c in calls if "NodeId=" in c} == {"8971", "8972"}
 
 
@@ -500,3 +501,35 @@ def test_designation_sub_listings_kept_attributions_skipped():
                   {"Name": "1836 $5 HM-8 MS", "Desg": "MS", "Variety": "HM-8"},
                   {"Name": "1878 8TF $1 MS", "Desg": "MS", "CoinDate": "1878 8TF"}):  # a duplicate
         assert not designation_child(child, morgan)
+
+
+def test_vam_priced_from_its_own_listing(authed, morgan_collection):
+    """Greysheet prices Morgan and Peace VAMs on their own: a coin with a listed VAM is priced from that listing; an
+    unlisted VAM falls back to the date. VAM listings stay out of checklists and the coin search unless asked for."""
+    cid = morgan_collection["id"]
+    coin = authed.post("/api/coins", json=coin_payload(cid, year=1878, mint_mark="P", variety="8TF", vam="VAM-1",
+                                                     pcgs_number="7072", grade=64)).json()
+    d = authed.post(f"/api/coins/{coin['inventory_number']}/cpg")
+    assert d.status_code == 200, d.text
+    assert any(c.startswith("GetPricingRequest") and "Gsid=11" in c for c in calls)  # the VAM-1 listing
+    assert d.json()["latest_cpg"]["description"] == "item gs11"
+
+    plain = authed.post("/api/coins", json=coin_payload(cid, year=1878, mint_mark="P", variety="8TF", vam="99",
+                                                      pcgs_number="7072", grade=64)).json()
+    d = authed.post(f"/api/coins/{plain['inventory_number']}/cpg").json()
+    assert d["latest_cpg"]["description"] == "item 7072"  # no VAM-99 listing: the date's own
+
+    m = authed.get("/api/catalog/match", params={"coin_type_id": morgan_collection["coin_type_id"], "year": 1878,
+                                                 "mint_mark": "P", "variety": "8TF", "vam": "99"}).json()
+    assert "doesn't list VAM-99" in (m["message"] or "")
+
+    from app.db import SessionLocal
+    from app.models import Collection
+    from app.services import checklist, coin_search
+
+    with SessionLocal() as db:
+        rows = checklist.build(db, db.get(Collection, cid)).rows
+        assert not any("VAM" in (r.variety or "") or "Spear Point" in (r.variety or "") for r in rows)
+        uid = 1
+        assert not any(h["vam"] for h in coin_search.search(db, uid, "1878 8TF Morgan"))
+        assert any(h["vam"] == "1" for h in coin_search.search(db, uid, "1878 8TF Morgan VAM 1"))

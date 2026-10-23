@@ -555,6 +555,7 @@ export default function CoinFormPage() {
         finish,
         variety: form.variety,
         gsa: form.gsa_hard_pack ? "hard" : form.gsa_soft_pack ? "soft" : null,
+        vam: form.vam,
       });
       if (m.best?.pcgs_number) {
         set("pcgs_number", m.best.pcgs_number);
@@ -615,6 +616,7 @@ export default function CoinFormPage() {
       year: h.year,
       mint_mark: h.mint_mark,
       variety: h.variety,
+      vam: h.vam ?? f.vam,
       strike_designation: h.designation,
       pcgs_number: h.pcgs_number,
       grade_prefix: h.finish !== "MS" ? "PR" : f.grade_prefix === "PR" ? "MS" : f.grade_prefix,

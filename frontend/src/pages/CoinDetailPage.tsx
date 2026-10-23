@@ -497,6 +497,7 @@ export default function CoinDetailPage() {
               {coin.latest_cpg.grade_used && `Grade ${coin.latest_cpg.grade_used} · `}as of {shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}
             </p>
           )}
+          {coin.latest_cpg && coin.vam && <VamPricing vam={coin.vam} listing={coin.latest_cpg.description} />}
           {coin.latest_greysheet && (
             <p className="small">
               Greysheet (wholesale): <strong>{money(coin.latest_greysheet.value)}</strong>
@@ -707,6 +708,20 @@ function CoinSummary({ coin }: { coin: CoinDetail }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** A VAM coin: which Greysheet listing priced it (the VAM's own, or the date's when the VAM isn't listed). */
+function VamPricing({ vam, listing }: { vam: string; listing: string | null }) {
+  const own = listing && /\bVAM\b/i.test(listing);
+  // "1888 $1 Doubled Ear, VAM-11 MS" -> "Doubled Ear, VAM-11"
+  const name = own ? listing.replace(/^\S+\s+\S+\s+/, "").replace(/\s+(MS|PR|SP)(\s+\S+)*$/, "") : null;
+  return (
+    <p className="small muted">
+      {own
+        ? `Priced from Greysheet's ${name} listing.`
+        : `Greysheet doesn't list ${/^vam/i.test(vam.trim()) ? vam.trim() : `VAM-${vam.trim()}`} for this date, so it's priced as the regular date.`}
+    </p>
   );
 }
 

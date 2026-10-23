@@ -108,12 +108,13 @@ def catalog_match(
     finish: Finish = "MS",
     variety: str | None = None,
     gsa: Literal["hard", "soft"] | None = None,
+    vam: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(current_user),
 ):
     ct = _coin_type(db, coin_type_id)
     _ensure_synced(db, ct)
-    r = catalog.match(db, ct.id, year, mint_mark, designation, finish, variety, gsa)
+    r = catalog.match(db, ct.id, year, mint_mark, designation, finish, variety, gsa, vam=vam)
     return MatchOut(
         candidates=[CandidateOut(**c.__dict__) for c in r.candidates],
         best=CandidateOut(**r.best.__dict__) if r.best else None,

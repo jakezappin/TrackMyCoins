@@ -72,6 +72,9 @@ def test_monthly_upkeep(authed, morgan_collection, keys_on, monkeypatch):
         db.add(AuctionFetch(pcgs_number=num, grade=grade, plus=plus, fetched_at=datetime.now(timezone.utc)))
 
     monkeypatch.setattr(price_archive, "fetch_full", fake_fetch)
+    from app.services import bullion
+
+    monkeypatch.setattr(bullion, "update_history", lambda db, **kw: {})  # no network in tests
     out = price_archive.run_due()
     assert (out["sheets"], out["auctions"]) == (2, 2)  # one sheet per issue, one auction list per issue and grade
     assert sorted(sheets) == ["7130", "7180"] and sorted(auctions) == [("7130", 64), ("7180", 63)]

@@ -65,13 +65,14 @@ def recent_entry(db: Session, key: str, max_age: timedelta | None = None) -> dic
 
 
 def _key_for(coin: Coin) -> list[str]:
+    """The price sheet the coin was priced from (a VAM's own, say), then its PCGS number's."""
     keys = []
-    if coin.pcgs_number:
-        keys.append(f"pcgs:{coin.pcgs_number}")
     q = latest_quote(coin, CPG)
     gsid = (q.raw or {}).get("gsid") if q is not None else None
     if gsid:
         keys.append(f"gsid:{gsid}")
+    if coin.pcgs_number:
+        keys.append(f"pcgs:{coin.pcgs_number}")
     return keys
 
 
