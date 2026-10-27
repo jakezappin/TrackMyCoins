@@ -343,6 +343,20 @@ def ensure_synced(db: Session, coin_type: CoinType) -> None:
             raise
 
 
+# What graders call a designation vs Greysheet's (and PCGS's) name for it, per series: NGC's Full Torch Roosevelt
+# dime is PCGS's and Greysheet's Full Bands.
+SERIES_DESIGNATIONS = {"roosevelt-dimes": {"FT": "FB"}}
+
+
+def catalog_designation(slug: str | None, designation: str | None) -> str | None:
+    """A designation in the catalog's words: "FT" -> "FB" on a Roosevelt dime, "FT PL" -> "PL FB"."""
+    d = canonical(designation)
+    aliases = SERIES_DESIGNATIONS.get(slug or "")
+    if not d or not aliases:
+        return d
+    return canonical(" ".join(aliases.get(w, w) for w in d.split()))
+
+
 _CAMEO = ("CAM", "DCAM")
 _MIRROR = ("PL", "DMPL")
 
@@ -356,6 +370,10 @@ def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:
         .distinct()
     ).all()
     found = {r for r in rows if r}
+    ct = db.get(CoinType, coin_type_id)
+    for alias, name in SERIES_DESIGNATIONS.get(ct.slug if ct else "", {}).items():
+        # Both graders' words: NGC's "FT" and PCGS's "FB" Roosevelts are the same coin (priced as FB).
+        found |= {canonical(d.replace(name, alias)) for d in found if name in d.split()}
     colors = sorted({w for d in found for w in d.split() if w in ("RD", "RB", "BN")})
     if strike == "PR":
         # Every proof can be Cameo or Deep/Ultra Cameo, whether or not the catalog lists it. Copper proofs carry
@@ -467,7 +485,8 @@ def match(
     vam: str | None = None,  # a Morgan / Peace VAM: its own listing when Greysheet has one
 ) -> MatchResult:
     strike = FINISHES.get(finish, FINISHES["MS"])[2]
-    designation = canonical(designation)
+    ct = db.get(CoinType, coin_type_id)
+    designation = catalog_designation(ct.slug if ct else None, designation)
     mint_mark = (mint_mark or "P").upper()
 
     entries = db.scalars(
@@ -615,6 +634,6 @@ def vam_listing(db: Session, coin: Coin, sync: bool = True) -> CatalogEntry | No
         CatalogEntry.coin_type_id == coin.coin_type_id, CatalogEntry.year == coin.year,
         CatalogEntry.mint_mark == (coin.mint_mark or "P").upper(), CatalogEntry.strike == strike,
         CatalogEntry.vam == key)).all()
-    designation = canonical(coin.strike_designation)
+    designation = catalog_designation(coin.coin_type.slug, coin.strike_designation)
     rows = sorted((e for e in rows if (e.designation or None) == designation), key=lambda e: (e.pcgs_number is None, e.gsid))
     return rows[0] if rows else None

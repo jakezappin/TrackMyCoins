@@ -533,3 +533,17 @@ def test_vam_priced_from_its_own_listing(authed, morgan_collection):
         uid = 1
         assert not any(h["vam"] for h in coin_search.search(db, uid, "1878 8TF Morgan"))
         assert any(h["vam"] == "1" for h in coin_search.search(db, uid, "1878 8TF Morgan VAM 1"))
+
+
+def test_roosevelt_full_torch_is_greysheets_full_bands():
+    """NGC calls it Full Torch (FT), PCGS and Greysheet Full Bands (FB): either prices from the FB listing."""
+    from app import grades
+    from app.services.catalog import catalog_designation
+
+    assert catalog_designation("roosevelt-dimes", "FT") == "FB"
+    assert catalog_designation("roosevelt-dimes", "Full Torch") == "FB"
+    assert catalog_designation("roosevelt-dimes", "FT PL") == "PL FB"
+    assert catalog_designation("mercury-dimes", "FB") == "FB" and catalog_designation("jefferson-nickels", "6FS") == "FS"
+    assert grades.problem("roosevelt-dimes", 1950, "MS", 65, False, "FB") is None
+    assert grades.problem("roosevelt-dimes", 1950, "MS", 65, False, "FT") is None
+    assert "Roosevelt" in (grades.problem("mercury-dimes", 1941, "MS", 65, False, "FT") or "")

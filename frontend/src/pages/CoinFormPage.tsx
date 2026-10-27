@@ -91,7 +91,7 @@ const CIRC_PREFIXES = ["MS", "SP", "AU", "XF", "VF", "F", "VG", "G", "AG", "FR",
 
 // Used until the catalog's designations for the series load (or if it can't be reached).
 const FALLBACK_DESIGNATIONS: Record<string, string[]> = {
-  MS: ["PL", "DMPL", "RD", "RB", "BN", "FB", "FS", "FH"],
+  MS: ["PL", "DMPL", "RD", "RB", "BN", "FB", "FT", "FBL", "FS", "FH"],
   PR: ["CAM", "DCAM", "RD", "RB", "BN"],
 };
 const VAM_SERIES = ["morgan-dollars", "peace-dollars"];

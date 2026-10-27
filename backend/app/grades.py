@@ -34,7 +34,7 @@ def letters_for(grade: int | None) -> str | None:
 COPPER = {"half-cents", "large-cents", "flying-eagle-cents", "indian-head-cents", "lincoln-cents", "two-cent-pieces"}
 # Full-detail designations and the series they belong to.
 STRIKE_ONLY = {
-    "FB": {"mercury-dimes"},
+    "FB": {"mercury-dimes", "roosevelt-dimes"},  # PCGS's Full Bands Roosevelt is NGC's Full Torch (FT)
     "FT": {"roosevelt-dimes"},
     "FBL": {"franklin-half-dollars"},
     "FS": {"jefferson-nickels"},
