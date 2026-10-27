@@ -30,9 +30,9 @@ def _cpg(db: Session, coin: Coin, saved_only: bool = False) -> tuple[dict, bool]
     _not_error(coin)
     greysheet.require_grade(coin)
     gsid = None
-    listing = catalog.vam_listing(db, coin, sync=not saved_only) if coin.vam else None
+    listing = catalog.vam_listing(db, coin, sync=not saved_only)
     if listing is not None:
-        gsid = listing.gsid  # a VAM Greysheet prices on its own ("1888 $1 Doubled Ear, VAM-11")
+        gsid = listing.gsid  # a VAM or FS variety Greysheet prices on its own ("1888 $1 Doubled Ear, VAM-11")
     elif not coin.pcgs_number:
         # Find the PCGS number from date/mint/designation via the Greysheet catalog.
         match = catalog.resolve_for_coin(db, coin)
@@ -71,7 +71,7 @@ def fill_cpg_from_saved(db: Session, coin: Coin) -> bool:
     (another coin's lookup): no Greysheet call. Returns True if a price was recorded. Never raises."""
     if coin.is_error or greysheet.is_set(coin) or not details.price_grade(coin):
         return False
-    listing = catalog.vam_listing(db, coin, sync=False) if coin.vam else None
+    listing = catalog.vam_listing(db, coin, sync=False)
     if not coin.pcgs_number and listing is None:
         return False
     last = latest_quote(coin, CPG)

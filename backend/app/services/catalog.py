@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -81,6 +81,16 @@ _ATTRIBUTION = re.compile(r"\b[A-Z]{1,4}-\s*\d")
 _VAM = re.compile(r"\bVAM[\s-]*(\d+(?:\.\d+)?[A-Z]?)\b", re.I)
 
 
+# Cherrypickers' Guide numbers: "FS-101", "FS-101/803", "FS-1.5" (older numbering), "FS-901" ...
+_FS = re.compile(r"\bFS[\s-]*(\d{1,3}(?:\.\d+)?[A-Z]?(?:\s*/\s*\d{1,3}[A-Z]?)?)\b", re.I)
+
+
+def fs_key(text: str | None) -> str | None:
+    """'Doubled Die Obverse, FS-101' -> '101'; 'FS-101/803' -> '101/803'; None without an FS number."""
+    m = _FS.search(text or "")
+    return re.sub(r"\s+", "", m.group(1)).upper() if m else None
+
+
 def vam_key(text: str | None) -> str | None:
     """'VAM-11', 'vam 2a', '11', '14.1' -> '11', '2A', '14.1' (how VAM listings are keyed)."""
     t = (text or "").strip()
@@ -117,12 +127,14 @@ def parse_collectible(d: dict, top: dict | None = None) -> dict | None:
     sub-listing's (UiParentId) top-level ancestor."""
     name = _clean(d.get("Name")) or ""
     # Sub-listings are kept only when they're the parent coin with a designation (see designation_child), or a VAM.
-    vam = None
+    vam = fs = None
     if d.get("UiParentId") and not designation_child(d, top):
-        m = _VAM.search(" ".join(x for x in (name, _clean(d.get("Variety")), _clean(d.get("Variety2"))) if x))
-        if not m:
+        text = " ".join(x for x in (name, _clean(d.get("Variety")), _clean(d.get("Variety2"))) if x)
+        m = _VAM.search(text)
+        if m:
+            vam = m.group(1).upper()
+        elif (fs := fs_key(text)) is None:
             return None
-        vam = m.group(1).upper()
     if "[TYPE]" in name.upper() or d.get("IsSet") is True or d.get("IsType") is True:
         return None
     coin_date = _clean(d.get("CoinDate")) or ""
@@ -189,6 +201,7 @@ def parse_collectible(d: dict, top: dict | None = None) -> dict | None:
         else (", ".join(parts)[:255] or None),
         "name": name[:255],
         "vam": vam,
+        "fs": fs,
     }
 
 
@@ -265,7 +278,12 @@ def sync(db: Session, coin_type: CoinType) -> SyncResult:
 
 BUNDLE = Path(__file__).resolve().parent.parent / "catalog_bundle.json.gz"
 _FIELDS = ("gsid", "node_id", "pcgs_number", "ngc_id", "year", "mint_mark", "designation", "strike", "variety", "name",
-           "vam")
+           "vam", "fs")
+
+
+def regular():
+    """Catalog rows that are dates' own listings: not VAM or FS die-variety listings (priced only when asked for)."""
+    return and_(CatalogEntry.vam.is_(None), CatalogEntry.fs.is_(None))
 
 
 def export_bundle(db: Session, path: Path = BUNDLE) -> int:
@@ -366,7 +384,7 @@ def designations(db: Session, coin_type_id: int, finish: str) -> list[str]:
     strike = FINISHES[finish][2]
     rows = db.scalars(
         select(CatalogEntry.designation)
-        .where(CatalogEntry.coin_type_id == coin_type_id, CatalogEntry.strike == strike, CatalogEntry.vam.is_(None))
+        .where(CatalogEntry.coin_type_id == coin_type_id, CatalogEntry.strike == strike, regular())
         .distinct()
     ).all()
     found = {r for r in rows if r}
@@ -483,6 +501,7 @@ def match(
     variety: str | None = None,
     gsa: str | None = None,  # "hard" | "soft" for coins in GSA holders
     vam: str | None = None,  # a Morgan / Peace VAM: its own listing when Greysheet has one
+    specials: bool = True,  # look for the coin's VAM / FS die-variety listing (False: the date's own listings)
 ) -> MatchResult:
     strike = FINISHES.get(finish, FINISHES["MS"])[2]
     ct = db.get(CoinType, coin_type_id)
@@ -498,13 +517,16 @@ def match(
         )
     ).all()
     vams = [e for e in entries if e.vam]
-    entries = [e for e in entries if not e.vam]
+    fss = [e for e in entries if e.fs]
+    entries = [e for e in entries if not e.vam and not e.fs]
     all_entries = entries
     entries = [e for e in entries if (e.designation or None) == designation]
     label = f"{year}{'' if mint_mark == 'P' else '-' + mint_mark} {designation or ''}".strip()
-    key = vam_key(vam)
-    if key and vams:
-        listed = [e for e in vams if e.vam == key]
+    key, kind, pool = vam_key(vam), "VAM", vams
+    if not (key and vams) and (fkey := fs_key(variety)) and fss:
+        key, kind, pool = fkey, "FS", fss
+    if specials and key and pool:
+        listed = _same_attribution(pool, kind, key)
         hit = [e for e in listed if (e.designation or None) == designation]
         if hit:
             hit.sort(key=lambda e: (e.pcgs_number is None, e.gsid))
@@ -513,8 +535,10 @@ def match(
                              designation=e.designation)
             best.exact = True
             return MatchResult(candidates=[best], best=best)
-        plain = match(db, coin_type_id, year, mint_mark, designation, finish, variety, gsa)
-        what = f"VAM-{key} {designation}" if listed and designation else f"VAM-{key}"
+        if kind == "FS":  # the date's own listing: the variety without its FS number ("Doubled Die Obverse")
+            variety = _FS.sub("", variety or "").strip(" ,;-") or None
+        plain = match(db, coin_type_id, year, mint_mark, designation, finish, variety, gsa, specials=False)
+        what = f"{kind}-{key} {designation}" if listed and designation else f"{kind}-{key}"
         note = f"Greysheet doesn't list {what} for {label.split()[0]}, so it's priced as the regular date."
         plain.message = f"{note} {plain.message}" if plain.message else note
         return plain
@@ -618,11 +642,23 @@ def resolve_for_coin(db: Session, coin: Coin) -> Candidate:
     return result.best
 
 
+def _same_attribution(pool: list, kind: str, key: str) -> list:
+    """Listings with this VAM / FS number. An FS number typed alone ("FS-101") also finds a combined listing
+    ("FS-101/803") when it's the only one."""
+    attr = (lambda e: e.vam) if kind == "VAM" else (lambda e: e.fs)
+    exact = [e for e in pool if attr(e) == key]
+    if exact or kind == "VAM" or "/" in key:
+        return exact
+    part = [e for e in pool if key in (attr(e) or "").split("/")]
+    return part if len({attr(e) for e in part}) == 1 else []
+
+
 def vam_listing(db: Session, coin: Coin, sync: bool = True) -> CatalogEntry | None:
-    """The coin's own VAM listing (same date, mint, strike and designation), if Greysheet has one. `sync`: download
-    the series' catalog first if there's none (not while a coin is being saved)."""
-    key = vam_key(coin.vam)
-    if not key or coin.is_error:
+    """The coin's own die-variety listing, if Greysheet has one: its VAM's (Morgan / Peace), else the FS number in its
+    variety ("Doubled Die Obverse, FS-101"). Same date, mint, strike and designation. `sync`: download the series'
+    catalog first if there's none (not while a coin is being saved)."""
+    vkey, fkey = vam_key(coin.vam), fs_key(coin.variety)
+    if not (vkey or fkey) or coin.is_error:
         return None
     if sync:
         try:
@@ -633,7 +669,11 @@ def vam_listing(db: Session, coin: Coin, sync: bool = True) -> CatalogEntry | No
     rows = db.scalars(select(CatalogEntry).where(
         CatalogEntry.coin_type_id == coin.coin_type_id, CatalogEntry.year == coin.year,
         CatalogEntry.mint_mark == (coin.mint_mark or "P").upper(), CatalogEntry.strike == strike,
-        CatalogEntry.vam == key)).all()
+        or_(CatalogEntry.vam.isnot(None), CatalogEntry.fs.isnot(None)))).all()
     designation = catalog_designation(coin.coin_type.slug, coin.strike_designation)
-    rows = sorted((e for e in rows if (e.designation or None) == designation), key=lambda e: (e.pcgs_number is None, e.gsid))
-    return rows[0] if rows else None
+    rows = [e for e in rows if (e.designation or None) == designation]
+    hits = _same_attribution([e for e in rows if e.vam], "VAM", vkey) if vkey else []
+    if not hits and fkey:
+        hits = _same_attribution([e for e in rows if e.fs], "FS", fkey)
+    hits.sort(key=lambda e: (e.pcgs_number is None, e.gsid))
+    return hits[0] if hits else None

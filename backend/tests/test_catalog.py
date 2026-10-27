@@ -30,6 +30,7 @@ MORGANS = [
     item(17, "7078", "1878 7/8TF", variety="Strong"),
     item(18, "7070", "1878 7/8TF", variety="Weak"),
     item(11, "133784", "1878 8TF", variety="Spear Point", variety2="VAM-1", parent=4),  # VAM child: its own listing
+    item(30, "990101", "1881-S", variety="Doubled Die Obverse, FS-101", parent=1),  # FS die variety: its own listing
     item(6, "7184", "1888-O"),
     item(7, "7308", "1888-O", variety="Hot Lips"),
     item(12, "7108", "1880/79-CC", variety="Reverse of 1878"),
@@ -166,7 +167,7 @@ def test_sync_pulls_series_nodes(authed):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["nodes"] == [8971, 8972]
-    assert body["count"] == 27  # 23 business strikes + 4 proofs (cameos kept) + the VAM-1 listing - [Type]
+    assert body["count"] == 28  # 23 business strikes + 4 proofs (cameos kept) + the VAM-1 and FS-101 listings - [Type]
     assert {c.split("NodeId=")[1].split("&")[0] for c in calls if "NodeId=" in c} == {"8971", "8972"}
 
 
@@ -547,3 +548,43 @@ def test_roosevelt_full_torch_is_greysheets_full_bands():
     assert grades.problem("roosevelt-dimes", 1950, "MS", 65, False, "FB") is None
     assert grades.problem("roosevelt-dimes", 1950, "MS", 65, False, "FT") is None
     assert "Roosevelt" in (grades.problem("mercury-dimes", 1941, "MS", 65, False, "FT") or "")
+
+
+def test_fs_die_variety_listings():
+    """Greysheet files Cherrypickers' (FS) die varieties under each date, with designations too ("1946 10c DDO,
+    FS-101 MS FB"): they're kept, tagged, and found by the FS number in a coin's variety."""
+    from app.services.catalog import _same_attribution, fs_key
+
+    top = item(100, "85010", "1946", "FB", denom="10c")
+    child = item(101, "391374", "1946", "FB", variety="Doubled Die Obverse, FS-104", parent=100, denom="10c")
+    combo = item(102, "391368", "1946", "FB", variety="DDO & DDR, FS-101/803", parent=100, denom="10c")
+    die = parse_collectible(child, top=top)
+    assert (die["fs"], die["vam"], die["designation"], die["pcgs_number"]) == ("104", None, "FB", "391374")
+    assert parse_collectible(combo, top=top)["fs"] == "101/803"
+    assert parse_collectible(top) ["fs"] is None  # the date's own listing
+
+    assert fs_key("Doubled Die Obverse, FS-101") == "101" and fs_key("FS 101/803") == "101/803"
+    assert fs_key("FS-1.5") == "1.5" and fs_key("Full Steps") is None and fs_key(None) is None
+
+    class E:
+        def __init__(self, fs):
+            self.fs, self.vam = fs, None
+
+    pool = [E("101/803"), E("104")]
+    assert [e.fs for e in _same_attribution(pool, "FS", "104")] == ["104"]
+    assert [e.fs for e in _same_attribution(pool, "FS", "101")] == ["101/803"]  # the only listing with FS-101
+    assert _same_attribution(pool + [E("101")], "FS", "101")[0].fs == "101"  # an exact match wins
+
+
+def test_fs_variety_priced_from_its_listing(authed, morgan_collection):
+    cid = morgan_collection["id"]
+    coin = authed.post("/api/coins", json=coin_payload(cid, pcgs_number="7130", variety="Doubled Die Obverse, FS-101",
+                                                     grade=64)).json()
+    d = authed.post(f"/api/coins/{coin['inventory_number']}/cpg").json()
+    assert d["latest_cpg"]["description"] == "item gs30"  # the FS-101 listing, not the plain 1881-S
+    m = authed.get("/api/catalog/match", params={"coin_type_id": morgan_collection["coin_type_id"], "year": 1881,
+                                                 "mint_mark": "S", "variety": "FS-999"}).json()
+    assert "doesn't list FS-999" in (m["message"] or "")
+    plain = authed.get("/api/catalog/match", params={"coin_type_id": morgan_collection["coin_type_id"], "year": 1881,
+                                                     "mint_mark": "S"}).json()
+    assert plain["best"]["pcgs_number"] == "7130"  # a coin without an FS number keeps the date's own listing

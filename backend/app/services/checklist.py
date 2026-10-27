@@ -209,7 +209,7 @@ def _catalog_entries(db: Session, col: Collection) -> list[CatalogEntry]:
     strike = FINISHES[col.finish][2]
     entries = db.scalars(
         select(CatalogEntry).where(CatalogEntry.coin_type_id == col.coin_type_id, CatalogEntry.strike == strike,
-                                   CatalogEntry.vam.is_(None))  # VAMs are priced on their own, not checklist lines
+                                   catalog.regular())  # VAM / FS listings are priced on their own, not checklist lines
     ).all()
     if col.finish == "SPR":
         # Silver proofs: dates struck in both silver and clad (e.g. 1992-S onward); keep the silver ones.
@@ -238,7 +238,7 @@ def _build_mixed_type_set(db: Session, col: Collection, series) -> Checklist:
         catalog.ensure_synced(db, ct)
     entries = db.scalars(
         select(CatalogEntry).where(CatalogEntry.coin_type_id.in_([ct.id for ct in members]), CatalogEntry.strike == "MS",
-                                   CatalogEntry.vam.is_(None))
+                                   catalog.regular())
     ).all()
     by_node: dict[int, list[CatalogEntry]] = {}
     for e in entries:

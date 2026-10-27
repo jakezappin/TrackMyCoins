@@ -497,7 +497,7 @@ export default function CoinDetailPage() {
               {coin.latest_cpg.grade_used && `Grade ${coin.latest_cpg.grade_used} · `}as of {shortDate(coin.latest_cpg.confirmed_at ?? coin.latest_cpg.fetched_at)}
             </p>
           )}
-          {coin.latest_cpg && coin.vam && <VamPricing vam={coin.vam} listing={coin.latest_cpg.description} />}
+          {coin.latest_cpg && dieVariety(coin) && <VarietyPricing label={dieVariety(coin)!} listing={coin.latest_cpg.description} />}
           {coin.latest_greysheet && (
             <p className="small">
               Greysheet (wholesale): <strong>{money(coin.latest_greysheet.value)}</strong>
@@ -711,16 +711,21 @@ function CoinSummary({ coin }: { coin: CoinDetail }) {
   );
 }
 
-/** A VAM coin: which Greysheet listing priced it (the VAM's own, or the date's when the VAM isn't listed). */
-function VamPricing({ vam, listing }: { vam: string; listing: string | null }) {
-  const own = listing && /\bVAM\b/i.test(listing);
-  // "1888 $1 Doubled Ear, VAM-11 MS" -> "Doubled Ear, VAM-11"
+/** A coin's die variety Greysheet may price on its own: its VAM ("VAM-11"), else an FS number in its variety. */
+function dieVariety(coin: CoinDetail): string | null {
+  if (coin.vam?.trim()) return /^vam/i.test(coin.vam.trim()) ? coin.vam.trim() : `VAM-${coin.vam.trim()}`;
+  const fs = /\bFS[\s-]*(\d{1,3}(?:\.\d+)?[A-Z]?(?:\s*\/\s*\d{1,3}[A-Z]?)?)\b/i.exec(coin.variety ?? "");
+  return fs ? `FS-${fs[1].replace(/\s+/g, "")}` : null;
+}
+
+/** A die-variety coin: which Greysheet listing priced it (the variety's own, or the date's when it isn't listed). */
+function VarietyPricing({ label, listing }: { label: string; listing: string | null }) {
+  const own = listing && /\b(VAM|FS)[\s-]*\d/i.test(listing);
+  // "1888 $1 Doubled Ear, VAM-11 MS" -> "Doubled Ear, VAM-11"; "1946 10c Doubled Die Obverse, FS-104 MS FB" -> "Doubled Die Obverse, FS-104"
   const name = own ? listing.replace(/^\S+\s+\S+\s+/, "").replace(/\s+(MS|PR|SP)(\s+\S+)*$/, "") : null;
   return (
     <p className="small muted">
-      {own
-        ? `Priced from Greysheet's ${name} listing.`
-        : `Greysheet doesn't list ${/^vam/i.test(vam.trim()) ? vam.trim() : `VAM-${vam.trim()}`} for this date, so it's priced as the regular date.`}
+      {own ? `Priced from Greysheet's ${name} listing.` : `Greysheet doesn't list ${label} for this date, so it's priced as the regular date.`}
     </p>
   );
 }

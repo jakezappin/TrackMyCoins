@@ -732,6 +732,8 @@ export interface CatalogHit {
   finish: Finish;
   /** A Morgan / Peace VAM listing ("11"): searched for only when "VAM" is typed. */
   vam: string | null;
+  /** An FS die-variety listing ("101"): searched for only when "FS" is typed. */
+  fs: string | null;
   /** The user's collection for it; null: one is created when the coin is saved. */
   collection_id: number | null;
   collection_name: string | null;
